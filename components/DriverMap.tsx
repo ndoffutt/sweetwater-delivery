@@ -295,7 +295,7 @@ function mapsHref(c: { address: string; lat: number | null; lng: number | null }
 }
 
 // ── Main ───────────────────────────────────────────────────────
-export default function DriverMap({ initialStops, isManager }: { initialStops: RouteStop[]; isManager: boolean }) {
+export default function DriverMap({ initialStops, isManager, canMessage = false }: { initialStops: RouteStop[]; isManager: boolean; canMessage?: boolean }) {
   const [stops, setStops] = useState(initialStops);
   const [targetId, setTargetId] = useState(() => (initialStops.find((s) => s.status === "pending" || s.status === "arrived") ?? initialStops[0])?.id ?? "");
   const [sheet, setSheet] = useState<"peek" | "full">("peek");
@@ -415,9 +415,11 @@ export default function DriverMap({ initialStops, isManager }: { initialStops: R
           <Icon name="route" size={20} color={C.green} />
         </button>
         )}
-        <button onClick={() => router.push("/driver/messages")} title="Messages" style={{ flexShrink: 0, width: 50, borderRadius: 16, background: "rgba(255,255,255,0.86)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", boxShadow: "0 6px 20px rgba(0,0,0,0.12)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <Icon name="chat" size={20} color={C.green} />
-        </button>
+        {canMessage && (
+          <button onClick={() => router.push("/driver/messages")} title="Messages" style={{ flexShrink: 0, width: 50, borderRadius: 16, background: "rgba(255,255,255,0.86)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", boxShadow: "0 6px 20px rgba(0,0,0,0.12)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Icon name="chat" size={20} color={C.green} />
+          </button>
+        )}
         {(() => {
           const pending = sync.pendingPhotos + sync.pendingActions;
           const title = !online

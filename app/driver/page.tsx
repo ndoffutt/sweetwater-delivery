@@ -52,5 +52,5 @@ export default async function DriverPage() {
 
   const stops = (route.route_stops || []) as RouteStop[];
 
-  return <DriverMap initialStops={stops} isManager={isManager} />;
+  return <DriverMap initialStops={stops} isManager={isManager} canMessage={session.role === "admin"} />;
 }

@@ -10,9 +10,12 @@ async function geocodeBusiness(name: string, address: string | null): Promise<{ 
   if (!TOKEN) return null;
   const q = [name, address].filter(Boolean).join(", ");
   try {
+    // bbox pins results to the Twin Forks (Westhampton→Montauk→North Fork) so a
+    // vague address like "North Fork, NY" can't resolve to another state.
     const url =
       `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json` +
-      `?access_token=${TOKEN}&limit=1&country=us&types=poi,address,place&proximity=-72.2,40.96`;
+      `?access_token=${TOKEN}&limit=1&country=us&types=poi,address,place&proximity=-72.2,40.96` +
+      `&bbox=-73.05,40.55,-71.65,41.35`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const data = (await res.json()) as { features?: { center?: [number, number] }[] };
