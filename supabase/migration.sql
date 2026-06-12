@@ -1,0 +1,183 @@
+-- Sweetwater's Delivery App — Initial Schema
+-- Run this in the Supabase SQL Editor
+
+create extension if not exists pgcrypto;
+
+-- Clean teardown so this migration is safely re-runnable
+drop table if exists customer_signups cascade;
+drop table if exists text_messages cascade;
+drop table if exists driver_locations cascade;
+drop table if exists stop_photos cascade;
+drop table if exists route_stops cascade;
+drop table if exists routes cascade;
+drop table if exists customers cascade;
+drop table if exists users cascade;
+
+-- ============================================================
+-- USERS (drivers + dispatchers, PIN-based auth)
+-- ============================================================
+create table users (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  role text not null check (role in ('driver', 'dispatcher')),
+  pin_hash text not null,
+  phone text,
+  active boolean not null default true,
+  deleted_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- ============================================================
+-- CUSTOMERS
+-- ============================================================
+create table customers (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  address text not null,
+  phone text,
+  lat double precision,
+  lng double precision,
+  gate_code text,
+  delivery_notes text,
+  tags text[] not null default '{}',
+  spot_account text,
+  account_type text,
+  active boolean not null default true,
+  deleted_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- ============================================================
+-- CUSTOMER SIGNUPS (pending website delivery requests)
+-- ============================================================
+create table customer_signups (
+  id uuid primary key default gen_random_uuid(),
+  full_name text not null,
+  address text not null,
+  phone text,
+  email text,
+  start_date text,
+  notes text,
+  status text not null default 'pending' check (status in ('pending', 'added', 'dismissed')),
+  customer_id uuid references customers(id),
+  created_at timestamptz not null default now()
+);
+
+create index customer_signups_status_idx
+  on customer_signups(status, created_at desc);
+
+-- ============================================================
+-- ROUTES (one per day, typically)
+-- ============================================================
+create table routes (
+  id uuid primary key default gen_random_uuid(),
+  date date not null,
+  driver_id uuid not null references users(id),
+  status text not null default 'draft' check (status in ('draft', 'dispatched', 'in_progress', 'completed')),
+  started_at timestamptz,
+  completed_at timestamptz,
+  deleted_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index routes_date_idx on routes(date) where deleted_at is null;
+
+-- ============================================================
+-- ROUTE STOPS
+-- ============================================================
+create table route_stops (
+  id uuid primary key default gen_random_uuid(),
+  route_id uuid not null references routes(id) on delete cascade,
+  customer_id uuid not null references customers(id),
+  stop_order integer not null,
+  status text not null default 'pending' check (status in ('pending', 'arrived', 'completed', 'skipped')),
+  has_dropoff boolean not null default false,
+  has_pickup boolean not null default false,
+  dropoff_confirmed boolean not null default false,
+  pickup_confirmed boolean not null default false,
+  notes text,
+  arrived_at timestamptz,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- ============================================================
+-- STOP PHOTOS (proof of delivery)
+-- ============================================================
+create table stop_photos (
+  id uuid primary key default gen_random_uuid(),
+  stop_id uuid not null references route_stops(id) on delete cascade,
+  storage_path text not null,
+  created_at timestamptz not null default now()
+);
+
+-- ============================================================
+-- DRIVER LOCATIONS (GPS pings)
+-- ============================================================
+create table driver_locations (
+  id uuid primary key default gen_random_uuid(),
+  driver_id uuid not null references users(id),
+  route_id uuid references routes(id),
+  lat double precision not null,
+  lng double precision not null,
+  accuracy double precision,
+  created_at timestamptz not null default now()
+);
+
+create index driver_locations_driver_time on driver_locations(driver_id, created_at desc);
+
+-- ============================================================
+-- TEXT MESSAGES (SMS log)
+-- ============================================================
+create table text_messages (
+  id uuid primary key default gen_random_uuid(),
+  stop_id uuid references route_stops(id),
+  customer_phone text not null,
+  message text not null,
+  status text not null default 'pending' check (status in ('pending', 'sent', 'failed')),
+  sent_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+-- ============================================================
+-- UPDATED_AT TRIGGER
+-- ============================================================
+create or replace function set_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger users_updated_at before update on users for each row execute function set_updated_at();
+create trigger customers_updated_at before update on customers for each row execute function set_updated_at();
+create trigger routes_updated_at before update on routes for each row execute function set_updated_at();
+create trigger route_stops_updated_at before update on route_stops for each row execute function set_updated_at();
+
+-- ============================================================
+-- STORAGE BUCKET
+-- ============================================================
+insert into storage.buckets (id, name, public) values ('stop-photos', 'stop-photos', true)
+on conflict do nothing;
+
+-- ============================================================
+-- SEED DATA
+-- ============================================================
+-- Manager PIN: 0000 (dispatcher). Driver has no PIN — tap "Start Driving" to sign in.
+insert into users (name, role, pin_hash, phone) values
+  ('Manager', 'dispatcher', encode(digest('0000' || 'sw-delivery-2026', 'sha256'), 'hex'), null),
+  ('Driver', 'driver', 'no-pin', null);
+
+-- Sample customers
+insert into customers (name, address, phone, gate_code, delivery_notes) values
+  ('Johnson Residence', '142 Ocean Ave, Wainscott, NY 11975', '631-555-0101', '4521', 'Leave on side porch, ring doorbell'),
+  ('Smith Estate', '28 Dune Rd, Hampton Bays, NY 11946', '631-555-0102', null, 'Main entrance, hand to housekeeper'),
+  ('Williams House', '55 Beach Ln, Wainscott, NY 11975', '631-555-0103', '0000#', 'Back gate — use intercom. Dog friendly.'),
+  ('Chen Family', '310 Montauk Hwy, Hampton Bays, NY 11946', '631-555-0104', null, null),
+  ('Davis Cottage', '7 Sagg Main St, Sagaponack, NY 11962', '631-555-0105', '8833', 'Fragile items — place in mudroom, never on steps'),
+  ('Peterson Home', '92 Flying Point Rd, Water Mill, NY 11976', '631-555-0106', null, 'Use service entrance around back');

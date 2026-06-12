@@ -1,0 +1,56 @@
+stop_order,name,address,city,state,zip,full_address,phone,customer_id,tender,account_type,latitude,longitude
+1,"Meister, Doris",30 Cove Hollow Farm Rd,East Hampton,NY,11937,"30 Cove Hollow Farm Rd, East Hampton, NY 11937",(631) 324-1157,1001902,SOF *5022,Delivery,40.942494,-72.2213075
+2,"Curland, Diane",20 Baiting Hollow Rd,East Hampton,NY,11937,"20 Baiting Hollow Rd, East Hampton, NY 11937",(201) 805-8686,1012899,SOF *1328,Delivery,40.9497696,-72.2066625
+3,"Kaufman, Shirin",41 Hwy Behind the Pond,East Hampton,NY,11937,"41 Hwy Behind the Pond, East Hampton, NY 11937",(917) 742-1418,1015237,SOF *0117,Delivery,40.9520989,-72.180169
+4,"Marks, Nancy",14 Tyson Ln,East Hampton,NY,11937,"14 Tyson Ln, East Hampton, NY 11937",(631) 804-3346,1004186,SOF *3950,Delivery,40.96218,-72.1513569
+5,"Frank, Wendy",117 Pantigo Rd,East Hampton,NY,11937,"117 Pantigo Rd, East Hampton, NY 11937",(917) 880-8506,1001441,SOF *6003,Delivery,40.9678024,-72.175846
+6,Loewe,20 Main St,East Hampton,NY,11937,"20 Main St, East Hampton, NY 11937",(631) 658-3866,SA6598,A/R,A/R,40.9634014,-72.1850363
+7,Zimmermann,27 Newtown Ln,East Hampton,NY,11937,"27 Newtown Ln, East Hampton, NY 11937",(631) 604-6291,SA6247,A/R Due,A/R,40.9638721,-72.1862357
+8,Brunello Cucinelli,39 Newtown Ln,East Hampton,NY,11937,"39 Newtown Ln, East Hampton, NY 11937",(631) 324-3400,1017190,A/R,A/R,40.9639999,-72.1867726
+9,"Purcell, Arthur",16 Barns Ln,East Hampton,NY,11937,"16 Barns Ln, East Hampton, NY 11937",(631) 324-0486,SA5818,SOF *4966,Delivery,40.965288,-72.1859799
+10,"Duda, Jana",57 Cedar St,East Hampton,NY,11937,"57 Cedar St, East Hampton, NY 11937",(607) 227-6154,1014636,SOF *3012,Delivery,40.9705348,-72.1871661
+11,"Goldman, Andrew",136 N Main St,East Hampton,NY,11937,"136 N Main St, East Hampton, NY 11937",(315) 717-5735,SA6412,SOF *3779,Delivery,40.9701742,-72.181365
+12,"Feldman, Lauren",123 Abrahams Path,East Hampton,NY,11937,"123 Abrahams Path, East Hampton, NY 11937",(917) 744-9898,SA5213,SOF *6010,Delivery,40.993716,-72.1675983
+13,"Stallworth, Felicia",74 Richardson Ave,East Hampton,NY,11937,"74 Richardson Ave, East Hampton, NY 11937",(332) 202-6673,SA6338,SOF *2957,Delivery,41.0350407,-72.1776515
+14,"Hall, Carl",418 Three Mile Harbor Hog Creek Rd,East Hampton,NY,11937,"418 Three Mile Harbor Hog Creek Rd, East Hampton, NY 11937",(214) 673-6642,SA6445,SOF *0074,Delivery,41.0263797,-72.1746558
+15,"Mcauliffe, Alexandra",3 Breeze Hill Rd,East Hampton,NY,11937,"3 Breeze Hill Rd, East Hampton, NY 11937",(917) 862-4030,SA6636,SOF *3005,Delivery,41.0099762,-72.1825311
+16,"Cole, Phil",45 Jonathan Dr 2B,East Hampton,NY,11937,"45 Jonathan Dr 2B, East Hampton, NY 11937",(917) 705-3441,1014623,SOF *2000,Delivery,40.9910769,-72.1929583
+17,"Lorell, Elizabeth",29 Spring Wood Way,East Hampton,NY,11937,"29 Spring Wood Way, East Hampton, NY 11937",(973) 476-3512,1015019,SOF *0788,Delivery,41.0142943,-72.1961027
+18,"Goncalves, Maria",19 Saddle Ln,East Hampton,NY,11937,"19 Saddle Ln, East Hampton, NY 11937",(631) 379-9980,1002788,SOF *2015,Delivery,41.0135332,-72.2123533
+19,"Lazarz, Scott Nick",14 Masthead Ln,East Hampton,NY,11937,"14 Masthead Ln, East Hampton, NY 11937",(212) 256-1987,1015268,SOF *4155,Delivery,41.0371563,-72.2201679
+20,"Varela, Eduardo",12 Landfall Cir,East Hampton,NY,11937,"12 Landfall Cir, East Hampton, NY 11937",(347) 574-0282,1015395,SOF *8549,Delivery,41.0345671,-72.2237947
+21,"Ovaitt, Elena",20 North Pass Rd,East Hampton,NY,11937,"20 North Pass Rd, East Hampton, NY 11937",(646) 246-2114,SA6517,SOF *5010,Delivery,41.0333899,-72.2220043
+22,"Butler, Paula",14 Old Orchard Ln,East Hampton,NY,11937,"14 Old Orchard Ln, East Hampton, NY 11937",(631) 324-3601,1008581,SOF *8021,Delivery,40.9814,-72.2089
+23,"Cohen, Stacey",8 Old Orchard Ln,East Hampton,NY,11937,"8 Old Orchard Ln, East Hampton, NY 11937",(561) 445-1677,1001532,SOF *8773,Delivery,40.9813685,-72.2088598
+24,"Levitin, Sam",37 Squires Path,East Hampton,NY,11937,"37 Squires Path, East Hampton, NY 11937",(201) 518-6465,1014871,SOF *3002,Delivery,40.9669843,-72.2241441
+25,"Scouras, Terry",501 Sag Harbor Turnpike,East Hampton,NY,11937,"501 Sag Harbor Turnpike, East Hampton, NY 11937",(716) 912-3771,1016926,SOF *1010,Delivery,40.9778457,-72.2462498
+26,"Rubin, Laura",53 Franklin St,Sag Harbor,NY,11963,"53 Franklin St, Sag Harbor, NY 11963",(917) 861-2036,SA6413,SOF *8004,Delivery,40.9981763,-72.2880086
+27,"Pickering, Gale",14 Prospect Ave,Sag Harbor,NY,11963,"14 Prospect Ave, Sag Harbor, NY 11963",(631) 877-7007,1004773,SOF *2005,Delivery,40.9992276,-72.2876166
+28,Goop,4 Bay St,Sag Harbor,NY,11963,"4 Bay St, Sag Harbor, NY 11963",(631) 808-3930,SA6382,A/R,A/R,41.0016545,-72.2940517
+29,"Geffen, Lu",41 Sunset Beach Rd,Sag Harbor,NY,11963,"41 Sunset Beach Rd, Sag Harbor, NY 11963",(631) 919-5156,1005425,SOF *4007,Delivery,41.0207022,-72.3145318
+30,"Soffer, Jessica",33 Seely Ln,Sag Harbor,NY,11963,"33 Seely Ln, Sag Harbor, NY 11963",(917) 287-8413,SA5791,SOF *4004,Delivery,41.0178286,-72.3148878
+31,"Brickman, Maura",33 Robertson Dr,Sag Harbor,NY,11963,"33 Robertson Dr, Sag Harbor, NY 11963",(917) 416-7921,SA5988,SOF *9009,Delivery,41.0177747,-72.3227334
+32,"Cahill, Alexa",23 Short Beach Rd,Sag Harbor,NY,11963,"23 Short Beach Rd, Sag Harbor, NY 11963",(917) 273-4081,1014411,SOF *1642,Delivery,41.010906,-72.314034
+33,"Kohr, Johanna",15 Wildwood Rd,Sag Harbor,NY,11963,"15 Wildwood Rd, Sag Harbor, NY 11963",(415) 310-2527,SA6407,SOF *0751,Delivery,40.9864252,-72.3670136
+34,"Babcock, Allison",17 Bluff Point Rd,Sag Harbor,NY,11963,"17 Bluff Point Rd, Sag Harbor, NY 11963",(631) 833-0576,1009378,SOF *5018,Delivery,40.9928698,-72.305828
+35,"Kutaeva, Tolina",48 Garden St,Sag Harbor,NY,11963,"48 Garden St, Sag Harbor, NY 11963",(646) 419-0885,SA6645,SOF *7364,Delivery,40.9991663,-72.2982136
+36,"Darrow, Meredith",289 Madison St,Sag Harbor,NY,11963,"289 Madison St, Sag Harbor, NY 11963",(917) 923-9374,1005985,SOF *4002,Delivery,40.9916309,-72.2904299
+37,"Heller, Jill",8 Harrison St,Sag Harbor,NY,11963,"8 Harrison St, Sag Harbor, NY 11963",(914) 262-1529,1010399,SOF *8001,Delivery,40.9911002,-72.2898704
+38,"Piccolomini, Manfredi",3 Montauk Ave Ext,Sag Harbor,NY,11963,"3 Montauk Ave Ext, Sag Harbor, NY 11963",(917) 653-0782,1000956,SOF *7007,Delivery,40.9917512,-72.2854142
+39,"Schwartz, Lonny",354 Madison St,Sag Harbor,NY,11963,"354 Madison St, Sag Harbor, NY 11963",(516) 721-0015,1016757,SOF *1007,Delivery,40.9886221,-72.2898682
+40,"Mancini, Bella",275 Town Line Rd,Sag Harbor,NY,11963,"275 Town Line Rd, Sag Harbor, NY 11963",(917) 686-8060,1015431,SOF *7322,Delivery,40.9746251,-72.2754394
+41,"Mancini, Jeff",275 Town Line Rd,Sag Harbor,NY,11963,"275 Town Line Rd, Sag Harbor, NY 11963",(646) 246-0680,1016772,SOF *7518,Delivery,40.9746251,-72.2754394
+42,"Reilly, John",30 Sagg Rd,Sagaponack,NY,11962,"30 Sagg Rd, Sagaponack, NY 11962",(516) 769-9275,SA6613,SOF *3290,Delivery,40.9541019,-72.2829637
+43,"Morris, Paige",7 Sagaponack Ct,Wainscott,NY,11975,"7 Sagaponack Ct, Wainscott, NY 11975",(917) 440-9847,1009015,SOF *4003,Delivery,40.9550637,-72.2768801
+44,"Frampton, Elena",141 Corwith Ave 15E,Bridgehampton,NY,11932,"141 Corwith Ave 15E, Bridgehampton, NY 11932",(646) 361-1252,1015151,SOF *4620,Delivery,40.9399399,-72.3066532
+45,"Novak, Bob",323 Butter Ln,Bridgehampton,NY,11932,"323 Butter Ln, Bridgehampton, NY 11932",(631) 800-9893,1003764,SOF *6001,Delivery,40.9430407,-72.3124151
+46,Borsella/Hoefler,203 Hildreth Ln,Bridgehampton,NY,11932,"203 Hildreth Ln, Bridgehampton, NY 11932",(917) 957-1832,SA5313,SOF *4005,Delivery,40.9323259,-72.3058495
+47,"Poser, Sam",74 Kellis Pond Ln,Water Mill,NY,11976,"74 Kellis Pond Ln, Water Mill, NY 11976",(954) 288-7578,SA5572,SOF *1003,Delivery,40.9240132,-72.321643
+48,"Hershenhorn, Rachel",48 Summerfield Ln,Water Mill,NY,11976,"48 Summerfield Ln, Water Mill, NY 11976",(516) 398-2118,SA6370,SOF *5025,Delivery,40.9123706,-72.3178232
+49,"Hirsch, Helyn",1088 Mecox Rd,Bridgehampton,NY,11932,"1088 Mecox Rd, Bridgehampton, NY 11932",(201) 280-1000,SA5735,SOF *0353,Delivery,40.911435,-72.3063822
+50,"Curtin, Annie",246 Bridge Ln,Bridgehampton,NY,11932,"246 Bridge Ln, Bridgehampton, NY 11932",(631) 903-9546,1007149,SOF *5003,Delivery,40.9194799,-72.2919725
+51,"Gans, Irina",640 Sagg Main St,Sagaponack,NY,11962,"640 Sagg Main St, Sagaponack, NY 11962",(917) 691-7019,1004532,SOF *5020,Delivery,40.923596,-72.2782454
+52,"Warren, Marjorie",74 Old Barn Ln,Sagaponack,NY,11962,"74 Old Barn Ln, Sagaponack, NY 11962",(516) 729-2165,SA6077,SOF *4001,Delivery,40.9327361,-72.2602065
+53,"Ebershoff, David",72 Town Line Rd,Sagaponack,NY,11962,"72 Town Line Rd, Sagaponack, NY 11962",(917) 881-3242,SA5750,SOF *6971,Delivery,40.925035,-72.2472641
+54,"Levy, Dawn",2 Merriwood Dr,Wainscott,NY,11975,"2 Merriwood Dr, Wainscott, NY 11975",(201) 233-8422,1015632,SOF *6000,Delivery,40.9454103,-72.2454881
+55,"Carpenter, Amy",12 Esterbrook Rd,Wainscott,NY,11975,"12 Esterbrook Rd, Wainscott, NY 11975",(626) 437-2439,1007923,SOF *3011,Delivery,40.9504363,-72.2498161
