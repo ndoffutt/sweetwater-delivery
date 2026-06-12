@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/session";
 import { cheapestInsertion, seqBetween } from "@/lib/geo";
 import { normalizeRouteSeqs } from "@/lib/route";
+import { geocodeAddress } from "@/lib/geocode";
 
 export interface MasterStop {
   id: string;
@@ -106,6 +107,9 @@ export async function createCustomer(input: CustomerInput) {
   await requireSession("dispatcher");
   const supabase = createAdminClient();
 
+  // Geocode up front so the route-position suggestion pops right after adding.
+  const coords = await geocodeAddress(input.address);
+
   const { data, error } = await supabase
     .from("customers")
     .insert({
@@ -114,6 +118,8 @@ export async function createCustomer(input: CustomerInput) {
       phone: input.phone || null,
       gate_code: input.gate_code || null,
       delivery_notes: input.delivery_notes || null,
+      lat: coords?.lat ?? null,
+      lng: coords?.lng ?? null,
     })
     .select()
     .single();
@@ -127,9 +133,17 @@ export async function updateCustomer(id: string, input: Partial<CustomerInput>) 
   await requireSession("dispatcher");
   const supabase = createAdminClient();
 
+  const patch: Record<string, unknown> = { ...input };
+  // Address changed → keep the map pin in sync.
+  if (input.address) {
+    const coords = await geocodeAddress(input.address);
+    patch.lat = coords?.lat ?? null;
+    patch.lng = coords?.lng ?? null;
+  }
+
   const { error } = await supabase
     .from("customers")
-    .update(input)
+    .update(patch)
     .eq("id", id);
 
   if (error) return { error: error.message };

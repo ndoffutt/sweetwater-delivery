@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useTransition } from "react";
 import {
   createCustomer,
+  updateCustomer,
   deleteCustomer,
   saveCustomerNotes,
   saveCustomerTags,
@@ -372,6 +373,7 @@ function Detail({
   const [gate, setGate] = useState(c.gate_code ?? "");
   const [notes, setNotes] = useState(c.delivery_notes ?? "");
   const [saved, setSaved] = useState(false);
+  const [editing, setEditing] = useState(false);
   const tags = c.tags ?? [];
   const dirty = gate !== (c.gate_code ?? "") || notes !== (c.delivery_notes ?? "");
 
@@ -424,6 +426,16 @@ function Detail({
     setTimeout(() => setSaved(false), 2000);
   }
 
+  if (editing) {
+    return (
+      <EditCustomer
+        c={c}
+        onCancel={() => setEditing(false)}
+        onSaved={(f) => { onPatch(f); setEditing(false); }}
+      />
+    );
+  }
+
   return (
     <div className="p-5 md:p-8 md:max-w-2xl space-y-5">
       <button onClick={onBack} className="md:hidden text-sm text-charcoal/50 font-body">← Back</button>
@@ -431,11 +443,19 @@ function Detail({
       <div>
         <div className="flex items-start justify-between gap-3">
           <h2 className="font-serif text-3xl font-light text-charcoal">{c.name}</h2>
-          {c.account_type && (
-            <span className={`shrink-0 text-[11px] font-body uppercase tracking-wider px-2.5 py-1 rounded-full ${c.account_type === "Delivery" ? "bg-green-primary/10 text-green-primary" : "bg-gold-primary/20 text-gold-dark"}`}>
-              {c.account_type}
-            </span>
-          )}
+          <div className="shrink-0 flex items-center gap-2">
+            {c.account_type && (
+              <span className={`text-[11px] font-body uppercase tracking-wider px-2.5 py-1 rounded-full ${c.account_type === "Delivery" ? "bg-green-primary/10 text-green-primary" : "bg-gold-primary/20 text-gold-dark"}`}>
+                {c.account_type}
+              </span>
+            )}
+            <button
+              onClick={() => setEditing(true)}
+              className="min-h-tap px-3 py-1.5 rounded-lg border border-cream-dark bg-cream text-charcoal/60 text-xs font-body uppercase tracking-widest"
+            >
+              ✎ Edit
+            </button>
+          </div>
         </div>
         {c.spot_account && <p className="text-xs text-charcoal/40 font-body mt-0.5">SPOT {c.spot_account}</p>}
       </div>
@@ -558,6 +578,60 @@ function Detail({
 
       <button onClick={() => { if (confirm(`Remove ${c.name}?`)) onDelete(); }} className="text-xs text-red-400 font-body uppercase tracking-widest">Remove customer</button>
     </div>
+  );
+}
+
+function EditCustomer({
+  c, onCancel, onSaved,
+}: {
+  c: Customer;
+  onCancel: () => void;
+  onSaved: (fields: Partial<Customer>) => void;
+}) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState("");
+
+  function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const name = (fd.get("name") as string).trim();
+    const address = (fd.get("address") as string).trim();
+    const phone = (fd.get("phone") as string).trim();
+    start(async () => {
+      const res = await updateCustomer(c.id, { name, address, phone: phone || undefined });
+      if (res.error) { setError(res.error); return; }
+      onSaved({ name, address, phone: phone || null });
+    });
+  }
+
+  const field = "w-full p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary";
+  const label = "text-[11px] text-charcoal/40 font-body uppercase tracking-widest block mb-1";
+
+  return (
+    <form onSubmit={submit} className="p-5 md:p-8 md:max-w-2xl space-y-3">
+      <button type="button" onClick={onCancel} className="md:hidden text-sm text-charcoal/50 font-body">← Back</button>
+      <h2 className="font-serif text-2xl font-light text-charcoal">Edit {c.name}</h2>
+      <div>
+        <span className={label}>Name</span>
+        <input name="name" defaultValue={c.name} required className={field} />
+      </div>
+      <div>
+        <span className={label}>Address</span>
+        <input name="address" defaultValue={c.address} required className={field} />
+        <p className="text-[11px] text-charcoal/40 font-body mt-1">Changing the address re-pins them on the map.</p>
+      </div>
+      <div>
+        <span className={label}>Phone</span>
+        <input name="phone" defaultValue={c.phone ?? ""} className={field} />
+      </div>
+      {error && <p className="text-sm text-red-600 font-body">{error}</p>}
+      <div className="flex gap-2">
+        <button type="submit" disabled={pending} className="flex-1 min-h-tap bg-green-primary text-cream font-body text-xs uppercase tracking-widest py-3 rounded-lg disabled:opacity-60">
+          {pending ? "Saving…" : "Save Changes"}
+        </button>
+        <button type="button" onClick={onCancel} className="min-h-tap px-4 text-charcoal/40 font-body text-xs uppercase tracking-widest">Cancel</button>
+      </div>
+    </form>
   );
 }
 

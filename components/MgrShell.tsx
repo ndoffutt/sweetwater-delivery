@@ -6,21 +6,23 @@ import { usePathname, useRouter } from "next/navigation";
 import { logout } from "@/lib/actions/auth";
 import WelcomeBack from "./WelcomeBack";
 
-type NavId = "dispatch" | "customers" | "messages" | "history" | "live" | "reports";
+type NavId = "dispatch" | "customers" | "sales" | "messages" | "history" | "live" | "reports";
 type NavItem = { id: NavId; label: string; href: string };
 const ITEMS: Record<NavId, NavItem> = {
   dispatch: { id: "dispatch", label: "Dispatch", href: "/dispatch" },
   customers: { id: "customers", label: "Customers", href: "/dispatch/customers" },
+  sales: { id: "sales", label: "Sales", href: "/sales/prospects" },
   messages: { id: "messages", label: "Messages", href: "/dispatch/messages" },
   history: { id: "history", label: "History", href: "/dispatch/history" },
   live: { id: "live", label: "Live", href: "/dispatch/live" },
   reports: { id: "reports", label: "Reports", href: "/dispatch/reports" },
 };
-// Owner (admin) gets the slimmed-down console; Manager keeps the ops tabs but
-// Messages is owner-only for now while it's being tested.
+// Owner (admin) gets the slimmed-down console (Sales lives on the /owner home);
+// Manager keeps the ops tabs + Sales so Ahsin can work prospects. Messages is
+// owner-only for now while it's being tested.
 const NAV_BY_ROLE: Record<"dispatcher" | "admin", NavItem[]> = {
   admin: [ITEMS.dispatch, ITEMS.customers, ITEMS.messages, ITEMS.history],
-  dispatcher: [ITEMS.dispatch, ITEMS.customers, ITEMS.history, ITEMS.live, ITEMS.reports],
+  dispatcher: [ITEMS.dispatch, ITEMS.customers, ITEMS.sales, ITEMS.history, ITEMS.live, ITEMS.reports],
 };
 
 function NavIcon({ id, className = "w-5 h-5" }: { id: NavId; className?: string }) {
@@ -28,6 +30,7 @@ function NavIcon({ id, className = "w-5 h-5" }: { id: NavId; className?: string 
   const paths: Record<NavId, React.ReactNode> = {
     dispatch: <g {...p}><circle cx="6" cy="18" r="2.4" /><circle cx="18" cy="6" r="2.4" /><path d="M8.4 18H14a3 3 0 000-6H9a3 3 0 010-6h6.5" /></g>,
     customers: <g {...p}><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20a5.5 5.5 0 0111 0" /><path d="M16 5.2a3 3 0 010 5.6M16.5 20a5.5 5.5 0 00-2-4.3" /></g>,
+    sales: <g {...p}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="0.8" /></g>,
     messages: <g {...p}><path d="M4 5h16a1 1 0 011 1v10a1 1 0 01-1 1H9l-4.5 3.5V17H4a1 1 0 01-1-1V6a1 1 0 011-1z" /><path d="M8 9.5h8M8 12.5h5" /></g>,
     history: <g {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></g>,
     live: <g {...p}><circle cx="12" cy="12" r="2.4" /><path d="M7.5 7.5a6 6 0 000 9M16.5 7.5a6 6 0 010 9M4.7 4.7a10 10 0 000 14.6M19.3 4.7a10 10 0 010 14.6" /></g>,

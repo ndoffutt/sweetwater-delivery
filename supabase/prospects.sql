@@ -451,3 +451,15 @@ update prospects set services = '{linen}'
   where name in ('Hedges Inn', 'Charles Gallanti Inc.');
 update prospects set services = '{referral}'
   where name in ('Hamptons Exclusive Property Mgmt', 'Mill House Inn', 'Journey East Hampton');
+
+-- ============================================================
+-- LINK — prospects that are already delivery customers
+-- (never double-add: match by normalized name)
+-- ============================================================
+update prospects p set customer_id = c.id
+from customers c
+where p.customer_id is null
+  and p.deleted_at is null
+  and c.deleted_at is null and c.active
+  and lower(regexp_replace(c.name, '[^a-zA-Z0-9]', '', 'g'))
+    = lower(regexp_replace(p.name, '[^a-zA-Z0-9]', '', 'g'));

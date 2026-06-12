@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
-async function geocodeBusiness(name: string, address: string | null): Promise<{ lat: number; lng: number } | null> {
+export async function geocodeBusiness(name: string, address: string | null): Promise<{ lat: number; lng: number } | null> {
   if (!TOKEN) return null;
   const q = [name, address].filter(Boolean).join(", ");
   try {

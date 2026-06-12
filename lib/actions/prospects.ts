@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/session";
+import { geocodeBusiness } from "@/lib/prospectGeo";
 import type { ProspectBusinessType, ProspectService, ProspectStatus, TouchpointType } from "@/lib/types";
 
 interface ProspectInput {
@@ -47,22 +48,40 @@ export async function updateProspect(
 ) {
   await requireSession("dispatcher");
   const supabase = createAdminClient();
-  const { error } = await supabase.from("prospects").update(fields).eq("id", id);
+  const patch: Record<string, unknown> = { ...fields };
+  // Address changed → re-pin on the map (null falls back to page-load geocoding).
+  if (fields.address !== undefined) {
+    const coords = await geocodeBusiness(fields.name ?? "", fields.address ?? null);
+    patch.lat = coords?.lat ?? null;
+    patch.lng = coords?.lng ?? null;
+  }
+  const { error } = await supabase.from("prospects").update(patch).eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/sales/prospects");
   return { success: true };
 }
 
-export async function logTouchpoint(prospectId: string, type: TouchpointType, note?: string) {
+export async function logTouchpoint(
+  prospectId: string,
+  type: TouchpointType,
+  note?: string,
+  date?: string // YYYY-MM-DD; defaults to now
+) {
   const session = await requireSession("dispatcher");
   const supabase = createAdminClient();
+  // Attribution: the Owner login is Nate, the Manager login is Ahsin.
+  const who =
+    session.role === "admin" ? "Nate" : session.role === "dispatcher" ? "Ahsin" : session.name;
+  const today = new Date().toISOString().slice(0, 10);
   const { data, error } = await supabase
     .from("prospect_touchpoints")
     .insert({
       prospect_id: prospectId,
       type,
       note: note?.trim() || null,
-      created_by: session.name,
+      created_by: who,
+      // Backdated entries land at noon ET on the chosen day.
+      ...(date && date !== today ? { created_at: `${date}T12:00:00-04:00` } : {}),
     })
     .select()
     .single();
@@ -105,18 +124,32 @@ export async function convertProspectToCustomer(id: string) {
   if (fetchError || !prospect) return { error: fetchError?.message ?? "Prospect not found" };
   if (prospect.customer_id) return { error: "Already converted to a customer" };
 
-  const { data: customer, error: insertError } = await supabase
+  // Never double-add: if a customer with this name already exists, link to it.
+  const norm = (s: string) => s.toLowerCase().replace(/^the /, "").replace(/[^a-z0-9]/g, "");
+  const { data: existingCustomers } = await supabase
     .from("customers")
-    .insert({
-      name: prospect.name,
-      address: prospect.address || "Address needed",
-      phone: prospect.phone || null,
-      delivery_notes: prospect.notes || null,
-      tags: ["Commercial"],
-    })
-    .select()
-    .single();
-  if (insertError) return { error: insertError.message };
+    .select("id,name")
+    .eq("active", true)
+    .is("deleted_at", null);
+  const existing = (existingCustomers ?? []).find((c) => norm(c.name) === norm(prospect.name));
+
+  let customer = existing ?? null;
+  if (!customer) {
+    const { data: created, error: insertError } = await supabase
+      .from("customers")
+      .insert({
+        name: prospect.name,
+        address: prospect.address || "Address needed",
+        phone: prospect.phone || null,
+        delivery_notes: prospect.notes || null,
+        tags: ["Commercial"],
+      })
+      .select()
+      .single();
+    if (insertError) return { error: insertError.message };
+    customer = created;
+  }
+  if (!customer) return { error: "Could not create customer" };
 
   const { error: updateError } = await supabase
     .from("prospects")

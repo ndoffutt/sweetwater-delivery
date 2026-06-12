@@ -5,9 +5,9 @@ import { getSession } from "@/lib/session";
 export default async function SalesLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
   if (!session) redirect("/");
-  if (session.role !== "admin") {
-    redirect(session.role === "driver" ? "/driver" : "/dispatch");
-  }
+  // Owner and Manager both work sales; drivers don't.
+  if (session.role !== "admin" && session.role !== "dispatcher") redirect("/driver");
+  const home = session.role === "admin" ? "/owner" : "/dispatch";
 
   return (
     <div className="md:flex md:h-screen bg-cream-dark">
@@ -26,7 +26,7 @@ export default async function SalesLayout({ children }: { children: React.ReactN
           </span>
         </nav>
         <div className="px-3 pb-5">
-          <Link href="/owner" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-body text-cream/65 hover:text-cream hover:bg-white/5 transition-colors">
+          <Link href={home} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-body text-cream/65 hover:text-cream hover:bg-white/5 transition-colors">
             ← Home
           </Link>
         </div>
@@ -38,7 +38,7 @@ export default async function SalesLayout({ children }: { children: React.ReactN
           <div className="font-serif text-lg font-light leading-none">Prospects</div>
           <div className="text-[10px] uppercase tracking-[0.18em] text-gold-light">Sweetwater&apos;s Sales</div>
         </div>
-        <Link href="/owner" className="text-[11px] uppercase tracking-[0.16em] text-cream/70 min-h-tap flex items-center">
+        <Link href={home} className="text-[11px] uppercase tracking-[0.16em] text-cream/70 min-h-tap flex items-center">
           ← Home
         </Link>
       </header>

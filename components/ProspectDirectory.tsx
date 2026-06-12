@@ -43,12 +43,14 @@ const SERVICES: { id: ProspectService; label: string }[] = [
 ];
 
 const TOUCH_TYPES: { id: TouchpointType; label: string; icon: string }[] = [
+  { id: "visit", label: "Visit", icon: "🚪" },
   { id: "call", label: "Call", icon: "📞" },
   { id: "email", label: "Email", icon: "✉️" },
   { id: "text", label: "Text", icon: "💬" },
-  { id: "visit", label: "Visit", icon: "🚪" },
   { id: "note", label: "Note", icon: "📝" },
 ];
+
+const todayStr = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD local
 
 const typeLabel = (t: ProspectBusinessType) => TYPES.find((x) => x.id === t)?.label ?? t;
 
@@ -293,6 +295,10 @@ function Detail({
   const [saved, setSaved] = useState(false);
   const [touchType, setTouchType] = useState<TouchpointType | null>(null);
   const [touchNote, setTouchNote] = useState("");
+  const [touchDate, setTouchDate] = useState(todayStr);
+  // Dead requires a reason (null = popup closed).
+  const [deadReason, setDeadReason] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [converting, setConverting] = useState(false);
   const [error, setError] = useState("");
@@ -307,8 +313,25 @@ function Detail({
       setSvcPick(p.services ?? []);
       return;
     }
+    if (status === "dead" && p.status !== "dead") {
+      // Dead requires a reason so the list stays auditable.
+      setDeadReason("");
+      return;
+    }
     onPatch({ status });
     startTransition(() => { updateProspect(p.id, { status }); });
+  }
+
+  async function confirmDead() {
+    const reason = deadReason?.trim();
+    if (!reason) return;
+    onPatch({ status: "dead" });
+    setDeadReason(null);
+    await updateProspect(p.id, { status: "dead" });
+    const res = await logTouchpoint(p.id, "note", `Marked dead — ${reason}`);
+    if (res.touchpoint) {
+      onPatch({ touchpoints: [res.touchpoint as ProspectTouchpoint, ...(p.touchpoints ?? [])] });
+    }
   }
 
   function confirmActive() {
@@ -328,16 +351,21 @@ function Detail({
   async function saveTouch() {
     if (!touchType) return;
     setBusy(true);
-    const res = await logTouchpoint(p.id, touchType, touchNote);
+    const res = await logTouchpoint(p.id, touchType, touchNote, touchDate);
     setBusy(false);
     if (res.error) { setError(res.error); return; }
     const tp = res.touchpoint as ProspectTouchpoint;
+    // Keep history sorted even when the touch is backdated.
+    const touchpoints = [tp, ...(p.touchpoints ?? [])].sort((a, b) =>
+      b.created_at.localeCompare(a.created_at)
+    );
     onPatch({
-      touchpoints: [tp, ...(p.touchpoints ?? [])],
+      touchpoints,
       ...(p.status === "new" ? { status: "working" as ProspectStatus } : {}),
     });
     setTouchType(null);
     setTouchNote("");
+    setTouchDate(todayStr());
   }
 
   async function saveNotes() {
@@ -351,17 +379,35 @@ function Detail({
     setConverting(true);
     const res = await convertProspectToCustomer(p.id);
     setConverting(false);
-    if (res.error) { setError(res.error); return; }
+    if (res.error || !res.customer) { setError(res.error ?? "Conversion failed"); return; }
     onPatch({ status: "active", customer_id: res.customer.id });
+  }
+
+  if (editing) {
+    return (
+      <EditProspect
+        p={p}
+        onCancel={() => setEditing(false)}
+        onSaved={(f) => { onPatch(f); setEditing(false); }}
+      />
+    );
   }
 
   return (
     <div className="p-5 md:p-8 md:max-w-2xl space-y-5">
       <button onClick={onBack} className="md:hidden text-sm text-charcoal/50 font-body">← Back</button>
 
-      <div>
-        <h2 className="font-serif text-3xl font-light text-charcoal">{p.name}</h2>
-        <p className="text-xs text-charcoal/40 font-body mt-0.5">{typeLabel(p.business_type)}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-serif text-3xl font-light text-charcoal">{p.name}</h2>
+          <p className="text-xs text-charcoal/40 font-body mt-0.5">{typeLabel(p.business_type)}</p>
+        </div>
+        <button
+          onClick={() => setEditing(true)}
+          className="shrink-0 min-h-tap px-3 py-1.5 rounded-lg border border-cream-dark bg-cream text-charcoal/60 text-xs font-body uppercase tracking-widest"
+        >
+          ✎ Edit
+        </button>
       </div>
 
       {/* Status pipeline */}
@@ -380,7 +426,7 @@ function Detail({
         </div>
         {p.status === "active" && (
           <div className="mt-3">
-            <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-2">They Buy</p>
+            <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-2">Services</p>
             <div className="flex gap-1.5 flex-wrap">
               {SERVICES.map((s) => {
                 const on = (p.services ?? []).includes(s.id);
@@ -410,6 +456,38 @@ function Detail({
           <p className="mt-2 text-xs text-green-primary font-body">✓ In the customer directory</p>
         )}
       </div>
+
+      {/* Dead popup: a reason is required so the list stays auditable */}
+      {deadReason !== null && (
+        <div className="fixed inset-0 z-50 bg-charcoal/40 flex items-center justify-center p-6" onClick={() => setDeadReason(null)}>
+          <div className="bg-cream rounded-2xl p-5 w-full max-w-sm shadow-xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div>
+              <h3 className="font-serif text-xl font-light text-charcoal">Mark {p.name} dead</h3>
+              <p className="text-xs text-charcoal/50 font-body mt-1">Why is this not winnable? (required)</p>
+            </div>
+            <textarea
+              value={deadReason}
+              onChange={(e) => setDeadReason(e.target.value)}
+              rows={3}
+              autoFocus
+              placeholder="e.g. laundry on site, contracted with Mattituck, hard no from GM…"
+              className="w-full p-2.5 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm resize-none focus:outline-none focus:border-green-primary"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={confirmDead}
+                disabled={!deadReason.trim()}
+                className="flex-1 min-h-tap bg-charcoal text-cream font-body text-xs uppercase tracking-widest py-3 rounded-lg disabled:opacity-40"
+              >
+                Mark Dead
+              </button>
+              <button onClick={() => setDeadReason(null)} className="min-h-tap px-4 text-charcoal/40 font-body text-xs uppercase tracking-widest">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Activation popup: capture what the new account buys */}
       {svcPick !== null && (
@@ -498,6 +576,16 @@ function Detail({
               placeholder="What happened? (optional)"
               className="w-full p-2.5 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm resize-none focus:outline-none focus:border-green-primary"
             />
+            <label className="flex items-center gap-2 text-xs text-charcoal/50 font-body">
+              When:
+              <input
+                type="date"
+                value={touchDate}
+                max={todayStr()}
+                onChange={(e) => setTouchDate(e.target.value)}
+                className="min-h-tap px-2.5 py-1.5 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary"
+              />
+            </label>
             <button
               onClick={saveTouch}
               disabled={busy}
@@ -538,6 +626,7 @@ function Detail({
                 <div className="flex items-center gap-2 text-sm font-body text-charcoal">
                   <span>{TOUCH_TYPES.find((x) => x.id === t.type)?.icon}</span>
                   <span className="capitalize">{t.type}</span>
+                  {t.created_by && <span className="text-charcoal/40 text-xs">· {t.created_by}</span>}
                   <span className="text-charcoal/40 text-xs ml-auto">{fmtDate(t.created_at)}</span>
                 </div>
                 {t.note && <p className="text-xs text-charcoal/60 font-body mt-1">{t.note}</p>}
@@ -554,6 +643,108 @@ function Detail({
         Remove prospect
       </button>
     </div>
+  );
+}
+
+function EditProspect({
+  p, onCancel, onSaved,
+}: {
+  p: Prospect;
+  onCancel: () => void;
+  onSaved: (fields: Partial<Prospect>) => void;
+}) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState("");
+  const [businessType, setBusinessType] = useState<ProspectBusinessType>(p.business_type);
+
+  function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const val = (n: string) => (fd.get(n) as string).trim();
+    const fields = {
+      name: val("name"),
+      contact_name: val("contact_name") || undefined,
+      contact_title: val("contact_title") || undefined,
+      phone: val("phone") || undefined,
+      email: val("email") || undefined,
+      address: val("address") || undefined,
+      website: val("website") || undefined,
+      business_type: businessType,
+    };
+    start(async () => {
+      const res = await updateProspect(p.id, fields);
+      if (res.error) { setError(res.error); return; }
+      onSaved({
+        name: fields.name,
+        contact_name: fields.contact_name ?? null,
+        contact_title: fields.contact_title ?? null,
+        phone: fields.phone ?? null,
+        email: fields.email ?? null,
+        address: fields.address ?? null,
+        website: fields.website ?? null,
+        business_type: businessType,
+      });
+    });
+  }
+
+  const field = "w-full p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary";
+  const label = "text-[11px] text-charcoal/40 font-body uppercase tracking-widest block mb-1";
+
+  return (
+    <form onSubmit={submit} className="p-5 md:p-8 md:max-w-2xl space-y-3">
+      <button type="button" onClick={onCancel} className="md:hidden text-sm text-charcoal/50 font-body">← Back</button>
+      <h2 className="font-serif text-2xl font-light text-charcoal">Edit {p.name}</h2>
+      <div>
+        <span className={label}>Business name</span>
+        <input name="name" defaultValue={p.name} required className={field} />
+      </div>
+      <div className="flex gap-1.5 flex-wrap">
+        {TYPES.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setBusinessType(t.id)}
+            className={`px-3 py-1.5 rounded-full text-xs font-body ${businessType === t.id ? "bg-green-primary text-cream" : "bg-cream-dark text-charcoal/50"}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <span className={label}>Main contact (POC)</span>
+          <input name="contact_name" defaultValue={p.contact_name ?? ""} className={field} />
+        </div>
+        <div>
+          <span className={label}>Title</span>
+          <input name="contact_title" defaultValue={p.contact_title ?? ""} className={field} />
+        </div>
+      </div>
+      <div>
+        <span className={label}>Phone</span>
+        <input name="phone" defaultValue={p.phone ?? ""} className={field} />
+      </div>
+      <div>
+        <span className={label}>Email</span>
+        <input name="email" type="email" defaultValue={p.email ?? ""} className={field} />
+      </div>
+      <div>
+        <span className={label}>Address</span>
+        <input name="address" defaultValue={p.address ?? ""} className={field} />
+        <p className="text-[11px] text-charcoal/40 font-body mt-1">Changing the address re-pins them on the map.</p>
+      </div>
+      <div>
+        <span className={label}>Website</span>
+        <input name="website" defaultValue={p.website ?? ""} className={field} />
+      </div>
+      {error && <p className="text-sm text-red-600 font-body">{error}</p>}
+      <div className="flex gap-2">
+        <button type="submit" disabled={pending} className="flex-1 min-h-tap bg-green-primary text-cream font-body text-xs uppercase tracking-widest py-3 rounded-lg disabled:opacity-60">
+          {pending ? "Saving…" : "Save Changes"}
+        </button>
+        <button type="button" onClick={onCancel} className="min-h-tap px-4 text-charcoal/40 font-body text-xs uppercase tracking-widest">Cancel</button>
+      </div>
+    </form>
   );
 }
 
