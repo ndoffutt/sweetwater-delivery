@@ -64,8 +64,50 @@ async function notifyRouteStarted(
   );
 }
 
+// A completed delivery to an active prospect counts as a visit, so it clears
+// the "overdue for a visit" reminder. Best-effort and deduped to one auto-visit
+// per prospect per day; never blocks the delivery if anything here fails.
+async function logDeliveryVisit(
+  supabase: ReturnType<typeof createAdminClient>,
+  customerId: string | null,
+  driverName: string
+) {
+  if (!customerId) return;
+  try {
+    const { data: prospect } = await supabase
+      .from("prospects")
+      .select("id")
+      .eq("customer_id", customerId)
+      .eq("status", "active")
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (!prospect) return;
+
+    // Don't double-log if they were already visited in the last ~18h.
+    const cutoff = new Date(Date.now() - 18 * 60 * 60 * 1000).toISOString();
+    const { data: recent } = await supabase
+      .from("prospect_touchpoints")
+      .select("id")
+      .eq("prospect_id", prospect.id)
+      .eq("type", "visit")
+      .gte("created_at", cutoff)
+      .limit(1);
+    if (recent && recent.length > 0) return;
+
+    await supabase.from("prospect_touchpoints").insert({
+      prospect_id: prospect.id,
+      type: "visit",
+      note: "Delivery",
+      created_by: driverName || "Delivery",
+    });
+    revalidatePath("/sales/prospects");
+  } catch {
+    /* prospects tables may not exist yet; delivery completion must still succeed */
+  }
+}
+
 export async function updateStopStatus(stopId: string, status: StopStatus) {
-  await requireSession();
+  const session = await requireSession();
   const supabase = createAdminClient();
 
   const updates: Record<string, unknown> = { status };
@@ -81,7 +123,7 @@ export async function updateStopStatus(stopId: string, status: StopStatus) {
     .from("route_stops")
     .update(updates)
     .eq("id", stopId)
-    .select("route_id")
+    .select("route_id, customer_id")
     .single();
 
   if (error) return { error: error.message };
@@ -126,6 +168,7 @@ export async function updateStopStatus(stopId: string, status: StopStatus) {
   }
   if (status === "completed") {
     await autoText(supabase, stopId, "Your Sweetwater's delivery is complete.");
+    await logDeliveryVisit(supabase, stop.customer_id, session.name);
   }
 
   revalidatePath(`/driver/stop/${stopId}`);
