@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { geocodeAddress } from "@/lib/geocode";
+import type { DeliveryDay } from "@/lib/deliveryDay";
 
 // How a manifest stop was resolved against the existing customer directory.
 // - exact / phone / address: a confident DETERMINISTIC match (auto-merge, but
@@ -16,7 +17,7 @@ export interface MatchCandidate {
   address: string;
   lat: number | null;
   lng: number | null;
-  day?: "wednesday" | "thursday" | null;
+  days?: DeliveryDay[];
   reason?: string;
 }
 
@@ -28,7 +29,7 @@ export interface StopResolution {
   customerLat?: number | null;
   customerLng?: number | null;
   customerSeq?: number | null; // matched customer's position in the master route
-  customerDay?: "wednesday" | "thursday" | null; // designated delivery day
+  customerDays?: DeliveryDay[]; // designated delivery days
   candidate?: MatchCandidate; // set for "suggested"
   // Geocoded coordinates for a brand-new stop (SPOT manifests carry no lat/lng),
   // so the review screen can compute a proximity-based route-spot suggestion.
@@ -74,10 +75,10 @@ export async function resolveCustomers(
   stops: StopLike[]
 ): Promise<StopResolution[]> {
   const supabase = createAdminClient();
-  // delivery_day is optional (tolerant of the migration not having run yet).
+  // delivery_days is optional (tolerant of the migration not having run yet).
   let { data } = await supabase
     .from("customers")
-    .select("id,name,address,phone,lat,lng,route_seq,delivery_day")
+    .select("id,name,address,phone,lat,lng,route_seq,delivery_days")
     .eq("active", true)
     .is("deleted_at", null);
   if (!data) {
@@ -90,7 +91,7 @@ export async function resolveCustomers(
   }
   const customers = (data || []) as (CustomerRow & {
     route_seq: number | null;
-    delivery_day?: "wednesday" | "thursday" | null;
+    delivery_days?: DeliveryDay[] | null;
   })[];
 
   // Master-route position per customer, from the same single query.
@@ -116,7 +117,7 @@ export async function resolveCustomers(
   const auto = (
     i: number,
     kind: MatchKind,
-    c: CustomerRow & { delivery_day?: "wednesday" | "thursday" | null }
+    c: CustomerRow & { delivery_days?: DeliveryDay[] | null }
   ): StopResolution => ({
     index: i,
     kind,
@@ -125,7 +126,7 @@ export async function resolveCustomers(
     customerLat: c.lat,
     customerLng: c.lng,
     customerSeq: seqMap.get(c.id) ?? null,
-    customerDay: c.delivery_day ?? null,
+    customerDays: c.delivery_days ?? [],
   });
 
   stops.forEach((s, i) => {
@@ -159,7 +160,7 @@ export async function resolveCustomers(
             index: sug.index,
             kind: "suggested",
             customerSeq: seqMap.get(c.id) ?? null,
-            candidate: { id: c.id, name: c.name, address: c.address, lat: c.lat, lng: c.lng, day: c.delivery_day ?? null, reason: sug.reason },
+            candidate: { id: c.id, name: c.name, address: c.address, lat: c.lat, lng: c.lng, days: c.delivery_days ?? [], reason: sug.reason },
           };
         }
       }

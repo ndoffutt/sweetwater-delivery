@@ -1,3 +1,5 @@
+import type { DeliveryDay } from "@/lib/deliveryDay";
+
 // "dispatcher" is the Manager role (kept for back-compat with existing
 // sessions/rows); "admin" is a superset reserved for owner-level surfaces.
 export type UserRole = "driver" | "dispatcher" | "admin";
@@ -23,8 +25,10 @@ export interface Customer {
   spot_account: string | null;
   account_type: string | null;
   route_seq: number | null;
-  // Wednesday = east of the shop (East Hampton town), Thursday = west.
-  delivery_day?: "wednesday" | "thursday" | null;
+  // Run days for this customer. Wednesday = east of the shop (East Hampton
+  // town), Thursday = west, Monday = small commercial-only run. A customer can
+  // be on more than one (e.g. a twice-weekly commercial account).
+  delivery_days?: DeliveryDay[] | null;
   active: boolean;
   created_at: string;
 }

@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getLastManifestScan } from "@/lib/actions/manifest";
 import { easternToday } from "@/lib/date";
 import DispatchConsole, { type InitialStop } from "@/components/DispatchConsole";
+import type { DeliveryDay } from "@/lib/deliveryDay";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ interface RawStop {
     lat: number | null;
     lng: number | null;
     tags: string[] | null;
-    delivery_day?: "wednesday" | "thursday" | null;
+    delivery_days?: DeliveryDay[] | null;
   } | null;
 }
 
@@ -41,7 +42,7 @@ export default async function DispatchPage() {
     supabase
       .from("routes")
       .select(
-        `id,status,date,route_stops(stop_order,status,has_dropoff,has_pickup,notes,piece_count,customers(id,name,address,phone,lat,lng,tags${withDay ? ",delivery_day" : ""}))`
+        `id,status,date,route_stops(stop_order,status,has_dropoff,has_pickup,notes,piece_count,customers(id,name,address,phone,lat,lng,tags${withDay ? ",delivery_days" : ""}))`
       )
       .eq("date", today)
       .is("deleted_at", null)
@@ -51,7 +52,7 @@ export default async function DispatchPage() {
   const customersSelect = (withDay: boolean) =>
     supabase
       .from("customers")
-      .select(`id,name,address,phone,lat,lng,route_seq,tags${withDay ? ",delivery_day" : ""}`)
+      .select(`id,name,address,phone,lat,lng,route_seq,tags${withDay ? ",delivery_days" : ""}`)
       .eq("active", true)
       .is("deleted_at", null)
       .order("name");
@@ -81,7 +82,7 @@ export default async function DispatchPage() {
     customersSelect(true),
   ]);
 
-  // Tolerant of the delivery_day migration not having run yet.
+  // Tolerant of the delivery_days migration not having run yet.
   const route = routeRes.error ? (await routeSelect(false)).data : routeRes.data;
   const allCustomerRows = customersRes.error
     ? (await customersSelect(false)).data
@@ -102,7 +103,7 @@ export default async function DispatchPage() {
       lat: s.customers!.lat,
       lng: s.customers!.lng,
       vip: (s.customers!.tags ?? []).includes("VIP"),
-      day: s.customers!.delivery_day ?? null,
+      days: s.customers!.delivery_days ?? [],
     }));
 
   const masterRoute = ((masterRows ?? []) as { name: string; lat: number | null; lng: number | null; route_seq: number }[])
@@ -112,7 +113,7 @@ export default async function DispatchPage() {
   const allCustomers = (((allCustomerRows ?? []) as unknown) as {
     id: string; name: string; address: string; phone: string | null;
     lat: number | null; lng: number | null; route_seq: number | null; tags: string[] | null;
-    delivery_day?: "wednesday" | "thursday" | null;
+    delivery_days?: DeliveryDay[] | null;
   }[]).map((c) => ({
     id: c.id,
     name: c.name,
@@ -122,7 +123,7 @@ export default async function DispatchPage() {
     lng: c.lng,
     route_seq: c.route_seq,
     vip: (c.tags ?? []).includes("VIP"),
-    delivery_day: c.delivery_day ?? null,
+    delivery_days: c.delivery_days ?? [],
   }));
 
   const dateLabel = new Date(today + "T12:00:00").toLocaleDateString("en-US", {

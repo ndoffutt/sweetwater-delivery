@@ -22,14 +22,24 @@ export default async function CustomersPage() {
 
   const supabase = createAdminClient();
 
-  const { data: customers } = await supabase
+  const baseCols =
+    "id,name,address,phone,gate_code,delivery_notes,tags,spot_account,account_type,route_seq,lat,lng,active,created_at";
+  // delivery_days is optional (tolerant of the migration not having run yet).
+  let { data: customers } = await supabase
     .from("customers")
-    .select(
-      "id,name,address,phone,gate_code,delivery_notes,tags,spot_account,account_type,route_seq,lat,lng,active,created_at"
-    )
+    .select(`${baseCols},delivery_days`)
     .eq("active", true)
     .is("deleted_at", null)
     .order("name");
+  if (!customers) {
+    const retry = await supabase
+      .from("customers")
+      .select(baseCols)
+      .eq("active", true)
+      .is("deleted_at", null)
+      .order("name");
+    customers = retry.data as typeof customers;
+  }
 
   const { data: stops } = await supabase
     .from("route_stops")

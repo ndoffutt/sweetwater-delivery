@@ -7,7 +7,7 @@ import { compressImage } from "@/lib/compressImage";
 import { resolveManifestStops, dispatchRoute, saveDraftRoute, clearTodaysRoute, type LastScan } from "@/lib/actions/manifest";
 import type { StopResolution } from "@/lib/manifest/match";
 import { routeMiles, routeEtaMinutes, formatMiles, formatDuration, cheapestInsertion, seqBetween } from "@/lib/geo";
-import { dayForLocation, dayForDow, DAY_LABEL, type DeliveryDay } from "@/lib/deliveryDay";
+import { dayForLocation, dayForDow, DAY_LABEL, RUN_DAYS, type DeliveryDay } from "@/lib/deliveryDay";
 import RouteMap from "@/components/RouteMap";
 import type { RouteStop } from "@/lib/types";
 
@@ -24,7 +24,7 @@ export interface InitialStop {
   lat: number | null;
   lng: number | null;
   vip: boolean;
-  day?: DeliveryDay | null;
+  days?: DeliveryDay[];
 }
 
 export interface MasterStop {
@@ -43,7 +43,7 @@ export interface PickCustomer {
   lng: number | null;
   route_seq: number | null;
   vip: boolean;
-  delivery_day?: DeliveryDay | null;
+  delivery_days?: DeliveryDay[];
 }
 
 interface Row {
@@ -68,13 +68,18 @@ interface Row {
   betweenBefore?: string;
   betweenAfter?: string;
   assignSeq?: number; // route_seq to persist for a new/unpositioned customer
-  day?: DeliveryDay | null; // designated run day (Wed = east, Thu = west)
+  days?: DeliveryDay[]; // designated run days (Mon, Wed = east, Thu = west)
 }
 
 type Phase = "empty" | "reading" | "review" | "dispatched";
 
 const GREEN = "#02733e";
 const townOf = (a: string) => a.split(",")[1]?.trim() ?? "";
+// Geographic default day as an array (east of shop = Wed, west = Thu).
+const geoDays = (lng: number | null | undefined): DeliveryDay[] => {
+  const d = dayForLocation(lng);
+  return d ? [d] : [];
+};
 const first = (n: string) => n.trim().split(/[\s/]/)[0] || n;
 
 let keySeq = 0;
@@ -178,7 +183,7 @@ export default function DispatchConsole({
       customerId: s.customerId,
       merge: s.customerId,
       included: true,
-      day: s.day ?? null,
+      days: s.days ?? [],
     }));
 
   const initialPhase: Phase =
@@ -262,13 +267,13 @@ export default function DispatchConsole({
           match: m,
           merge: auto ? m?.customerId ?? null : null,
           included: true,
-          // Matched customers carry their designated day; brand-new ones get
-          // it from geography (east of the shop = Wed, west = Thu).
-          day: auto
-            ? m?.customerDay ?? null
+          // Matched customers carry their designated days; brand-new ones get
+          // them from geography (east of the shop = Wed, west = Thu).
+          days: auto
+            ? m?.customerDays ?? []
             : m?.kind === "suggested"
-            ? null // unknown until the dispatcher decides merge vs. new
-            : dayForLocation(s.lng ?? m?.geoLng),
+            ? [] // unknown until the dispatcher decides merge vs. new
+            : geoDays(s.lng ?? m?.geoLng),
         };
       });
       const ordered = orderWithSuggestions(built, masterRoute);
@@ -319,11 +324,11 @@ export default function DispatchConsole({
             lat: r.lat ?? cand.lat ?? null,
             lng: r.lng ?? cand.lng ?? null,
             seq: r.seq ?? r.match?.customerSeq ?? null,
-            day: cand.day ?? r.day ?? null,
+            days: cand.days?.length ? cand.days : r.days ?? [],
           };
         }
-        // Declined the suggestion -> brand-new customer: day from geography.
-        return { ...r, merge, day: merge ? r.day : r.day ?? dayForLocation(r.lng) };
+        // Declined the suggestion -> brand-new customer: days from geography.
+        return { ...r, merge, days: merge ? r.days : r.days?.length ? r.days : geoDays(r.lng) };
       })
     );
   const toggleTask = (key: string, k: "has_dropoff" | "has_pickup") =>
@@ -343,7 +348,7 @@ export default function DispatchConsole({
   // customer belongs to the OTHER run (e.g. an East Hampton / Wednesday
   // customer on a Thursday manifest).
   const runDay = dispatchDow != null ? dayForDow(dispatchDow) : null;
-  const wrongDay = (r: Row) => Boolean(runDay && r.day && r.day !== runDay);
+  const wrongDay = (r: Row) => Boolean(runDay && r.days?.length && !r.days.includes(runDay));
   const wrongDayCount = included.filter(wrongDay).length;
 
   const coords = included.map((r) => (r.lat != null && r.lng != null ? { lat: r.lat, lng: r.lng } : null));
@@ -408,7 +413,7 @@ export default function DispatchConsole({
         customerId: c.id,
         merge: c.id,
         included: true,
-        day: c.delivery_day ?? null,
+        days: c.delivery_days ?? [],
       }));
 
     setRows((cur) => {
@@ -595,8 +600,8 @@ export default function DispatchConsole({
           <span className="text-red-500 mt-0.5"><Ic d={I.x} size={18} /></span>
           <p className="font-body text-sm text-red-700">
             <b>{wrongDayCount} stop{wrongDayCount === 1 ? "" : "s"} on the wrong day.</b>{" "}
-            Today is the {DAY_LABEL[runDay]} run, but the stop{wrongDayCount === 1 ? "" : "s"} marked in red below belong{wrongDayCount === 1 ? "s" : ""} to the {DAY_LABEL[runDay === "wednesday" ? "thursday" : "wednesday"]} run
-            ({runDay === "wednesday" ? "west of the shop" : "East Hampton town"}). Remove {wrongDayCount === 1 ? "it" : "them"} with the ✕, or send anyway if it&apos;s intentional.
+            Today is the {DAY_LABEL[runDay]} run, but the stop{wrongDayCount === 1 ? "" : "s"} marked in red below {wrongDayCount === 1 ? "isn't" : "aren't"} scheduled for {DAY_LABEL[runDay]}.
+            Remove {wrongDayCount === 1 ? "it" : "them"} with the ✕, or send anyway if it&apos;s intentional.
           </p>
         </div>
       )}
@@ -666,7 +671,7 @@ export default function DispatchConsole({
                     {r.vip && <span className="text-gold-dark shrink-0"><Ic d={I.star} size={13} fill /></span>}
                     {!dispatched && wrongDay(r) && (
                       <span className="shrink-0 bg-red-100 text-red-700 border border-red-300 rounded px-1.5 py-0.5 text-[10px] font-body font-semibold uppercase tracking-wide">
-                        {r.day === "wednesday" ? "Wed" : "Thu"} customer
+                        {RUN_DAYS.filter((d) => r.days?.includes(d)).map((d) => DAY_LABEL[d].slice(0, 3)).join(" · ")} customer
                       </span>
                     )}
                   </div>

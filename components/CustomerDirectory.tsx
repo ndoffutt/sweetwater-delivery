@@ -10,11 +10,12 @@ import {
   getRoutePositioning,
   saveRoutePosition,
   reorderRoute,
-  setDeliveryDay,
+  setDeliveryDays,
   type RoutePositioning,
 } from "@/lib/actions/customers";
 import RouteMap from "@/components/RouteMap";
 import type { Customer, RouteStop } from "@/lib/types";
+import { RUN_DAYS, DAY_LABEL, DAY_INITIAL, formatDays } from "@/lib/deliveryDay";
 
 export interface Activity {
   date: string;
@@ -281,7 +282,13 @@ export default function CustomerDirectory({
             </div>
           </div>
         )}
-        <div className="md:flex-1 md:overflow-auto p-3 space-y-1.5">
+        <div
+          className="md:flex-1 md:overflow-auto p-3 space-y-1.5"
+          onPointerMove={(e) => { if (dragId) onHandleMove(e, dragId); }}
+          onPointerUp={(e) => { if (dragId) onHandleUp(e, dragId); }}
+          onPointerLeave={(e) => { if (dragId) onHandleUp(e, dragId); }}
+          style={dragId ? { touchAction: "none" } : undefined}
+        >
           {canReorder && (
             <p className="text-[11px] text-charcoal/40 font-body px-1 pb-1">Drag stops to reorder the route.</p>
           )}
@@ -297,8 +304,6 @@ export default function CustomerDirectory({
               {draggable && (
                 <span
                   onPointerDown={(e) => onHandleDown(e, c.id)}
-                  onPointerMove={(e) => onHandleMove(e, c.id)}
-                  onPointerUp={(e) => onHandleUp(e, c.id)}
                   className="shrink-0 -ml-1 px-1 text-charcoal/40 text-base leading-none cursor-grab active:cursor-grabbing select-none"
                   style={{ touchAction: "none" }}
                   aria-label="Drag to reorder"
@@ -309,9 +314,9 @@ export default function CustomerDirectory({
                   {c.route_seq != null ? Math.round(c.route_seq) : "·"}
                 </span>
               )}
-              {sort === "route" && c.delivery_day && (
-                <span className={`shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-body font-semibold ${c.delivery_day === "wednesday" ? "bg-gold-primary/25 text-gold-dark" : "bg-green-primary/10 text-green-primary"}`} title={c.delivery_day === "wednesday" ? "Wednesday run (east)" : "Thursday run (west)"}>
-                  {c.delivery_day === "wednesday" ? "W" : "T"}
+              {sort === "route" && (c.delivery_days?.length ?? 0) > 0 && (
+                <span className="shrink-0 px-1.5 h-6 rounded-md flex items-center justify-center text-[10px] font-body font-semibold bg-green-primary/10 text-green-primary" title={formatDays(c.delivery_days)}>
+                  {RUN_DAYS.filter((d) => c.delivery_days?.includes(d)).map((d) => DAY_INITIAL[d]).join("·")}
                 </span>
               )}
               <div className="flex-1 min-w-0">
@@ -503,19 +508,29 @@ function Detail({
         </div>
       )}
 
-      {/* Delivery day: Wednesday = east of the shop, Thursday = west */}
+      {/* Delivery days: Monday (commercial), Wednesday = east, Thursday = west.
+          Pick any combination — twice-weekly accounts get two. */}
       <div>
-        <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-2">Delivery Day</p>
+        <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-2">Delivery Days</p>
         <div className="flex gap-2">
-          {(["wednesday", "thursday"] as const).map((d) => (
-            <button
-              key={d}
-              onClick={() => { const next = c.delivery_day === d ? null : d; onPatch({ delivery_day: next }); pending(() => { setDeliveryDay(c.id, next); }); }}
-              className={`flex-1 min-h-tap py-2.5 rounded-lg text-xs font-body uppercase tracking-widest border ${c.delivery_day === d ? "bg-green-primary border-green-primary text-cream" : "bg-cream border-cream-dark text-charcoal/50"}`}
-            >
-              {d === "wednesday" ? "Wednesday · East" : "Thursday · West"}
-            </button>
-          ))}
+          {RUN_DAYS.map((d) => {
+            const on = (c.delivery_days ?? []).includes(d);
+            const sub = d === "monday" ? "Commercial" : d === "wednesday" ? "East" : "West";
+            return (
+              <button
+                key={d}
+                onClick={() => {
+                  const cur = c.delivery_days ?? [];
+                  const next = on ? cur.filter((x) => x !== d) : RUN_DAYS.filter((x) => x === d || cur.includes(x));
+                  onPatch({ delivery_days: next });
+                  pending(() => { setDeliveryDays(c.id, next); });
+                }}
+                className={`flex-1 min-h-tap py-2.5 rounded-lg text-xs font-body uppercase tracking-widest border ${on ? "bg-green-primary border-green-primary text-cream" : "bg-cream border-cream-dark text-charcoal/50"}`}
+              >
+                {DAY_LABEL[d]}<span className="block text-[9px] opacity-70 tracking-wide">{sub}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 

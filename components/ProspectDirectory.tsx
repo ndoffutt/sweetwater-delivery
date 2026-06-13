@@ -8,7 +8,11 @@ import {
   deleteProspect,
   convertProspectToCustomer,
 } from "@/lib/actions/prospects";
+import { getRoutePositioning, saveRoutePosition } from "@/lib/actions/customers";
+import RouteMap from "@/components/RouteMap";
 import ProspectMap, { pinColor } from "@/components/ProspectMap";
+import type { RouteStop } from "@/lib/types";
+import type { RoutePositioning } from "@/lib/actions/customers";
 import type {
   Prospect,
   ProspectStatus,
@@ -302,6 +306,8 @@ function Detail({
   const [busy, setBusy] = useState(false);
   const [converting, setConverting] = useState(false);
   const [error, setError] = useState("");
+  const [routePos, setRoutePos] = useState<RoutePositioning | null>(null);
+  const [routePosBusy, setRoutePosBusy] = useState(false);
   // Activation popup: which services the new account buys (null = closed).
   const [svcPick, setSvcPick] = useState<ProspectService[] | null>(null);
   const [, startTransition] = useTransition();
@@ -381,6 +387,16 @@ function Detail({
     setConverting(false);
     if (res.error || !res.customer) { setError(res.error ?? "Conversion failed"); return; }
     onPatch({ status: "active", customer_id: res.customer.id });
+    // Show route positioning suggestion immediately after adding to customer directory.
+    getRoutePositioning(res.customer.id).then((r) => setRoutePos(r)).catch(() => {});
+  }
+
+  async function confirmRoutePos() {
+    if (!routePos?.suggestion || !p.customer_id) return;
+    setRoutePosBusy(true);
+    await saveRoutePosition(p.customer_id, routePos.suggestion.seq);
+    setRoutePos((r) => r ? { ...r, current: routePos.suggestion!.seq, suggestion: null } : r);
+    setRoutePosBusy(false);
   }
 
   if (editing) {
@@ -456,6 +472,47 @@ function Detail({
           <p className="mt-2 text-xs text-green-primary font-body">✓ In the customer directory</p>
         )}
       </div>
+
+      {/* Route positioning — appears after converting to customer */}
+      {routePos?.ok && routePos.suggestion && (() => {
+        const master = routePos.masterRoute;
+        const posMapStops: RouteStop[] = [
+          ...master.slice(0, routePos.suggestion.index),
+          { id: p.customer_id ?? p.id, name: p.name, lat: routePos.suggestion.lat, lng: routePos.suggestion.lng } as unknown as RouteStop,
+          ...master.slice(routePos.suggestion.index),
+        ].map((s, i) => ({
+          id: (s as { id: string }).id,
+          stop_order: i + 1,
+          status: "pending",
+          customer: { name: (s as { name: string }).name, address: "", lat: (s as { lat: number }).lat, lng: (s as { lng: number }).lng },
+        })) as unknown as RouteStop[];
+        return (
+          <div>
+            <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-2">Route Position</p>
+            <div className="bg-cream rounded-xl border border-cream-dark p-3">
+              <p className="text-sm font-body text-charcoal">
+                Suggested spot
+                {routePos.suggestion.before && routePos.suggestion.after ? (
+                  <>, between <b>{routePos.suggestion.before}</b> &amp; <b>{routePos.suggestion.after}</b></>
+                ) : routePos.suggestion.before ? (
+                  <>, after <b>{routePos.suggestion.before}</b></>
+                ) : routePos.suggestion.after ? (
+                  <>, before <b>{routePos.suggestion.after}</b></>
+                ) : null}.
+              </p>
+              <div className="relative h-44 mt-3 rounded-lg overflow-hidden border border-cream-dark">
+                <RouteMap stops={posMapStops} targetId={p.customer_id ?? p.id} onSelect={() => {}} suggestedIds={[p.customer_id ?? p.id]} />
+              </div>
+              <button onClick={confirmRoutePos} disabled={routePosBusy} className="w-full mt-3 min-h-tap bg-green-primary text-cream font-body text-xs uppercase tracking-widest py-3 rounded-lg disabled:opacity-60">
+                {routePosBusy ? "Saving…" : "Confirm this spot"}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+      {routePos?.ok && routePos.current != null && (
+        <p className="text-xs text-green-primary font-body">✓ Placed in route, position {Math.round(routePos.current)}</p>
+      )}
 
       {/* Dead popup: a reason is required so the list stays auditable */}
       {deadReason !== null && (

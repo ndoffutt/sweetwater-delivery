@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/session";
 import { cheapestInsertion, seqBetween } from "@/lib/geo";
 import { normalizeRouteSeqs } from "@/lib/route";
 import { geocodeAddress } from "@/lib/geocode";
+import type { DeliveryDay } from "@/lib/deliveryDay";
 
 export interface MasterStop {
   id: string;
@@ -173,16 +174,13 @@ export async function saveCustomerNotes(
   return { success: true };
 }
 
-/** Wednesday (east of the shop) or Thursday (west) - the customer's run day. */
-export async function setDeliveryDay(
-  customerId: string,
-  day: "wednesday" | "thursday" | null
-) {
+/** The customer's run days: Monday, Wednesday (east), and/or Thursday (west). */
+export async function setDeliveryDays(customerId: string, days: DeliveryDay[]) {
   await requireSession("dispatcher");
   const supabase = createAdminClient();
   const { error } = await supabase
     .from("customers")
-    .update({ delivery_day: day })
+    .update({ delivery_days: days })
     .eq("id", customerId);
   if (error) return { error: error.message };
   revalidatePath("/dispatch/customers");

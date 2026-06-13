@@ -817,3 +817,22 @@ update customers set delivery_day = 'wednesday'
   where route_seq is not null and route_seq <= 25 and delivery_day is null;
 update customers set delivery_day = 'thursday'
   where route_seq is not null and route_seq > 25 and delivery_day is null;
+
+-- ── From delivery_days.sql ──
+-- Multi-day delivery: a customer can be on more than one run day. Monday is a
+-- small commercial-only run; Wednesday = east of the shop, Thursday = west.
+alter table customers add column if not exists delivery_days text[] not null default '{}';
+
+alter table customers drop constraint if exists customers_delivery_days_valid;
+alter table customers add constraint customers_delivery_days_valid
+  check (delivery_days <@ array['monday', 'wednesday', 'thursday']::text[]);
+
+update customers
+  set delivery_days = array[delivery_day]
+  where delivery_day is not null
+    and (delivery_days is null or delivery_days = '{}');
+
+update customers
+  set delivery_days = array['monday', 'thursday']
+  where lower(name) like 'brunello%'
+     or lower(regexp_replace(name, '^the ', '')) like 'hedges%';

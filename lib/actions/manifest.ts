@@ -117,17 +117,17 @@ export async function createRouteFromManifest(
       lat: stop.lat ?? null,
       lng: stop.lng ?? null,
       // East of the shop -> Wednesday run, west -> Thursday.
-      delivery_day: dayForLocation(stop.lng),
+      delivery_days: ((d) => (d ? [d] : []))(dayForLocation(stop.lng)),
     }));
     let { data: created, error } = await supabase
       .from("customers")
       .insert(rows)
       .select("id, name");
     if (error) {
-      // delivery_day column not migrated yet: insert without it.
+      // delivery_days column not migrated yet: insert without it.
       const retry = await supabase
         .from("customers")
-        .insert(rows.map(({ delivery_day, ...r }) => { void delivery_day; return r; }))
+        .insert(rows.map(({ delivery_days, ...r }) => { void delivery_days; return r; }))
         .select("id, name");
       created = retry.data;
       error = retry.error;
