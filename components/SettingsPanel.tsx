@@ -10,6 +10,7 @@ import {
   setTeamMemberActive,
   removeTeamMember,
 } from "@/lib/actions/team";
+import PushToggle from "@/components/PushToggle";
 
 export interface TeamMember {
   id: string;
@@ -113,6 +114,12 @@ export default function SettingsPanel({ meId, team }: { meId: string; team: Team
       </header>
 
       <div className="p-5 md:p-8 max-w-2xl mx-auto space-y-6">
+        {/* Notifications */}
+        <section>
+          <h2 className="font-serif text-2xl font-light text-charcoal mb-3">Notifications</h2>
+          <PushToggle />
+        </section>
+
         {/* Team */}
         <section>
           <div className="flex items-center justify-between mb-3">

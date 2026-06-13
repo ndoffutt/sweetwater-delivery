@@ -17,12 +17,14 @@
     "react": "^18",
     "react-dom": "^18",
     "react-map-gl": "^8.1.1",
-    "resend": "^6.12.4"
+    "resend": "^6.12.4",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@types/web-push": "^3.6.4",
     "eslint": "^8",
     "eslint-config-next": "14.2.35",
     "postcss": "^8",

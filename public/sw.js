@@ -4,7 +4,7 @@
 //  - Hashed build assets (/_next/static): cache-first, they're immutable.
 //  - APIs, server actions, and cross-origin (Mapbox/Supabase): untouched -
 //    the in-app queues (lib/offline.ts) own write resilience.
-const CACHE = "sw-shell-v1";
+const CACHE = "sw-shell-v2";
 
 self.addEventListener("install", (e) => {
   self.skipWaiting();
@@ -16,6 +16,41 @@ self.addEventListener("activate", (e) => {
       .keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
+  );
+});
+
+// Web Push: show the notification the server sent (visit reminders).
+self.addEventListener("push", (e) => {
+  let data = { title: "Sweetwater's", body: "", url: "/sales/prospects" };
+  try {
+    if (e.data) data = { ...data, ...e.data.json() };
+  } catch {
+    if (e.data) data.body = e.data.text();
+  }
+  e.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: "/icon.png",
+      badge: "/icon.png",
+      data: { url: data.url || "/sales/prospects" },
+    })
+  );
+});
+
+// Tapping a notification focuses an open tab or opens the target page.
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || "/sales/prospects";
+  e.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if ("focus" in c) {
+          c.navigate(url);
+          return c.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    })
   );
 });
 
