@@ -95,6 +95,14 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
+type ProspectSort = "town" | "name" | "touched";
+const SORTS: { id: ProspectSort; label: string }[] = [
+  { id: "town", label: "Town" },
+  { id: "name", label: "A–Z" },
+  { id: "touched", label: "Last touch" },
+];
+const prospectTown = (p: Prospect) => p.town ?? townFromAddress(p.address);
+
 export default function ProspectDirectory({ prospects: initial }: { prospects: Prospect[] }) {
   const [prospects, setProspects] = useState(initial);
   const [query, setQuery] = useState("");
@@ -102,10 +110,9 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [view, setView] = useState<"list" | "map">("list");
+  const [sort, setSort] = useState<ProspectSort>("town");
   const [, startTransition] = useTransition();
 
-  // Active pipeline first, sorted by longest-since-last-touch so the coldest
-  // prospects surface at the top of the call list.
   const filtered = prospects
     .filter((p) => {
       if (filter !== "all" && p.status !== filter) return false;
@@ -120,13 +127,24 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
       return true;
     })
     .sort((a, b) => {
-      if (closed(a.status) !== closed(b.status)) return closed(a.status) ? 1 : -1;
-      const at = lastTouch(a);
-      const bt = lastTouch(b);
-      if (!at && !bt) return a.name.localeCompare(b.name);
-      if (!at) return -1; // never-touched floats to the very top
-      if (!bt) return 1;
-      return at.localeCompare(bt);
+      if (sort === "name") return a.name.localeCompare(b.name);
+      if (sort === "town") {
+        const at = prospectTown(a);
+        const bt = prospectTown(b);
+        if (at !== bt) {
+          if (!at) return 1; // no-town sinks to the bottom
+          if (!bt) return -1;
+          return at.localeCompare(bt);
+        }
+        return a.name.localeCompare(b.name); // alpha within a town
+      }
+      // "touched": most recently touched first, never-touched last.
+      const al = lastTouch(a);
+      const bl = lastTouch(b);
+      if (!al && !bl) return a.name.localeCompare(b.name);
+      if (!al) return 1;
+      if (!bl) return -1;
+      return bl.localeCompare(al);
     });
 
   const selected = prospects.find((p) => p.id === selectedId) || null;
@@ -220,6 +238,20 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
                 {s.label} {s.n > 0 && <span className="opacity-60">{s.n}</span>}
               </button>
             ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-charcoal/40 font-body uppercase tracking-widest shrink-0">Sort</span>
+            <div className="inline-flex rounded-lg bg-cream-dark/60 p-0.5 text-xs font-body">
+              {SORTS.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setSort(s.id)}
+                  className={`px-2.5 py-1 rounded-md ${sort === s.id ? "bg-cream text-charcoal shadow-sm" : "text-charcoal/50"}`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         <div className="md:flex-1 md:overflow-auto p-3 space-y-1.5">
