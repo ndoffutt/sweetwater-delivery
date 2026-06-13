@@ -8,9 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const session = await getSession();
   if (!session) redirect("/");
-  if (session.role !== "admin") {
-    redirect(session.role === "driver" ? "/driver" : "/dispatch");
-  }
+  if (session.role === "driver") redirect("/driver");
 
   const supabase = createAdminClient();
   const { data } = await supabase
@@ -20,5 +18,11 @@ export default async function SettingsPage() {
     .order("role")
     .order("created_at");
 
-  return <SettingsPanel meId={session.id} team={(data ?? []) as TeamMember[]} />;
+  return (
+    <SettingsPanel
+      meId={session.id}
+      viewerRole={session.role as "admin" | "dispatcher"}
+      team={(data ?? []) as TeamMember[]}
+    />
+  );
 }

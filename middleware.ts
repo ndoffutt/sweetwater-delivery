@@ -70,6 +70,7 @@ export async function middleware(request: NextRequest) {
   if (
     (pathname.startsWith("/dispatch") ||
       pathname.startsWith("/sales") ||
+      pathname.startsWith("/settings") ||
       pathname.startsWith("/owner")) &&
     user.role === "driver"
   ) {

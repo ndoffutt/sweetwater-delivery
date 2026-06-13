@@ -33,12 +33,25 @@ const ROLE_STYLE: Record<TeamMember["role"], string> = {
   admin: "bg-green-primary text-cream",
 };
 
-export default function SettingsPanel({ meId, team }: { meId: string; team: TeamMember[] }) {
+export default function SettingsPanel({
+  meId,
+  viewerRole,
+  team,
+}: {
+  meId: string;
+  viewerRole: "admin" | "dispatcher";
+  team: TeamMember[];
+}) {
   const router = useRouter();
+  const isOwner = viewerRole === "admin";
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
   const [adding, setAdding] = useState(false);
   const [newRole, setNewRole] = useState<TeamMember["role"]>("driver");
+
+  // Owner can manage everyone; Manager only drivers and themselves.
+  const canEdit = (m: TeamMember) => isOwner || m.role === "driver" || m.id === meId;
+  const canRemove = (m: TeamMember) => isOwner && m.id !== meId;
 
   function refresh() {
     router.refresh();
@@ -51,7 +64,7 @@ export default function SettingsPanel({ meId, team }: { meId: string; team: Team
     const pin = (fd.get("pin") as string).trim();
     setError("");
     start(async () => {
-      const res = await createTeamMember({ name, role: newRole, pin });
+      const res = await createTeamMember({ name, role: isOwner ? newRole : "driver", pin });
       if (res.error) { setError(res.error); return; }
       setAdding(false);
       setNewRole("driver");
@@ -141,21 +154,25 @@ export default function SettingsPanel({ meId, team }: { meId: string; team: Team
                 <span className={label}>Name</span>
                 <input name="name" required autoFocus placeholder="e.g. Mike" className={field} />
               </div>
-              <div>
-                <span className={label}>Role</span>
-                <div className="flex gap-2">
-                  {(["driver", "dispatcher", "admin"] as const).map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => setNewRole(r)}
-                      className={`flex-1 min-h-tap py-2 rounded-lg text-xs font-body uppercase tracking-widest border ${newRole === r ? "bg-green-primary border-green-primary text-cream" : "bg-cream border-cream-dark text-charcoal/50"}`}
-                    >
-                      {ROLE_LABEL[r]}
-                    </button>
-                  ))}
+              {isOwner ? (
+                <div>
+                  <span className={label}>Role</span>
+                  <div className="flex gap-2">
+                    {(["driver", "dispatcher", "admin"] as const).map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setNewRole(r)}
+                        className={`flex-1 min-h-tap py-2 rounded-lg text-xs font-body uppercase tracking-widest border ${newRole === r ? "bg-green-primary border-green-primary text-cream" : "bg-cream border-cream-dark text-charcoal/50"}`}
+                      >
+                        {ROLE_LABEL[r]}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <p className="text-xs text-charcoal/50 font-body">Adding a new <b>Driver</b>.</p>
+              )}
               <div>
                 <span className={label}>PIN (4–6 digits)</span>
                 <input name="pin" required inputMode="numeric" pattern="\d{4,6}" maxLength={6} placeholder="••••" className={field} />
@@ -179,18 +196,20 @@ export default function SettingsPanel({ meId, team }: { meId: string; team: Team
                   {m.id === meId && <span className="text-[10px] font-body text-charcoal/40">you</span>}
                   {!m.active && <span className="text-[10px] font-body text-charcoal/40 ml-auto">inactive</span>}
                 </div>
-                <div className="flex gap-3 mt-2 flex-wrap">
-                  <button onClick={() => resetPin(m)} disabled={pending} className="text-[11px] font-body uppercase tracking-widest text-green-primary">Reset PIN</button>
-                  <button onClick={() => rename(m)} disabled={pending} className="text-[11px] font-body uppercase tracking-widest text-charcoal/50">Rename</button>
-                  {m.id !== meId && (
-                    <>
-                      <button onClick={() => toggleActive(m)} disabled={pending} className="text-[11px] font-body uppercase tracking-widest text-charcoal/50">
-                        {m.active ? "Deactivate" : "Activate"}
-                      </button>
-                      <button onClick={() => remove(m)} disabled={pending} className="text-[11px] font-body uppercase tracking-widest text-red-400 ml-auto">Remove</button>
-                    </>
-                  )}
-                </div>
+                {canEdit(m) && (
+                  <div className="flex gap-3 mt-2 flex-wrap">
+                    <button onClick={() => resetPin(m)} disabled={pending} className="text-[11px] font-body uppercase tracking-widest text-green-primary">Reset PIN</button>
+                    <button onClick={() => rename(m)} disabled={pending} className="text-[11px] font-body uppercase tracking-widest text-charcoal/50">Rename</button>
+                    {canRemove(m) && (
+                      <>
+                        <button onClick={() => toggleActive(m)} disabled={pending} className="text-[11px] font-body uppercase tracking-widest text-charcoal/50">
+                          {m.active ? "Deactivate" : "Activate"}
+                        </button>
+                        <button onClick={() => remove(m)} disabled={pending} className="text-[11px] font-body uppercase tracking-widest text-red-400 ml-auto">Remove</button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>

@@ -7,7 +7,7 @@ export default async function SalesLayout({ children }: { children: React.ReactN
   if (!session) redirect("/");
   // Owner and Manager both work sales; drivers don't.
   if (session.role !== "admin" && session.role !== "dispatcher") redirect("/driver");
-  const home = session.role === "admin" ? "/owner" : "/dispatch";
+  const home = "/owner";
 
   return (
     <div className="md:flex md:h-screen bg-cream-dark">

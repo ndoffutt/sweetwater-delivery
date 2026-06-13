@@ -22,8 +22,10 @@ function setSessionCookie(token: string) {
   });
 }
 
+// Manager and Owner both land on the shared home (Drive / Dispatch / Sales /
+// Settings + recent activity); drivers go straight to the route.
 const homeFor = (role: string) =>
-  role === "admin" ? "/owner" : role === "dispatcher" ? "/dispatch" : "/driver";
+  role === "admin" || role === "dispatcher" ? "/owner" : "/driver";
 
 // Single login: the PIN identifies the person (driver, Manager, or Owner) so we
 // always know who's driving. Routes to the right home for their role.

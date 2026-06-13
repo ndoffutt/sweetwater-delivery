@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { logout } from "@/lib/actions/auth";
+import type { ActivityItem } from "@/lib/activity";
 
 const SECTIONS = [
   {
@@ -54,7 +55,27 @@ const SECTIONS = [
   },
 ];
 
-export default function OwnerHome({ name, overdueCount = 0 }: { name: string; overdueCount?: number }) {
+function ago(iso: string): string {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+export default function OwnerHome({
+  name,
+  overdueCount = 0,
+  activity = [],
+}: {
+  name: string;
+  overdueCount?: number;
+  activity?: ActivityItem[];
+}) {
   const router = useRouter();
 
   async function signOut() {
@@ -63,50 +84,75 @@ export default function OwnerHome({ name, overdueCount = 0 }: { name: string; ov
   }
 
   return (
-    <div className="min-h-screen bg-green-primary flex flex-col items-center justify-center p-6">
-      <div className="mb-10 text-center">
-        <h1 className="font-serif text-4xl font-light text-cream mb-2">Sweetwater&apos;s</h1>
-        <p className="font-body text-xs uppercase tracking-widest text-gold-primary">
-          Welcome, {name}
-        </p>
-      </div>
-
-      <div className="w-full max-w-sm space-y-3">
-        {SECTIONS.map((s) => (
-          <Link
-            key={s.href}
-            href={s.href}
-            className="flex items-center gap-4 bg-cream rounded-2xl p-5 shadow-xl active:scale-[0.99] transition-transform"
+    <div className="min-h-screen bg-green-primary">
+      <div className="max-w-2xl mx-auto px-5 pt-10 pb-16">
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <h1 className="font-serif text-4xl font-light text-cream leading-none">Sweetwater&apos;s</h1>
+            <p className="font-body text-xs uppercase tracking-widest text-gold-primary mt-2">
+              Welcome, {name}
+            </p>
+          </div>
+          <button
+            onClick={signOut}
+            className="text-[11px] text-cream/60 hover:text-cream font-body uppercase tracking-widest min-h-tap"
           >
-            <span className="shrink-0 w-12 h-12 rounded-xl bg-green-primary/10 text-green-primary flex items-center justify-center">
-              <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                {s.icon}
-              </svg>
-            </span>
-            <span className="flex-1">
-              <span className="block font-serif text-2xl font-light text-charcoal leading-none">{s.label}</span>
-              <span className="block text-xs text-charcoal/40 font-body mt-1">
-                {s.href === "/sales" && overdueCount > 0
-                  ? `🔔 ${overdueCount} overdue for a visit`
-                  : s.sub}
-              </span>
-            </span>
-            {s.href === "/sales" && overdueCount > 0 && (
-              <span className="bg-gold-primary text-charcoal text-xs font-body font-semibold rounded-full min-w-[22px] h-[22px] px-1.5 flex items-center justify-center">
-                {overdueCount}
-              </span>
-            )}
-            <span className="text-charcoal/30 text-xl">→</span>
-          </Link>
-        ))}
-      </div>
+            Sign Out
+          </button>
+        </div>
 
-      <button
-        onClick={signOut}
-        className="mt-10 text-xs text-cream/60 hover:text-cream font-body uppercase tracking-widest"
-      >
-        Sign Out
-      </button>
+        {/* Sections */}
+        <div className="grid grid-cols-2 gap-3">
+          {SECTIONS.map((s) => {
+            const showBadge = s.href === "/sales" && overdueCount > 0;
+            return (
+              <Link
+                key={s.href}
+                href={s.href}
+                className="relative bg-cream rounded-2xl p-5 shadow-xl active:scale-[0.99] transition-transform"
+              >
+                {showBadge && (
+                  <span className="absolute top-3 right-3 bg-gold-primary text-charcoal text-xs font-body font-semibold rounded-full min-w-[22px] h-[22px] px-1.5 flex items-center justify-center">
+                    {overdueCount}
+                  </span>
+                )}
+                <span className="block w-11 h-11 rounded-xl bg-green-primary/10 text-green-primary flex items-center justify-center mb-3">
+                  <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    {s.icon}
+                  </svg>
+                </span>
+                <span className="block font-serif text-2xl font-light text-charcoal leading-none">{s.label}</span>
+                <span className="block text-xs text-charcoal/40 font-body mt-1">
+                  {showBadge ? `🔔 ${overdueCount} overdue for a visit` : s.sub}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Recent activity */}
+        <div className="mt-8">
+          <p className="text-[11px] uppercase tracking-widest text-cream/60 font-body mb-3">Recent activity</p>
+          <div className="bg-cream rounded-2xl shadow-xl divide-y divide-cream-dark overflow-hidden">
+            {activity.length === 0 ? (
+              <p className="text-sm text-charcoal/40 font-body p-5 text-center">No activity yet.</p>
+            ) : (
+              activity.map((a) => (
+                <div key={a.id} className="flex items-center gap-3 px-4 py-3">
+                  <span className="shrink-0 text-lg">{a.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-body text-sm text-charcoal truncate">{a.title}</p>
+                    <p className="text-xs text-charcoal/45 font-body truncate">
+                      {a.detail}{a.who ? ` · ${a.who}` : ""}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-[11px] text-charcoal/35 font-body">{ago(a.at)}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

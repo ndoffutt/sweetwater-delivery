@@ -141,11 +141,9 @@ export default function MgrShell({
           })}
         </nav>
         <div className="px-3 pb-3 space-y-1">
-          {role === "admin" && (
-            <Link href="/owner" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-body text-cream/65 hover:text-cream hover:bg-white/5 transition-colors">
-              ← Home
-            </Link>
-          )}
+          <Link href="/owner" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-body text-cream/65 hover:text-cream hover:bg-white/5 transition-colors">
+            ← Home
+          </Link>
           <Link href="/driver" className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-gold-primary/90 hover:bg-gold-primary text-charcoal text-sm font-body transition-colors">
             <TruckIcon /> Driver View
           </Link>
@@ -164,19 +162,13 @@ export default function MgrShell({
           <div className="font-serif text-lg font-light leading-none">{current.label}</div>
           <div className="text-[10px] uppercase tracking-[0.18em] text-gold-light">Sweetwater&apos;s Dispatch</div>
         </div>
-        <div className="flex items-center gap-2">
-          {role === "admin" ? (
-            <Link href="/owner" className="text-[11px] uppercase tracking-[0.16em] text-cream/70 min-h-tap flex items-center pr-1">
-              ← Home
-            </Link>
-          ) : (
-            <>
-              <Link href="/driver" className="flex items-center gap-1.5 bg-gold-primary text-charcoal rounded-full pl-2.5 pr-3 py-1.5 text-[11px] uppercase tracking-[0.12em] font-body">
-                <TruckIcon className="w-4 h-4" /> Drive
-              </Link>
-              <button onClick={signOut} className="text-[11px] uppercase tracking-[0.16em] text-cream/70">Out</button>
-            </>
-          )}
+        <div className="flex items-center gap-3">
+          <Link href="/driver" className="flex items-center gap-1.5 bg-gold-primary text-charcoal rounded-full pl-2.5 pr-3 py-1.5 text-[11px] uppercase tracking-[0.12em] font-body">
+            <TruckIcon className="w-4 h-4" /> Drive
+          </Link>
+          <Link href="/owner" className="text-[11px] uppercase tracking-[0.16em] text-cream/70 min-h-tap flex items-center">
+            ← Home
+          </Link>
         </div>
       </header>
 

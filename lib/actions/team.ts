@@ -13,6 +13,29 @@ async function requireAdmin() {
   return session;
 }
 
+// Owner or Manager may reach Settings; Manager is restricted to drivers + self.
+async function requireStaff() {
+  const session = await getSession();
+  if (!session || (session.role !== "admin" && session.role !== "dispatcher")) {
+    throw new Error("Unauthorized");
+  }
+  return session;
+}
+
+// A Manager may only act on drivers or their own account; the Owner may act on
+// anyone. Returns an error string if not allowed, else null.
+async function guardTarget(
+  session: { id: string; role: string },
+  supabase: ReturnType<typeof createAdminClient>,
+  targetId: string
+): Promise<string | null> {
+  if (session.role === "admin") return null;
+  if (targetId === session.id) return null;
+  const { data: target } = await supabase.from("users").select("role").eq("id", targetId).single();
+  if (target?.role !== "driver") return "Managers can only change drivers";
+  return null;
+}
+
 function validPin(pin: string): boolean {
   return /^\d{4,6}$/.test(pin);
 }
@@ -34,7 +57,9 @@ async function pinTaken(
 }
 
 export async function createTeamMember(input: { name: string; role: TeamRole; pin: string }) {
-  await requireAdmin();
+  const session = await requireStaff();
+  // Managers can only add drivers; the Owner can add any role.
+  const role = session.role === "admin" ? input.role : "driver";
   const name = input.name.trim();
   if (!name) return { error: "Name is required" };
   if (!validPin(input.pin)) return { error: "PIN must be 4–6 digits" };
@@ -46,7 +71,7 @@ export async function createTeamMember(input: { name: string; role: TeamRole; pi
   }
   const { data, error } = await supabase
     .from("users")
-    .insert({ name, role: input.role, pin_hash })
+    .insert({ name, role, pin_hash })
     .select("id, name, role, phone, active, created_at")
     .single();
   if (error) return { error: error.message };
@@ -55,9 +80,11 @@ export async function createTeamMember(input: { name: string; role: TeamRole; pi
 }
 
 export async function setTeamMemberPin(id: string, pin: string) {
-  await requireAdmin();
+  const session = await requireStaff();
   if (!validPin(pin)) return { error: "PIN must be 4–6 digits" };
   const supabase = createAdminClient();
+  const denied = await guardTarget(session, supabase, id);
+  if (denied) return { error: denied };
   const pin_hash = await hashPin(pin);
   if (await pinTaken(supabase, pin_hash, id)) {
     return { error: "That PIN is already in use — pick another" };
@@ -69,10 +96,12 @@ export async function setTeamMemberPin(id: string, pin: string) {
 }
 
 export async function renameTeamMember(id: string, name: string) {
-  await requireAdmin();
+  const session = await requireStaff();
   const trimmed = name.trim();
   if (!trimmed) return { error: "Name is required" };
   const supabase = createAdminClient();
+  const denied = await guardTarget(session, supabase, id);
+  if (denied) return { error: denied };
   const { error } = await supabase.from("users").update({ name: trimmed }).eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/settings");

@@ -5,9 +5,7 @@ import { redirect } from "next/navigation";
 export default async function LoginPage() {
   const session = await getSession();
   if (session) {
-    redirect(
-      session.role === "driver" ? "/driver" : session.role === "admin" ? "/owner" : "/dispatch"
-    );
+    redirect(session.role === "driver" ? "/driver" : "/owner");
   }
 
   return (
