@@ -22,8 +22,12 @@ function setSessionCookie(token: string) {
   });
 }
 
-// Staff login: the PIN decides who you are - Manager (dispatcher) or Admin.
-export async function loginManager(pin: string) {
+const homeFor = (role: string) =>
+  role === "admin" ? "/owner" : role === "dispatcher" ? "/dispatch" : "/driver";
+
+// Single login: the PIN identifies the person (driver, Manager, or Owner) so we
+// always know who's driving. Routes to the right home for their role.
+export async function loginWithPin(pin: string) {
   if (!pin || pin.length < 4) {
     return { error: "PIN must be at least 4 digits" };
   }
@@ -35,7 +39,6 @@ export async function loginManager(pin: string) {
     .from("users")
     .select("id, name, role")
     .eq("pin_hash", pinHash)
-    .in("role", ["dispatcher", "admin"])
     .eq("active", true)
     .is("deleted_at", null)
     .single();
@@ -51,35 +54,7 @@ export async function loginManager(pin: string) {
   });
   setSessionCookie(token);
 
-  return { redirect: user.role === "admin" ? "/owner" : "/dispatch" };
-}
-
-// Drivers don't use a PIN - one tap signs them in as the active driver.
-export async function loginDriver() {
-  const supabase = createAdminClient();
-
-  const { data: user, error } = await supabase
-    .from("users")
-    .select("id, name, role")
-    .eq("role", "driver")
-    .eq("active", true)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .single();
-
-  if (error || !user) {
-    return { error: "No active driver configured" };
-  }
-
-  const token = await createSessionToken({
-    id: user.id,
-    name: user.name,
-    role: user.role,
-  });
-  setSessionCookie(token);
-
-  return { redirect: "/driver" };
+  return { redirect: homeFor(user.role) };
 }
 
 export async function logout() {

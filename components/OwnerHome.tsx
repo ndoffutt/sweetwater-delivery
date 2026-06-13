@@ -41,9 +41,20 @@ const SECTIONS = [
       </g>
     ),
   },
+  {
+    href: "/settings",
+    label: "Settings",
+    sub: "Drivers & team",
+    icon: (
+      <g>
+        <circle cx="12" cy="12" r="3" />
+        <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1" />
+      </g>
+    ),
+  },
 ];
 
-export default function OwnerHome({ name }: { name: string }) {
+export default function OwnerHome({ name, overdueCount = 0 }: { name: string; overdueCount?: number }) {
   const router = useRouter();
 
   async function signOut() {
@@ -74,8 +85,17 @@ export default function OwnerHome({ name }: { name: string }) {
             </span>
             <span className="flex-1">
               <span className="block font-serif text-2xl font-light text-charcoal leading-none">{s.label}</span>
-              <span className="block text-xs text-charcoal/40 font-body mt-1">{s.sub}</span>
+              <span className="block text-xs text-charcoal/40 font-body mt-1">
+                {s.href === "/sales" && overdueCount > 0
+                  ? `🔔 ${overdueCount} overdue for a visit`
+                  : s.sub}
+              </span>
             </span>
+            {s.href === "/sales" && overdueCount > 0 && (
+              <span className="bg-gold-primary text-charcoal text-xs font-body font-semibold rounded-full min-w-[22px] h-[22px] px-1.5 flex items-center justify-center">
+                {overdueCount}
+              </span>
+            )}
             <span className="text-charcoal/30 text-xl">→</span>
           </Link>
         ))}

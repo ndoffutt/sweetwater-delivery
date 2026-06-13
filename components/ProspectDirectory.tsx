@@ -11,6 +11,7 @@ import {
   convertProspectToCustomer,
 } from "@/lib/actions/prospects";
 import { townFromAddress } from "@/lib/town";
+import { isOverdueForVisit, OVERDUE_DAYS } from "@/lib/prospectVisit";
 import { getRoutePositioning, saveRoutePosition } from "@/lib/actions/customers";
 import RouteMap from "@/components/RouteMap";
 import ProspectMap, { pinColor } from "@/components/ProspectMap";
@@ -127,6 +128,11 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
       return true;
     })
     .sort((a, b) => {
+      // Overdue-for-a-visit always floats to the very top, then the chosen sort
+      // orders within each group.
+      const oa = isOverdueForVisit(a);
+      const ob = isOverdueForVisit(b);
+      if (oa !== ob) return oa ? -1 : 1;
       if (sort === "name") return a.name.localeCompare(b.name);
       if (sort === "town") {
         const at = prospectTown(a);
@@ -149,6 +155,7 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
 
   const selected = prospects.find((p) => p.id === selectedId) || null;
   const counts = STATUSES.map((s) => ({ ...s, n: prospects.filter((p) => p.status === s.id).length }));
+  const overdueCount = prospects.filter(isOverdueForVisit).length;
 
   function patch(id: string, fields: Partial<Prospect>) {
     setProspects((ps) => ps.map((p) => (p.id === id ? { ...p, ...fields } : p)));
@@ -255,18 +262,30 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
           </div>
         </div>
         <div className="md:flex-1 md:overflow-auto p-3 space-y-1.5">
+          {overdueCount > 0 && (
+            <div className="flex items-start gap-2 bg-gold-primary/15 border border-gold-primary/40 rounded-xl px-3 py-2.5 mb-1">
+              <span className="text-gold-dark">🔔</span>
+              <p className="text-xs font-body text-charcoal">
+                <b>{overdueCount}</b> prospect{overdueCount === 1 ? "" : "s"} not visited in {OVERDUE_DAYS}+ days — pinned to the top.
+              </p>
+            </div>
+          )}
           {filtered.map((p) => {
             const days = daysSince(lastTouch(p));
             const cold = !closed(p.status) && (days == null || days > 30);
+            const overdue = isOverdueForVisit(p);
             return (
               <button
                 key={p.id}
                 onClick={() => { setSelectedId(p.id); setAdding(false); }}
-                className={`w-full text-left flex items-center gap-3 p-3 rounded-xl border transition-colors ${selectedId === p.id ? "bg-green-primary/5 border-green-primary/30" : "bg-cream border-cream-dark"}`}
+                className={`w-full text-left flex items-center gap-3 p-3 rounded-xl border transition-colors ${selectedId === p.id ? "bg-green-primary/5 border-green-primary/30" : overdue ? "bg-gold-primary/5 border-gold-primary/40" : "bg-cream border-cream-dark"}`}
               >
                 <span className="shrink-0 w-2.5 h-2.5 rounded-full" style={{ background: pinColor(p.status) }} />
                 <div className="flex-1 min-w-0">
-                  <span className="font-body font-medium text-charcoal truncate block">{p.name}</span>
+                  <span className="font-body font-medium text-charcoal truncate block">
+                    {overdue && <span className="text-gold-dark" title={`Not visited in ${OVERDUE_DAYS}+ days`}>🔔 </span>}
+                    {p.name}
+                  </span>
                   <p className="text-xs text-charcoal/40 font-body truncate">
                     {(p.town ?? townFromAddress(p.address)) ? `${p.town ?? townFromAddress(p.address)} · ` : ""}
                     {typeLabel(p.business_type)}
@@ -510,6 +529,13 @@ function Detail({
           ✎ Edit
         </button>
       </div>
+
+      {isOverdueForVisit(p) && (
+        <div className="flex items-center gap-2 bg-gold-primary/15 border border-gold-primary/40 rounded-xl px-3 py-2.5">
+          <span className="text-gold-dark">🔔</span>
+          <p className="text-xs font-body text-charcoal">Overdue for a visit — log a Visit below to clear this.</p>
+        </div>
+      )}
 
       {/* Status pipeline */}
       <div>

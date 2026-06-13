@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { loginManager } from "@/lib/actions/auth";
+import { loginWithPin } from "@/lib/actions/auth";
 
 export default function PinPad() {
   const [pin, setPin] = useState("");
@@ -18,7 +18,7 @@ export default function PinPad() {
 
     if (next.length >= 4) {
       startTransition(async () => {
-        const result = await loginManager(next);
+        const result = await loginWithPin(next);
         if (result.error) {
           setError(result.error);
           setPin("");

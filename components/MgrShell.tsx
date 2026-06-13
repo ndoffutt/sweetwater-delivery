@@ -61,6 +61,7 @@ export default function MgrShell({
   const router = useRouter();
   const NAV = NAV_BY_ROLE[role];
   const hasMessages = NAV.some((n) => n.id === "messages");
+  const hasSales = NAV.some((n) => n.id === "sales");
 
   // Unread-texts badge on the Messages tab. Tolerant: 0 until the messaging
   // migration runs / Twilio is connected.
@@ -78,10 +79,28 @@ export default function MgrShell({
     return () => { live = false; clearInterval(t); };
   }, [pathname, hasMessages]);
 
+  // Overdue-visit badge on the Sales tab.
+  const [overdue, setOverdue] = useState(0);
+  useEffect(() => {
+    if (!hasSales) return;
+    let live = true;
+    const poll = () =>
+      fetch("/api/prospects/overdue", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => { if (live) setOverdue(d.count ?? 0); })
+        .catch(() => {});
+    poll();
+    const t = setInterval(poll, 120000);
+    return () => { live = false; clearInterval(t); };
+  }, [pathname, hasSales]);
+
+  const badgeCount = (id: NavId) =>
+    id === "messages" ? unread : id === "sales" ? overdue : 0;
+
   const Badge = ({ id }: { id: NavId }) =>
-    id === "messages" && unread > 0 ? (
+    badgeCount(id) > 0 ? (
       <span className="ml-auto bg-gold-primary text-charcoal text-[10px] font-body font-semibold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center">
-        {unread}
+        {badgeCount(id)}
       </span>
     ) : null;
 
@@ -173,7 +192,7 @@ export default function MgrShell({
               className={`relative flex-1 flex flex-col items-center gap-0.5 py-2.5 ${on ? "text-gold-light" : "text-cream/65"}`}>
               <NavIcon id={n.id} className="w-5 h-5" />
               <span className="text-[10px] font-body tracking-wide">{n.label}</span>
-              {n.id === "messages" && unread > 0 && (
+              {badgeCount(n.id) > 0 && (
                 <span className="absolute top-1.5 right-[22%] w-2 h-2 rounded-full bg-gold-primary" />
               )}
             </Link>
