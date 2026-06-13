@@ -18,6 +18,7 @@ create table prospects (
   phone text,
   email text,
   address text,              -- at least "Town, NY" so the map can place it
+  town text,                 -- East End hamlet/village, shown as a tag
   website text,
   lat double precision,
   lng double precision,
@@ -463,3 +464,10 @@ where p.customer_id is null
   and c.deleted_at is null and c.active
   and lower(regexp_replace(c.name, '[^a-zA-Z0-9]', '', 'g'))
     = lower(regexp_replace(p.name, '[^a-zA-Z0-9]', '', 'g'));
+
+-- ============================================================
+-- TOWN — tag each prospect with its hamlet/village (from the address)
+-- ============================================================
+update prospects
+  set town = trim(substring(address from '([^,]+),\s*NY'))
+  where town is null and address ~* ',\s*NY';

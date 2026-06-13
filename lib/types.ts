@@ -94,6 +94,7 @@ export interface Prospect {
   phone: string | null;
   email: string | null;
   address: string | null;
+  town: string | null;
   website: string | null;
   lat: number | null;
   lng: number | null;

@@ -5,9 +5,12 @@ import {
   createProspect,
   updateProspect,
   logTouchpoint,
+  updateTouchpoint,
+  deleteTouchpoint,
   deleteProspect,
   convertProspectToCustomer,
 } from "@/lib/actions/prospects";
+import { townFromAddress } from "@/lib/town";
 import { getRoutePositioning, saveRoutePosition } from "@/lib/actions/customers";
 import RouteMap from "@/components/RouteMap";
 import ProspectMap, { pinColor } from "@/components/ProspectMap";
@@ -233,6 +236,7 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
                 <div className="flex-1 min-w-0">
                   <span className="font-body font-medium text-charcoal truncate block">{p.name}</span>
                   <p className="text-xs text-charcoal/40 font-body truncate">
+                    {(p.town ?? townFromAddress(p.address)) ? `${p.town ?? townFromAddress(p.address)} · ` : ""}
                     {typeLabel(p.business_type)}
                     {p.contact_name ? ` · ${p.contact_name}` : ""}
                   </p>
@@ -300,6 +304,12 @@ function Detail({
   const [touchType, setTouchType] = useState<TouchpointType | null>(null);
   const [touchNote, setTouchNote] = useState("");
   const [touchDate, setTouchDate] = useState(todayStr);
+  // Editing a past touch (null = none open).
+  const [editTouchId, setEditTouchId] = useState<string | null>(null);
+  const [editTouchType, setEditTouchType] = useState<TouchpointType>("note");
+  const [editTouchNote, setEditTouchNote] = useState("");
+  const [editTouchDate, setEditTouchDate] = useState(todayStr);
+  const [touchBusy, setTouchBusy] = useState(false);
   // Dead requires a reason (null = popup closed).
   const [deadReason, setDeadReason] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -374,6 +384,42 @@ function Detail({
     setTouchDate(todayStr());
   }
 
+  function openEditTouch(t: ProspectTouchpoint) {
+    setEditTouchId(t.id);
+    setEditTouchType(t.type);
+    setEditTouchNote(t.note ?? "");
+    setEditTouchDate(t.created_at.slice(0, 10));
+    setError("");
+  }
+
+  async function saveEditTouch() {
+    if (!editTouchId) return;
+    setTouchBusy(true);
+    const res = await updateTouchpoint(editTouchId, {
+      type: editTouchType,
+      note: editTouchNote,
+      date: editTouchDate,
+    });
+    setTouchBusy(false);
+    if (res.error || !res.touchpoint) { setError(res.error ?? "Couldn't save"); return; }
+    const updated = res.touchpoint as ProspectTouchpoint;
+    const touchpoints = (p.touchpoints ?? [])
+      .map((t) => (t.id === updated.id ? updated : t))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    onPatch({ touchpoints });
+    setEditTouchId(null);
+  }
+
+  async function removeTouch(id: string) {
+    if (!confirm("Delete this logged touch?")) return;
+    setTouchBusy(true);
+    const res = await deleteTouchpoint(id);
+    setTouchBusy(false);
+    if (res.error) { setError(res.error); return; }
+    onPatch({ touchpoints: (p.touchpoints ?? []).filter((t) => t.id !== id) });
+    setEditTouchId(null);
+  }
+
   async function saveNotes() {
     onPatch({ notes: notes.trim() || null });
     await updateProspect(p.id, { notes: notes.trim() || undefined });
@@ -416,7 +462,14 @@ function Detail({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-serif text-3xl font-light text-charcoal">{p.name}</h2>
-          <p className="text-xs text-charcoal/40 font-body mt-0.5">{typeLabel(p.business_type)}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs text-charcoal/40 font-body">{typeLabel(p.business_type)}</span>
+            {(p.town ?? townFromAddress(p.address)) && (
+              <span className="text-[11px] font-body bg-gold-primary/20 text-gold-dark rounded-full px-2 py-0.5">
+                📍 {p.town ?? townFromAddress(p.address)}
+              </span>
+            )}
+          </div>
         </div>
         <button
           onClick={() => setEditing(true)}
@@ -678,17 +731,58 @@ function Detail({
           <p className="text-sm text-charcoal/40 font-body">No touches logged yet.</p>
         ) : (
           <div className="space-y-2">
-            {(p.touchpoints ?? []).slice(0, 12).map((t) => (
-              <div key={t.id} className="bg-cream rounded-lg border border-cream-dark p-3">
-                <div className="flex items-center gap-2 text-sm font-body text-charcoal">
-                  <span>{TOUCH_TYPES.find((x) => x.id === t.type)?.icon}</span>
-                  <span className="capitalize">{t.type}</span>
-                  {t.created_by && <span className="text-charcoal/40 text-xs">· {t.created_by}</span>}
-                  <span className="text-charcoal/40 text-xs ml-auto">{fmtDate(t.created_at)}</span>
+            {(p.touchpoints ?? []).slice(0, 12).map((t) =>
+              editTouchId === t.id ? (
+                <div key={t.id} className="bg-cream rounded-lg border border-green-primary/40 p-3 space-y-2">
+                  <div className="flex gap-1.5 flex-wrap">
+                    {TOUCH_TYPES.map((tt) => (
+                      <button
+                        key={tt.id}
+                        onClick={() => setEditTouchType(tt.id)}
+                        className={`min-h-tap px-2.5 py-1.5 rounded-lg text-xs font-body ${editTouchType === tt.id ? "bg-green-primary text-cream" : "bg-cream border border-cream-dark text-charcoal/60"}`}
+                      >
+                        {tt.icon} {tt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    value={editTouchNote}
+                    onChange={(e) => setEditTouchNote(e.target.value)}
+                    rows={2}
+                    placeholder="What happened?"
+                    className="w-full p-2.5 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm resize-none focus:outline-none focus:border-green-primary"
+                  />
+                  <label className="flex items-center gap-2 text-xs text-charcoal/50 font-body">
+                    When:
+                    <input
+                      type="date"
+                      value={editTouchDate}
+                      max={todayStr()}
+                      onChange={(e) => setEditTouchDate(e.target.value)}
+                      className="min-h-tap px-2.5 py-1.5 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary"
+                    />
+                  </label>
+                  <div className="flex gap-2">
+                    <button onClick={saveEditTouch} disabled={touchBusy} className="flex-1 min-h-tap bg-green-primary text-cream font-body text-xs uppercase tracking-widest py-2 rounded-lg disabled:opacity-60">
+                      {touchBusy ? "Saving…" : "Save"}
+                    </button>
+                    <button onClick={() => removeTouch(t.id)} disabled={touchBusy} className="min-h-tap px-3 text-red-500 font-body text-xs uppercase tracking-widest">Delete</button>
+                    <button onClick={() => setEditTouchId(null)} className="min-h-tap px-3 text-charcoal/40 font-body text-xs uppercase tracking-widest">Cancel</button>
+                  </div>
                 </div>
-                {t.note && <p className="text-xs text-charcoal/60 font-body mt-1">{t.note}</p>}
-              </div>
-            ))}
+              ) : (
+                <div key={t.id} className="bg-cream rounded-lg border border-cream-dark p-3">
+                  <div className="flex items-center gap-2 text-sm font-body text-charcoal">
+                    <span>{TOUCH_TYPES.find((x) => x.id === t.type)?.icon}</span>
+                    <span className="capitalize">{t.type}</span>
+                    {t.created_by && <span className="text-charcoal/40 text-xs">· {t.created_by}</span>}
+                    <span className="text-charcoal/40 text-xs ml-auto">{fmtDate(t.created_at)}</span>
+                    <button onClick={() => openEditTouch(t)} className="text-charcoal/40 hover:text-charcoal text-xs font-body" aria-label="Edit touch">✎</button>
+                  </div>
+                  {t.note && <p className="text-xs text-charcoal/60 font-body mt-1">{t.note}</p>}
+                </div>
+              )
+            )}
           </div>
         )}
       </div>
@@ -725,6 +819,7 @@ function EditProspect({
       phone: val("phone") || undefined,
       email: val("email") || undefined,
       address: val("address") || undefined,
+      town: val("town") || undefined,
       website: val("website") || undefined,
       business_type: businessType,
     };
@@ -738,6 +833,7 @@ function EditProspect({
         phone: fields.phone ?? null,
         email: fields.email ?? null,
         address: fields.address ?? null,
+        town: fields.town ?? townFromAddress(fields.address) ?? null,
         website: fields.website ?? null,
         business_type: businessType,
       });
@@ -789,6 +885,11 @@ function EditProspect({
         <span className={label}>Address</span>
         <input name="address" defaultValue={p.address ?? ""} className={field} />
         <p className="text-[11px] text-charcoal/40 font-body mt-1">Changing the address re-pins them on the map.</p>
+      </div>
+      <div>
+        <span className={label}>Town</span>
+        <input name="town" defaultValue={p.town ?? townFromAddress(p.address) ?? ""} placeholder="e.g. Sag Harbor" className={field} />
+        <p className="text-[11px] text-charcoal/40 font-body mt-1">Auto-filled from the address; edit to override.</p>
       </div>
       <div>
         <span className={label}>Website</span>

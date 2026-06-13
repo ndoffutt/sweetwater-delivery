@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/session";
 import { geocodeBusiness } from "@/lib/prospectGeo";
+import { townFromAddress } from "@/lib/town";
 import type { ProspectBusinessType, ProspectService, ProspectStatus, TouchpointType } from "@/lib/types";
 
 interface ProspectInput {
@@ -13,30 +14,40 @@ interface ProspectInput {
   phone?: string;
   email?: string;
   address?: string;
+  town?: string;
   website?: string;
   business_type?: ProspectBusinessType;
   services?: ProspectService[];
   notes?: string;
 }
 
+// True when an error is the prospect_town migration not having run yet
+// (Postgres "column ... does not exist" → code 42703).
+const missingTown = (msg: string | undefined) =>
+  !!msg && /town/i.test(msg) && /does not exist/i.test(msg);
+
 export async function createProspect(input: ProspectInput) {
   await requireSession("dispatcher");
   const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("prospects")
-    .insert({
-      name: input.name,
-      contact_name: input.contact_name || null,
-      contact_title: input.contact_title || null,
-      phone: input.phone || null,
-      email: input.email || null,
-      address: input.address || null,
-      website: input.website || null,
-      business_type: input.business_type || "other",
-      notes: input.notes || null,
-    })
-    .select()
-    .single();
+  const row = {
+    name: input.name,
+    contact_name: input.contact_name || null,
+    contact_title: input.contact_title || null,
+    phone: input.phone || null,
+    email: input.email || null,
+    address: input.address || null,
+    // Auto-tag the town from the address unless one was given explicitly.
+    town: input.town?.trim() || townFromAddress(input.address) || null,
+    website: input.website || null,
+    business_type: input.business_type || "other",
+    notes: input.notes || null,
+  };
+  let { data, error } = await supabase.from("prospects").insert(row).select().single();
+  if (error && missingTown(error.message)) {
+    const { town, ...rest } = row;
+    void town;
+    ({ data, error } = await supabase.from("prospects").insert(rest).select().single());
+  }
   if (error) return { error: error.message };
   revalidatePath("/sales/prospects");
   return { prospect: data };
@@ -49,13 +60,21 @@ export async function updateProspect(
   await requireSession("dispatcher");
   const supabase = createAdminClient();
   const patch: Record<string, unknown> = { ...fields };
-  // Address changed → re-pin on the map (null falls back to page-load geocoding).
+  // Address changed → re-pin on the map (null falls back to page-load
+  // geocoding) and re-derive the town tag unless one was set explicitly.
   if (fields.address !== undefined) {
     const coords = await geocodeBusiness(fields.name ?? "", fields.address ?? null);
     patch.lat = coords?.lat ?? null;
     patch.lng = coords?.lng ?? null;
+    if (fields.town === undefined) patch.town = townFromAddress(fields.address);
   }
-  const { error } = await supabase.from("prospects").update(patch).eq("id", id);
+  if (typeof patch.town === "string") patch.town = (patch.town as string).trim() || null;
+  let { error } = await supabase.from("prospects").update(patch).eq("id", id);
+  if (error && missingTown(error.message)) {
+    const { town, ...rest } = patch;
+    void town;
+    ({ error } = await supabase.from("prospects").update(rest).eq("id", id));
+  }
   if (error) return { error: error.message };
   revalidatePath("/sales/prospects");
   return { success: true };
@@ -94,6 +113,38 @@ export async function logTouchpoint(
     .eq("status", "new");
   revalidatePath("/sales/prospects");
   return { touchpoint: data };
+}
+
+/** Edit a previously logged touch (type / note / date). Keeps the original author. */
+export async function updateTouchpoint(
+  id: string,
+  fields: { type?: TouchpointType; note?: string; date?: string } // date = YYYY-MM-DD
+) {
+  await requireSession("dispatcher");
+  const supabase = createAdminClient();
+  const patch: Record<string, unknown> = {};
+  if (fields.type !== undefined) patch.type = fields.type;
+  if (fields.note !== undefined) patch.note = fields.note.trim() || null;
+  // Edited date lands at noon ET on the chosen day, matching how touches log.
+  if (fields.date) patch.created_at = `${fields.date}T12:00:00-04:00`;
+  const { data, error } = await supabase
+    .from("prospect_touchpoints")
+    .update(patch)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) return { error: error.message };
+  revalidatePath("/sales/prospects");
+  return { touchpoint: data };
+}
+
+export async function deleteTouchpoint(id: string) {
+  await requireSession("dispatcher");
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("prospect_touchpoints").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/sales/prospects");
+  return { success: true };
 }
 
 export async function deleteProspect(id: string) {
