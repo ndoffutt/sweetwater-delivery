@@ -50,7 +50,7 @@ export async function createRouteFromManifest(
   stops: ManifestStopInput[],
   status: "draft" | "dispatched" = "draft"
 ) {
-  await requireSession("dispatcher");
+  const session = await requireSession("dispatcher");
 
   const clean = stops.filter((s) => s.customer_name.trim() && s.address.trim());
   if (clean.length === 0) return { error: "No valid stops to add" };
@@ -58,16 +58,9 @@ export async function createRouteFromManifest(
   const supabase = createAdminClient();
   const today = easternToday();
 
-  // Driver to assign the route to.
-  const { data: driver } = await supabase
-    .from("users")
-    .select("id")
-    .eq("role", "driver")
-    .is("deleted_at", null)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .single();
-  if (!driver) return { error: "No active driver configured" };
+  // One van, no driver assignment: the route is owned by whoever builds it; any
+  // staff member can open Drive and run it.
+  const driverId = session.id;
 
   // Match-or-create customers.
   const { data: existing } = await supabase
@@ -197,7 +190,7 @@ export async function createRouteFromManifest(
   } else {
     const { data: created, error } = await supabase
       .from("routes")
-      .insert({ date: today, driver_id: driver.id, status })
+      .insert({ date: today, driver_id: driverId, status })
       .select("id")
       .single();
     if (error || !created) {

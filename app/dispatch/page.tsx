@@ -57,16 +57,8 @@ export default async function DispatchPage() {
       .is("deleted_at", null)
       .order("name");
 
-  const [routeRes, { data: driver }, lastScan, { count: signupCount }, { data: masterRows }, customersRes] = await Promise.all([
+  const [routeRes, lastScan, { count: signupCount }, { data: masterRows }, customersRes] = await Promise.all([
     routeSelect(true),
-    supabase
-      .from("users")
-      .select("name")
-      .eq("role", "driver")
-      .is("deleted_at", null)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle(),
     getLastManifestScan(),
     supabase
       .from("customer_signups")
@@ -136,7 +128,7 @@ export default async function DispatchPage() {
   return (
     <DispatchConsole
       dateLabel={dateLabel}
-      driverName={driver?.name ?? "Driver"}
+      driverName="Driver"
       lastScan={lastScan}
       pendingSignups={signupCount ?? 0}
       masterRoute={masterRoute}

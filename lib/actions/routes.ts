@@ -5,22 +5,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/session";
 
 export async function createRoute(date: string) {
-  await requireSession("dispatcher");
+  const session = await requireSession("dispatcher");
   const supabase = createAdminClient();
 
-  const { data: driver } = await supabase
-    .from("users")
-    .select("id")
-    .eq("role", "driver")
-    .eq("active", true)
-    .is("deleted_at", null)
-    .single();
-
-  if (!driver) return { error: "No active driver found" };
-
+  // One van, no driver assignment: the route is owned by whoever builds it; any
+  // staff member can open Drive and run it.
   const { data, error } = await supabase
     .from("routes")
-    .insert({ date, driver_id: driver.id, status: "draft" })
+    .insert({ date, driver_id: session.id, status: "draft" })
     .select()
     .single();
 
