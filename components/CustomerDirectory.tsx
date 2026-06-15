@@ -697,6 +697,11 @@ function EditCustomer({
 function AddForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (c: Customer) => void }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
+  // Step 2: the just-created customer must be given a route spot before finishing.
+  const [created, setCreated] = useState<Customer | null>(null);
+  const [pos, setPos] = useState<RoutePositioning | null>(null);
+  const [posBusy, setPosBusy] = useState(false);
+
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -708,10 +713,94 @@ function AddForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (c:
         gate_code: (fd.get("gate_code") as string) || undefined,
         delivery_notes: (fd.get("delivery_notes") as string) || undefined,
       });
-      if (res.error) setError(res.error);
-      else if (res.customer) onCreated(res.customer as Customer);
+      if (res.error) { setError(res.error); return; }
+      if (res.customer) {
+        const c = res.customer as Customer;
+        setCreated(c);
+        getRoutePositioning(c.id).then(setPos).catch(() => {});
+      }
     });
   }
+
+  function finish(seq: number) {
+    onCreated({ ...(created as Customer), route_seq: seq });
+  }
+  function confirmSuggested() {
+    if (!created || !pos?.suggestion) return;
+    const seq = pos.suggestion.seq;
+    setPosBusy(true);
+    saveRoutePosition(created.id, seq).then(() => finish(seq)).finally(() => setPosBusy(false));
+  }
+  function addEnd() {
+    if (!created) return;
+    setPosBusy(true);
+    placeAtEndOfRoute(created.id)
+      .then((res) => { const seq = (res as { seq?: number }).seq; if (seq != null) finish(seq); })
+      .finally(() => setPosBusy(false));
+  }
+
+  // ── Step 2: required route spot ──
+  if (created) {
+    const s = pos?.suggestion;
+    const mapStops: RouteStop[] = (() => {
+      if (!pos) return [];
+      const master = pos.masterRoute;
+      const list = s
+        ? [...master.slice(0, s.index), { id: created.id, name: created.name, lat: s.lat, lng: s.lng }, ...master.slice(s.index)]
+        : master;
+      return list.map((m, i) => ({
+        id: m.id, stop_order: i + 1, status: "pending",
+        customer: { name: m.name, address: "", lat: m.lat, lng: m.lng },
+      })) as unknown as RouteStop[];
+    })();
+    return (
+      <div className="p-5 md:p-8 md:max-w-2xl space-y-4">
+        <div>
+          <h2 className="font-serif text-2xl font-light text-charcoal">Set {created.name}&apos;s route spot</h2>
+          <p className="text-xs text-charcoal/50 font-body mt-1">Every customer needs a spot in the route — pick one to finish.</p>
+        </div>
+        {!pos ? (
+          <p className="text-sm text-charcoal/40 font-body">Finding the best spot…</p>
+        ) : (
+          <div className="bg-cream rounded-xl border border-cream-dark p-3">
+            {s ? (
+              <>
+                <p className="text-sm font-body text-charcoal">
+                  Suggested spot
+                  {s.before && s.after ? <>, between <b>{s.before}</b> &amp; <b>{s.after}</b></>
+                    : s.before ? <>, after <b>{s.before}</b></>
+                    : s.after ? <>, before <b>{s.after}</b></> : null}.
+                </p>
+                {mapStops.length > 0 && (
+                  <div className="relative h-44 mt-3 rounded-lg overflow-hidden border border-cream-dark">
+                    <RouteMap stops={mapStops} targetId={created.id} onSelect={() => {}} suggestedIds={[created.id]} />
+                  </div>
+                )}
+                <button onClick={confirmSuggested} disabled={posBusy} className="w-full mt-3 min-h-tap bg-green-primary text-cream font-body text-xs uppercase tracking-widest py-3 rounded-lg disabled:opacity-60">
+                  {posBusy ? "Saving…" : "Confirm this spot"}
+                </button>
+                <button onClick={addEnd} disabled={posBusy} className="w-full mt-2 min-h-tap text-charcoal/50 font-body text-[11px] uppercase tracking-widest">
+                  or add to end of route
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-body text-charcoal">
+                  {pos.noCoords ? "No map pin yet for this address." : "Couldn't suggest a spot."} Add it to the end of the route — you can drag it into place after.
+                </p>
+                <button onClick={addEnd} disabled={posBusy} className="w-full mt-3 min-h-tap bg-green-primary text-cream font-body text-xs uppercase tracking-widest py-3 rounded-lg disabled:opacity-60">
+                  {posBusy ? "Saving…" : "Add to end of route"}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        {error && <p className="text-sm text-red-600 font-body">{error}</p>}
+      </div>
+    );
+  }
+
+  // ── Step 1: details ──
   return (
     <form onSubmit={submit} className="p-5 md:p-8 md:max-w-2xl space-y-3">
       <button type="button" onClick={onCancel} className="md:hidden text-sm text-charcoal/50 font-body">← Back</button>
@@ -724,7 +813,7 @@ function AddForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (c:
       <textarea name="delivery_notes" placeholder="Notes (optional)" rows={2} className="w-full p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm resize-none focus:outline-none focus:border-green-primary" />
       {error && <p className="text-sm text-red-600 font-body">{error}</p>}
       <div className="flex gap-2">
-        <button type="submit" disabled={pending} className="flex-1 min-h-tap bg-green-primary text-cream font-body text-xs uppercase tracking-widest py-3 rounded-lg">{pending ? "Adding…" : "Add Customer"}</button>
+        <button type="submit" disabled={pending} className="flex-1 min-h-tap bg-green-primary text-cream font-body text-xs uppercase tracking-widest py-3 rounded-lg">{pending ? "Adding…" : "Next: route spot"}</button>
         <button type="button" onClick={onCancel} className="min-h-tap px-4 text-charcoal/40 font-body text-xs uppercase tracking-widest">Cancel</button>
       </div>
     </form>
