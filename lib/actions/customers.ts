@@ -76,6 +76,30 @@ export async function saveRoutePosition(customerId: string, seq: number) {
 }
 
 /**
+ * Drop a customer at the end of the master route. The guaranteed way to give a
+ * spot to a customer we can't geographically place (no coords / address won't
+ * geocode) — they can always be dragged into the right order afterward.
+ */
+export async function placeAtEndOfRoute(customerId: string) {
+  await requireSession("dispatcher");
+  const supabase = createAdminClient();
+  const { data: rows } = await supabase
+    .from("customers")
+    .select("route_seq")
+    .eq("active", true)
+    .is("deleted_at", null)
+    .not("route_seq", "is", null)
+    .order("route_seq", { ascending: false })
+    .limit(1);
+  const seq = Math.round((rows?.[0]?.route_seq as number | undefined) ?? 0) + 1;
+  const { error } = await supabase.from("customers").update({ route_seq: seq }).eq("id", customerId);
+  if (error) return { error: error.message };
+  await normalizeRouteSeqs(supabase);
+  revalidatePath("/dispatch/customers");
+  return { seq };
+}
+
+/**
  * Re-number the master route after a manual drag-reorder. The dispatcher passes
  * the positioned customers in their new order; we assign clean sequential
  * route_seq values (1..N) so the order sticks every week.

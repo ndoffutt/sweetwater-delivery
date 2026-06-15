@@ -9,6 +9,7 @@ import {
   saveCustomerTags,
   getRoutePositioning,
   saveRoutePosition,
+  placeAtEndOfRoute,
   reorderRoute,
   setDeliveryDays,
   type RoutePositioning,
@@ -46,6 +47,7 @@ export default function CustomerDirectory({
   const [adding, setAdding] = useState(false);
   const [view, setView] = useState<"list" | "map">("list");
   const [sort, setSort] = useState<"name" | "route">("name");
+  const [onlyUnpositioned, setOnlyUnpositioned] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const movedRef = useRef(false);
   // Last SAVED route order (ids in sequence), so a drag can be described
@@ -163,8 +165,12 @@ export default function CustomerDirectory({
 
   const lastDelivered = (id: string) => activity[id]?.[0]?.date;
 
+  // Every customer should have a route spot; surface the ones that don't.
+  const unpositioned = customers.filter((c) => c.route_seq == null);
+
   const filtered = customers
     .filter((c) => {
+      if (onlyUnpositioned && c.route_seq != null) return false;
       if (filter !== "All" && !(c.tags ?? []).includes(filter)) return false;
       if (query) {
         const q = query.toLowerCase();
@@ -282,6 +288,19 @@ export default function CustomerDirectory({
             </div>
           </div>
         )}
+        {unpositioned.length > 0 && (
+          <div className="mx-3 mt-3 rounded-xl border border-gold-primary/50 bg-gold-primary/10 p-3">
+            <p className="text-sm font-body text-charcoal">
+              <b>{unpositioned.length}</b> customer{unpositioned.length === 1 ? "" : "s"} {unpositioned.length === 1 ? "has" : "have"} no route spot. Open each and confirm a spot so the whole route is ordered.
+            </p>
+            <button
+              onClick={() => setOnlyUnpositioned((v) => !v)}
+              className="mt-2 min-h-tap px-3 py-1.5 bg-gold-primary text-charcoal font-body text-xs uppercase tracking-widest rounded-lg"
+            >
+              {onlyUnpositioned ? "Show all customers" : "Show only these"}
+            </button>
+          </div>
+        )}
         <div
           className="md:flex-1 md:overflow-auto p-3 space-y-1.5"
           onPointerMove={(e) => { if (dragId) onHandleMove(e, dragId); }}
@@ -323,6 +342,9 @@ export default function CustomerDirectory({
                 <div className="flex items-center gap-1.5">
                   {(c.tags ?? []).includes("VIP") && <span className="text-gold-primary text-sm">★</span>}
                   <span className="font-body font-medium text-charcoal truncate">{c.name}</span>
+                  {c.route_seq == null && (
+                    <span className="shrink-0 text-[10px] font-body uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-gold-primary/20 text-gold-dark" title="No route spot yet">⚠ No spot</span>
+                  )}
                 </div>
                 <p className="text-xs text-charcoal/40 font-body truncate">{c.address}</p>
               </div>
@@ -398,6 +420,18 @@ function Detail({
     setPosBusy(true);
     saveRoutePosition(c.id, seq).then(() => {
       setPos((p) => (p ? { ...p, current: seq, suggestion: null } : p));
+      onPatch({ route_seq: seq });
+    }).finally(() => setPosBusy(false));
+  }
+
+  function appendToEnd() {
+    setPosBusy(true);
+    placeAtEndOfRoute(c.id).then((res) => {
+      const seq = (res as { seq?: number }).seq;
+      if (seq != null) {
+        setPos((p) => (p ? { ...p, current: seq, suggestion: null, noCoords: false } : p));
+        onPatch({ route_seq: seq });
+      }
     }).finally(() => setPosBusy(false));
   }
 
@@ -470,8 +504,8 @@ function Detail({
         {c.phone && <a href={`tel:${c.phone}`} className="block text-sm text-charcoal/70 font-body">📞 {c.phone}</a>}
       </div>
 
-      {/* Route position */}
-      {pos?.ok && (pos.current != null || pos.suggestion || pos.noCoords) && (
+      {/* Route position — every customer should have a spot */}
+      {pos?.ok && (
         <div>
           <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-2">Route Position</p>
           {pos.current != null ? (
@@ -502,9 +536,19 @@ function Detail({
                 {posBusy ? "Saving…" : "Confirm this spot"}
               </button>
             </div>
-          ) : pos.noCoords ? (
-            <p className="text-sm text-charcoal/40 font-body">No location on file, so we can&apos;t suggest a route spot.</p>
-          ) : null}
+          ) : (
+            <div className="bg-gold-primary/10 border border-gold-primary/40 rounded-xl p-3">
+              <p className="text-sm font-body text-charcoal">
+                ⚠ No route spot yet.
+                {pos.noCoords
+                  ? " No map pin on file — add/fix the address (✎ Edit) for a suggested spot, or drop it at the end of the route now."
+                  : " Add it to the end of the route, then drag it into place in the list (Sort: Route)."}
+              </p>
+              <button onClick={appendToEnd} disabled={posBusy} className="w-full mt-3 min-h-tap bg-gold-primary text-charcoal font-body text-xs uppercase tracking-widest py-3 rounded-lg disabled:opacity-60">
+                {posBusy ? "Saving…" : "Add to end of route"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { geocodeMissingCustomers } from "@/lib/customerGeo";
 import CustomerDirectory, { type Activity } from "@/components/CustomerDirectory";
 import type { Customer } from "@/lib/types";
 
@@ -19,6 +20,10 @@ interface StopRow {
 export default async function CustomersPage() {
   const session = await getSession();
   if (!session) redirect("/");
+
+  // Pin any customers missing coordinates so each can get a route spot (no-op
+  // once all are geocoded).
+  await geocodeMissingCustomers().catch(() => {});
 
   const supabase = createAdminClient();
 
