@@ -205,7 +205,7 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
   return (
     <div className="md:flex md:h-screen">
       {/* Master list */}
-      <div className={`${selected ? "hidden md:flex" : "flex"} md:w-96 md:border-r md:border-cream-dark flex-col`}>
+      <div className={`${selected || adding ? "hidden md:flex" : "flex"} md:w-96 md:border-r md:border-cream-dark flex-col`}>
         <div className="p-4 border-b border-cream-dark space-y-3">
           <div className="flex items-center justify-between">
             <div>
