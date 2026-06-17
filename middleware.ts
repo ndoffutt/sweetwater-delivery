@@ -35,6 +35,7 @@ export async function middleware(request: NextRequest) {
     pathname === "/" ||
     pathname === "/privacy" || // public: linked from A2P 10DLC campaign registration
     pathname === "/terms" ||
+    pathname === "/signup" || // public: SMS opt-in / Call-to-Action form
     pathname.startsWith("/track/") || // public: tokenized customer delivery tracker
     pathname === "/sw.js" || // service worker must be fetchable before auth
     pathname.startsWith("/api/auth") ||

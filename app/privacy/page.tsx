@@ -46,10 +46,16 @@ export default function PrivacyPage() {
 
           <h2 className="font-serif text-2xl font-light text-charcoal pt-2">Text messaging</h2>
           <p>
-            Text notifications are optional and not required to receive service. Message frequency
-            varies with your deliveries. Message and data rates may apply. Reply{" "}
-            <strong>STOP</strong> at any time to stop receiving texts, or <strong>HELP</strong> for
-            help.
+            You opt in to text notifications by checking the SMS consent box on our{" "}
+            <a href="/signup" className="text-green-primary underline underline-offset-2">sign-up form</a>,
+            by giving consent in person at our store, or by texting our business number first. Text
+            notifications are optional and not required to receive service. Message frequency varies
+            with your deliveries. Message and data rates may apply. Reply <strong>STOP</strong> at any
+            time to stop receiving texts, or <strong>HELP</strong> for help.
+          </p>
+          <p>
+            No mobile information or SMS opt-in consent will be shared with third parties or
+            affiliates for marketing or promotional purposes.
           </p>
 
           <h2 className="font-serif text-2xl font-light text-charcoal pt-2">Contact</h2>

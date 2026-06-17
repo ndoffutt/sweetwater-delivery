@@ -22,10 +22,12 @@ export default function TermsPage() {
             exchange customer-service messages with our team by replying to our business number.
           </p>
           <p>
-            <strong>Opt-in:</strong> You consent to receive these messages by providing your phone
-            number when signing up for delivery service, in person at our store or through the
-            signup form on our website. Consent is not a condition of purchase, and text
-            notifications are not required to receive delivery service.
+            <strong>Opt-in:</strong> You consent to receive these messages by checking the SMS
+            consent box on our{" "}
+            <a href="/signup" className="text-green-primary underline underline-offset-2">online sign-up form</a>,
+            by giving consent in person at our store, or by texting our business number first.
+            Consent is not a condition of purchase, and text notifications are not required to
+            receive delivery service.
           </p>
           <p>
             <strong>Message frequency</strong> varies based on your delivery schedule, typically a
