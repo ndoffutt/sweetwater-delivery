@@ -198,7 +198,7 @@ export async function saveCustomerNotes(
   return { success: true };
 }
 
-/** The customer's run days: Monday, Wednesday (east), and/or Thursday (west). */
+/** The customer's run days: Monday, Wednesday (west), and/or Thursday (east). */
 export async function setDeliveryDays(customerId: string, days: DeliveryDay[]) {
   await requireSession("dispatcher");
   const supabase = createAdminClient();

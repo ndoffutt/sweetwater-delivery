@@ -64,9 +64,10 @@ async function notifyRouteStarted(
   );
 }
 
-// A completed delivery to an active prospect counts as a visit, so it clears
-// the "overdue for a visit" reminder. Best-effort and deduped to one auto-visit
-// per prospect per day; never blocks the delivery if anything here fails.
+// A completed delivery to an active prospect is logged as its own "delivery"
+// touch (van icon) — and still counts toward "last visited", so it clears the
+// overdue reminder. Best-effort and deduped to one per prospect per day; never
+// blocks the delivery if anything here fails.
 async function logDeliveryVisit(
   supabase: ReturnType<typeof createAdminClient>,
   customerId: string | null,
@@ -83,23 +84,27 @@ async function logDeliveryVisit(
       .maybeSingle();
     if (!prospect) return;
 
-    // Don't double-log if they were already visited in the last ~18h.
+    // Don't double-log if a visit or delivery was already recorded in ~18h.
     const cutoff = new Date(Date.now() - 18 * 60 * 60 * 1000).toISOString();
     const { data: recent } = await supabase
       .from("prospect_touchpoints")
       .select("id")
       .eq("prospect_id", prospect.id)
-      .eq("type", "visit")
+      .in("type", ["visit", "delivery"])
       .gte("created_at", cutoff)
       .limit(1);
     if (recent && recent.length > 0) return;
 
-    await supabase.from("prospect_touchpoints").insert({
-      prospect_id: prospect.id,
-      type: "visit",
-      note: "Delivery",
-      created_by: driverName || "Delivery",
-    });
+    const row = { prospect_id: prospect.id, created_by: driverName || "Delivery" };
+    const { error } = await supabase
+      .from("prospect_touchpoints")
+      .insert({ ...row, type: "delivery", note: null });
+    // Fall back to a visit if the 'delivery' type isn't migrated in yet.
+    if (error) {
+      await supabase
+        .from("prospect_touchpoints")
+        .insert({ ...row, type: "visit", note: "Delivery" });
+    }
     revalidatePath("/sales/prospects");
   } catch {
     /* prospects tables may not exist yet; delivery completion must still succeed */

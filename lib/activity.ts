@@ -11,6 +11,7 @@ export interface ActivityItem {
 
 const TOUCH_ICON: Record<string, string> = {
   visit: "🚪",
+  delivery: "🚐",
   call: "📞",
   email: "✉️",
   text: "💬",

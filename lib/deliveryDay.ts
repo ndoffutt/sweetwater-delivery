@@ -1,6 +1,6 @@
 // Delivery-day rule: the route splits at the Wainscott shop.
-// East of the shop (East Hampton town)  -> Wednesday run (route stops 1-25)
-// West of the shop (Water Mill & beyond) -> Thursday run  (stops 26+)
+// East of the shop (East Hampton town)  -> Thursday run
+// West of the shop (Water Mill & beyond) -> Wednesday run
 // Monday is a small commercial-only run (e.g. twice-weekly accounts); it is
 // never auto-assigned by location — it's set by hand in the directory.
 
@@ -12,7 +12,7 @@ const SHOP_LNG = -72.2366;
 /** Auto-assign a new customer's geographic day from their location. */
 export function dayForLocation(lng: number | null | undefined): DeliveryDay | null {
   if (lng == null) return null;
-  return lng > SHOP_LNG ? "wednesday" : "thursday";
+  return lng > SHOP_LNG ? "thursday" : "wednesday";
 }
 
 export const DAY_LABEL: Record<DeliveryDay, string> = {

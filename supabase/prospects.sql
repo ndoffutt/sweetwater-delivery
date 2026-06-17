@@ -42,7 +42,7 @@ create table prospects (
 create table prospect_touchpoints (
   id uuid primary key default gen_random_uuid(),
   prospect_id uuid not null references prospects(id) on delete cascade,
-  type text not null check (type in ('call', 'email', 'text', 'visit', 'note')),
+  type text not null check (type in ('call', 'email', 'text', 'visit', 'delivery', 'note')),
   note text,
   created_by text,
   created_at timestamptz not null default now()

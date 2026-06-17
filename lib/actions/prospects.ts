@@ -21,10 +21,11 @@ interface ProspectInput {
   notes?: string;
 }
 
-// True when an error is the prospect_town migration not having run yet
-// (Postgres "column ... does not exist" → code 42703).
+// True when an error is the prospect_town migration not having run yet. Covers
+// both Postgres ("column ... does not exist", 42703) and PostgREST
+// ("Could not find the 'town' column ... in the schema cache", PGRST204).
 const missingTown = (msg: string | undefined) =>
-  !!msg && /town/i.test(msg) && /does not exist/i.test(msg);
+  !!msg && /town/i.test(msg) && /(does not exist|schema cache|could not find)/i.test(msg);
 
 export async function createProspect(input: ProspectInput) {
   await requireSession("dispatcher");
@@ -92,18 +93,26 @@ export async function logTouchpoint(
   const who =
     session.role === "admin" ? "Nate" : session.role === "dispatcher" ? "Ahsin" : session.name;
   const today = new Date().toISOString().slice(0, 10);
-  const { data, error } = await supabase
+  const base = {
+    prospect_id: prospectId,
+    note: note?.trim() || null,
+    created_by: who,
+    // Backdated entries land at noon ET on the chosen day.
+    ...(date && date !== today ? { created_at: `${date}T12:00:00-04:00` } : {}),
+  };
+  let { data, error } = await supabase
     .from("prospect_touchpoints")
-    .insert({
-      prospect_id: prospectId,
-      type,
-      note: note?.trim() || null,
-      created_by: who,
-      // Backdated entries land at noon ET on the chosen day.
-      ...(date && date !== today ? { created_at: `${date}T12:00:00-04:00` } : {}),
-    })
+    .insert({ ...base, type })
     .select()
     .single();
+  // 'delivery' is a newer type; fall back to 'visit' if that migration hasn't run.
+  if (error && type === "delivery") {
+    ({ data, error } = await supabase
+      .from("prospect_touchpoints")
+      .insert({ ...base, type: "visit", note: base.note ?? "Delivery" })
+      .select()
+      .single());
+  }
   if (error) return { error: error.message };
   // First contact moves a fresh prospect along the pipeline automatically.
   await supabase

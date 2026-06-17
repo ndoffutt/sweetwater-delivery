@@ -75,11 +75,40 @@ type Phase = "empty" | "reading" | "review" | "dispatched";
 
 const GREEN = "#02733e";
 const townOf = (a: string) => a.split(",")[1]?.trim() ?? "";
-// Geographic default day as an array (east of shop = Wed, west = Thu).
+// Geographic default day as an array (east of shop = Thu, west = Wed).
 const geoDays = (lng: number | null | undefined): DeliveryDay[] => {
   const d = dayForLocation(lng);
   return d ? [d] : [];
 };
+
+interface RecentRoute { id: string; date: string; status: string; completedAt: string | null; stopCount: number }
+
+// History of the routes actually sent out, newest first.
+function RecentDispatches({ routes }: { routes: RecentRoute[] }) {
+  if (!routes.length) return null;
+  return (
+    <div className="mt-4 bg-cream rounded-2xl border border-cream-dark p-4 md:p-5">
+      <p className="font-body text-[11px] uppercase tracking-widest text-charcoal/40 mb-3">Recent dispatches</p>
+      <div className="divide-y divide-cream-dark">
+        {routes.map((r) => {
+          const d = new Date(r.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+          const done = r.status === "completed";
+          const label = done ? "Completed" : r.status === "in_progress" ? "Out for delivery" : "Dispatched";
+          return (
+            <div key={r.id} className="flex items-center gap-3 py-2.5">
+              <span className="shrink-0 text-charcoal/40"><Ic d={I.truck} size={16} /></span>
+              <span className="font-body text-sm text-charcoal">{d}</span>
+              <span className="font-body text-xs text-charcoal/40">{r.stopCount} stop{r.stopCount === 1 ? "" : "s"}</span>
+              <span className={`ml-auto font-body text-[11px] uppercase tracking-wide px-2 py-0.5 rounded-full ${done ? "bg-cream-dark text-charcoal/50" : "bg-green-primary/10 text-green-primary"}`}>
+                {label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 const first = (n: string) => n.trim().split(/[\s/]/)[0] || n;
 
 let keySeq = 0;
@@ -150,6 +179,7 @@ export default function DispatchConsole({
   masterRoute = [],
   allCustomers = [],
   dispatchDow,
+  recentRoutes = [],
   today,
 }: {
   dateLabel: string;
@@ -159,6 +189,7 @@ export default function DispatchConsole({
   masterRoute?: MasterStop[];
   allCustomers?: PickCustomer[];
   dispatchDow?: number; // 0-6 weekday (Eastern) of today's route date
+  recentRoutes?: { id: string; date: string; status: string; completedAt: string | null; stopCount: number }[];
   today: { id: string; status: string; stops: InitialStop[] } | null;
 }) {
   const router = useRouter();
@@ -268,7 +299,7 @@ export default function DispatchConsole({
           merge: auto ? m?.customerId ?? null : null,
           included: true,
           // Matched customers carry their designated days; brand-new ones get
-          // them from geography (east of the shop = Wed, west = Thu).
+          // them from geography (east of the shop = Thu, west = Wed).
           days: auto
             ? m?.customerDays ?? []
             : m?.kind === "suggested"
@@ -575,6 +606,8 @@ export default function DispatchConsole({
           </div>
         )}
 
+        {phase === "empty" && <RecentDispatches routes={recentRoutes} />}
+
         {picking && (
           <ManualPicker
             customers={allCustomers}
@@ -798,6 +831,8 @@ export default function DispatchConsole({
           )}
         </div>
       </div>
+
+      <RecentDispatches routes={recentRoutes} />
 
       {confirmKey && (() => {
         const r = rows.find((x) => x.key === confirmKey);

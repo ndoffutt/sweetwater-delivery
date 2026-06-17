@@ -52,6 +52,7 @@ const SERVICES: { id: ProspectService; label: string }[] = [
 
 const TOUCH_TYPES: { id: TouchpointType; label: string; icon: string }[] = [
   { id: "visit", label: "Visit", icon: "🚪" },
+  { id: "delivery", label: "Delivery", icon: "🚐" },
   { id: "call", label: "Call", icon: "📞" },
   { id: "email", label: "Email", icon: "✉️" },
   { id: "text", label: "Text", icon: "💬" },

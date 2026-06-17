@@ -57,7 +57,7 @@ export default async function DispatchPage() {
       .is("deleted_at", null)
       .order("name");
 
-  const [routeRes, lastScan, { count: signupCount }, { data: masterRows }, customersRes] = await Promise.all([
+  const [routeRes, lastScan, { count: signupCount }, { data: masterRows }, customersRes, { data: recentRows }] = await Promise.all([
     routeSelect(true),
     getLastManifestScan(),
     supabase
@@ -72,7 +72,26 @@ export default async function DispatchPage() {
       .not("route_seq", "is", null)
       .order("route_seq"),
     customersSelect(true),
+    // Recent dispatches (the actually-sent routes), newest first.
+    supabase
+      .from("routes")
+      .select("id,date,status,completed_at,route_stops(count)")
+      .in("status", ["dispatched", "in_progress", "completed"])
+      .is("deleted_at", null)
+      .order("date", { ascending: false })
+      .limit(14),
   ]);
+
+  const recentRoutes = ((recentRows ?? []) as unknown as {
+    id: string; date: string; status: string; completed_at: string | null;
+    route_stops: { count: number }[] | null;
+  }[]).map((r) => ({
+    id: r.id,
+    date: r.date,
+    status: r.status,
+    completedAt: r.completed_at,
+    stopCount: r.route_stops?.[0]?.count ?? 0,
+  }));
 
   // Tolerant of the delivery_days migration not having run yet.
   const route = routeRes.error ? (await routeSelect(false)).data : routeRes.data;
@@ -134,6 +153,7 @@ export default async function DispatchPage() {
       masterRoute={masterRoute}
       allCustomers={allCustomers}
       dispatchDow={dispatchDow}
+      recentRoutes={recentRoutes}
       today={route ? { id: route.id, status: route.status, stops } : null}
     />
   );

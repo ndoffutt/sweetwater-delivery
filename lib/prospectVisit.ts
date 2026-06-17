@@ -7,11 +7,13 @@ export const OVERDUE_DAYS = 30;
 
 const SCOPE = new Set<Prospect["status"]>(["new", "working", "active"]);
 
-/** Most recent in-person visit, or null if never visited. */
+/** Most recent in-person visit or delivery, or null if never visited. */
 export function lastVisitAt(touchpoints: ProspectTouchpoint[] | undefined): string | null {
   let latest: string | null = null;
   for (const t of touchpoints ?? []) {
-    if (t.type === "visit" && (!latest || t.created_at > latest)) latest = t.created_at;
+    if ((t.type === "visit" || t.type === "delivery") && (!latest || t.created_at > latest)) {
+      latest = t.created_at;
+    }
   }
   return latest;
 }

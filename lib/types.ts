@@ -25,8 +25,8 @@ export interface Customer {
   spot_account: string | null;
   account_type: string | null;
   route_seq: number | null;
-  // Run days for this customer. Wednesday = east of the shop (East Hampton
-  // town), Thursday = west, Monday = small commercial-only run. A customer can
+  // Run days for this customer. Thursday = east of the shop (East Hampton
+  // town), Wednesday = west, Monday = small commercial-only run. A customer can
   // be on more than one (e.g. a twice-weekly commercial account).
   delivery_days?: DeliveryDay[] | null;
   active: boolean;
@@ -84,7 +84,7 @@ export type ProspectBusinessType =
   | "retail"
   | "prop_manager"
   | "other";
-export type TouchpointType = "call" | "email" | "text" | "visit" | "note";
+export type TouchpointType = "call" | "email" | "text" | "visit" | "delivery" | "note";
 
 export interface Prospect {
   id: string;

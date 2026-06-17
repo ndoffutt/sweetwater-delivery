@@ -109,7 +109,7 @@ export async function createRouteFromManifest(
       route_seq: stop.route_seq ?? null,
       lat: stop.lat ?? null,
       lng: stop.lng ?? null,
-      // East of the shop -> Wednesday run, west -> Thursday.
+      // East of the shop -> Thursday run, west -> Wednesday.
       delivery_days: ((d) => (d ? [d] : []))(dayForLocation(stop.lng)),
     }));
     let { data: created, error } = await supabase

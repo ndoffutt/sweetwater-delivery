@@ -552,14 +552,14 @@ function Detail({
         </div>
       )}
 
-      {/* Delivery days: Monday (commercial), Wednesday = east, Thursday = west.
+      {/* Delivery days: Monday (commercial), Wednesday = west, Thursday = east.
           Pick any combination — twice-weekly accounts get two. */}
       <div>
         <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-2">Delivery Days</p>
         <div className="flex gap-2">
           {RUN_DAYS.map((d) => {
             const on = (c.delivery_days ?? []).includes(d);
-            const sub = d === "monday" ? "Commercial" : d === "wednesday" ? "East" : "West";
+            const sub = d === "monday" ? "Commercial" : d === "wednesday" ? "West" : "East";
             return (
               <button
                 key={d}
