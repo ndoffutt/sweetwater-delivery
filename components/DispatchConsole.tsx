@@ -95,14 +95,15 @@ function RecentDispatches({ routes }: { routes: RecentRoute[] }) {
           const done = r.status === "completed";
           const label = done ? "Completed" : r.status === "in_progress" ? "Out for delivery" : "Dispatched";
           return (
-            <div key={r.id} className="flex items-center gap-3 py-2.5">
+            <Link key={r.id} href={`/dispatch/route/${r.id}`} className="flex items-center gap-3 py-2.5 -mx-1 px-1 rounded-lg hover:bg-cream-dark/30 active:bg-cream-dark/40 transition-colors">
               <span className="shrink-0 text-charcoal/40"><Ic d={I.truck} size={16} /></span>
               <span className="font-body text-sm text-charcoal">{d}</span>
               <span className="font-body text-xs text-charcoal/40">{r.stopCount} stop{r.stopCount === 1 ? "" : "s"}</span>
               <span className={`ml-auto font-body text-[11px] uppercase tracking-wide px-2 py-0.5 rounded-full ${done ? "bg-cream-dark text-charcoal/50" : "bg-green-primary/10 text-green-primary"}`}>
                 {label}
               </span>
-            </div>
+              <span className="text-charcoal/30 shrink-0">›</span>
+            </Link>
           );
         })}
       </div>

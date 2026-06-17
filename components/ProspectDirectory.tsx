@@ -205,7 +205,7 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
   return (
     <div className="md:flex md:h-screen">
       {/* Master list */}
-      <div className={`${selected || adding ? "hidden md:flex" : "flex"} md:w-96 md:border-r md:border-cream-dark flex-col`}>
+      <div className={`${selected ? "hidden md:flex" : "flex"} md:w-96 md:border-r md:border-cream-dark flex-col`}>
         <div className="p-4 border-b border-cream-dark space-y-3">
           <div className="flex items-center justify-between">
             <div>
@@ -310,18 +310,9 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
         </div>
       </div>
 
-      {/* Detail / Add */}
-      <div className={`${selected || adding ? "block" : "hidden md:block"} flex-1 md:overflow-auto`}>
-        {adding ? (
-          <AddForm
-            onCancel={() => setAdding(false)}
-            onCreated={(p) => {
-              setProspects((ps) => [...ps, { ...p, touchpoints: [] }]);
-              setAdding(false);
-              setSelectedId(p.id);
-            }}
-          />
-        ) : selected ? (
+      {/* Detail */}
+      <div className={`${selected ? "block" : "hidden md:block"} flex-1 md:overflow-auto`}>
+        {selected ? (
           <Detail
             key={selected.id}
             p={selected}
@@ -339,6 +330,28 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
           </div>
         )}
       </div>
+
+      {/* Add a prospect — centered popup (works the same on desktop + mobile) */}
+      {adding && (
+        <div
+          className="fixed inset-0 z-50 bg-charcoal/40 flex items-start md:items-center justify-center p-4 overflow-auto"
+          onClick={() => setAdding(false)}
+        >
+          <div
+            className="bg-cream rounded-2xl w-full max-w-lg my-auto shadow-xl max-h-[90vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <AddForm
+              onCancel={() => setAdding(false)}
+              onCreated={(p) => {
+                setProspects((ps) => [...ps, { ...p, touchpoints: [] }]);
+                setAdding(false);
+                setSelectedId(p.id);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
