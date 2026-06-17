@@ -4,7 +4,7 @@
 //  - Hashed build assets (/_next/static): cache-first, they're immutable.
 //  - APIs, server actions, and cross-origin (Mapbox/Supabase): untouched -
 //    the in-app queues (lib/offline.ts) own write resilience.
-const CACHE = "sw-shell-v2";
+const CACHE = "sw-shell-v3";
 
 self.addEventListener("install", (e) => {
   self.skipWaiting();
@@ -125,8 +125,17 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // Page navigations: network-first with offline fallback.
+  // Page navigations:
+  //  - /driver: network-first with offline fallback (driver needs the route to
+  //    open in a dead zone).
+  //  - everything else (dispatch / sales / owner / settings): always go to the
+  //    network so a new deploy is picked up immediately and the page never gets
+  //    trapped on a stale cached shell. Online use only, so no offline fallback
+  //    needed here.
   if (req.mode === "navigate") {
-    e.respondWith(networkFirst(req));
+    if (url.pathname.startsWith("/driver")) {
+      e.respondWith(networkFirst(req));
+    }
+    // else: let the browser fetch it normally (no SW caching).
   }
 });

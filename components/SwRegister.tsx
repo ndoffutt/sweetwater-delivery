@@ -9,6 +9,18 @@ export default function SwRegister() {
     if (process.env.NODE_ENV !== "production") return;
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker.register("/sw.js").catch(() => {});
+
+    // When a new service worker takes control (after a deploy), reload once so
+    // the open app picks up the fresh code instead of running the old cached
+    // bundle. Guarded so it can't loop.
+    let refreshing = false;
+    const onChange = () => {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    };
+    navigator.serviceWorker.addEventListener("controllerchange", onChange);
+    return () => navigator.serviceWorker.removeEventListener("controllerchange", onChange);
   }, []);
   return null;
 }
