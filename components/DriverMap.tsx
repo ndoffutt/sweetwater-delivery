@@ -13,6 +13,7 @@ import { runStopAction, subscribeSync, type SyncState } from "@/lib/offline";
 import PhotoCapture from "@/components/PhotoCapture";
 import RouteMap from "@/components/RouteMap";
 import type { RouteStop } from "@/lib/types";
+import { googleVoiceCallHref } from "@/lib/phone";
 
 const C = {
   green: "#02733e",
@@ -483,7 +484,7 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
                 </div>
               )}
               {cust.phone && (
-                <a href={`tel:${cust.phone}`} style={{ display: "flex", alignItems: "center", gap: 11, background: "#fff", border: `1px solid ${C.creamDark}`, borderRadius: 13, padding: "12px 14px", textDecoration: "none", marginBottom: 12 }}>
+                <a href={googleVoiceCallHref(cust.phone)} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 11, background: "#fff", border: `1px solid ${C.creamDark}`, borderRadius: 13, padding: "12px 14px", textDecoration: "none", marginBottom: 12 }}>
                   <Icon name="phone" size={19} color={C.green} />
                   <span style={{ fontSize: 14.5, color: C.charcoal }}>{cust.phone}</span>
                   <span style={{ marginLeft: "auto", fontSize: 11.5, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(26,26,26,0.35)" }}>Call</span>

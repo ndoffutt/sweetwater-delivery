@@ -11,6 +11,7 @@ import {
   convertProspectToCustomer,
 } from "@/lib/actions/prospects";
 import { townFromAddress } from "@/lib/town";
+import { googleVoiceCallHref } from "@/lib/phone";
 import { isOverdueForVisit, OVERDUE_DAYS } from "@/lib/prospectVisit";
 import { getRoutePositioning, saveRoutePosition } from "@/lib/actions/customers";
 import RouteMap from "@/components/RouteMap";
@@ -713,7 +714,7 @@ function Detail({
             {p.contact_title && <span className="text-charcoal/40"> — {p.contact_title}</span>}
           </p>
         )}
-        {p.phone && <a href={`tel:${p.phone.replace(/[^+\d]/g, "")}`} className="block text-sm text-green-primary font-body">📞 {p.phone}</a>}
+        {p.phone && <a href={googleVoiceCallHref(p.phone)} target="_blank" rel="noopener noreferrer" className="block text-sm text-green-primary font-body">📞 {p.phone}</a>}
         {p.email && <a href={`mailto:${p.email}`} className="block text-sm text-green-primary font-body break-all">✉️ {p.email}</a>}
         {p.address && (
           <a

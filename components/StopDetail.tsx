@@ -6,6 +6,7 @@ import type { RouteStop } from "@/lib/types";
 import { sendSms } from "@/lib/actions/stops";
 import { saveCustomerNotes } from "@/lib/actions/customers";
 import { runStopAction } from "@/lib/offline";
+import { googleVoiceCallHref } from "@/lib/phone";
 import PhotoCapture from "./PhotoCapture";
 
 interface StopDetailProps {
@@ -99,7 +100,9 @@ export default function StopDetail({ stop: initial, photoUrls }: StopDetailProps
 
         {customer.phone && (
           <a
-            href={`tel:${customer.phone}`}
+            href={googleVoiceCallHref(customer.phone)}
+            target="_blank"
+            rel="noopener noreferrer"
             className="block mt-2 text-sm text-charcoal/70 font-body"
           >
             📞 {customer.phone}
