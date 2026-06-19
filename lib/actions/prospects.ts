@@ -84,9 +84,25 @@ export async function updateProspect(
   id: string,
   fields: Partial<ProspectInput> & { status?: ProspectStatus }
 ) {
-  await requireSession("dispatcher");
+  const session = await requireSession("dispatcher");
   const supabase = createAdminClient();
   const patch: Record<string, unknown> = { ...fields };
+
+  // Log status changes to the touch history (dead carries its own reason note,
+  // so it's logged by the caller). Captures any path that flips the status.
+  if (fields.status) {
+    const { data: cur } = await supabase.from("prospects").select("status").eq("id", id).single();
+    if (cur && cur.status !== fields.status && fields.status !== "dead") {
+      const label = fields.status.charAt(0).toUpperCase() + fields.status.slice(1).replace("_", " ");
+      const who = session.role === "admin" ? "Nate" : session.role === "dispatcher" ? "Ahsin" : session.name;
+      await supabase.from("prospect_touchpoints").insert({
+        prospect_id: id,
+        type: "note",
+        note: `Status → ${label}`,
+        created_by: who,
+      });
+    }
+  }
   // Address changed → re-pin on the map (null falls back to page-load
   // geocoding) and re-derive the town tag unless one was set explicitly.
   if (fields.address !== undefined) {

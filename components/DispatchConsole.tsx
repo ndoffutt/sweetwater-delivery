@@ -9,6 +9,8 @@ import type { StopResolution } from "@/lib/manifest/match";
 import { routeMiles, routeEtaMinutes, formatMiles, formatDuration, cheapestInsertion, seqBetween } from "@/lib/geo";
 import { dayForLocation, dayForDow, DAY_LABEL, RUN_DAYS, type DeliveryDay } from "@/lib/deliveryDay";
 import RouteMap from "@/components/RouteMap";
+import NearbyVisits, { type NearbyItem } from "@/components/NearbyVisits";
+import PlannedVisits, { type PlannedVisit } from "@/components/PlannedVisits";
 import type { RouteStop } from "@/lib/types";
 
 export interface InitialStop {
@@ -82,6 +84,17 @@ const geoDays = (lng: number | null | undefined): DeliveryDay[] => {
 };
 
 interface RecentRoute { id: string; date: string; status: string; completedAt: string | null; stopCount: number }
+
+export interface NearbyProspect { id: string; name: string; lat: number; lng: number; town: string | null }
+
+// Great-circle distance in miles.
+function milesBetween(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const R = 3958.8, toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(bLat - aLat), dLng = toRad(bLng - aLng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+}
+const NEAR_MILES = 3;
 
 // History of the routes actually sent out, newest first.
 function RecentDispatches({ routes }: { routes: RecentRoute[] }) {
@@ -181,6 +194,9 @@ export default function DispatchConsole({
   allCustomers = [],
   dispatchDow,
   recentRoutes = [],
+  overdueProspects = [],
+  plannedVisitIds = [],
+  plannedVisits = [],
   today,
 }: {
   dateLabel: string;
@@ -191,6 +207,9 @@ export default function DispatchConsole({
   allCustomers?: PickCustomer[];
   dispatchDow?: number; // 0-6 weekday (Eastern) of today's route date
   recentRoutes?: { id: string; date: string; status: string; completedAt: string | null; stopCount: number }[];
+  overdueProspects?: NearbyProspect[];
+  plannedVisitIds?: string[];
+  plannedVisits?: PlannedVisit[];
   today: { id: string; status: string; stops: InitialStop[] } | null;
 }) {
   const router = useRouter();
@@ -624,6 +643,22 @@ export default function DispatchConsole({
 
   // ── REVIEW / DISPATCHED ──────────────────────────────────────
   const dispatched = phase === "dispatched";
+
+  // Overdue prospects sitting within a few miles of any of today's stops.
+  const routeId = today?.id ?? null;
+  const nearbyVisits: NearbyItem[] = routeId
+    ? overdueProspects
+        .map((p) => {
+          let min = Infinity;
+          for (const r of rows) {
+            if (r.lat != null && r.lng != null) min = Math.min(min, milesBetween(p.lat, p.lng, r.lat, r.lng));
+          }
+          return { id: p.id, name: p.name, town: p.town, miles: min };
+        })
+        .filter((x) => x.miles <= NEAR_MILES)
+        .sort((a, b) => a.miles - b.miles)
+    : [];
+
   return (
     <div className="p-4 md:p-8 md:max-w-5xl md:mx-auto pb-24 md:pb-8">
       <Header dateLabel={dateLabel} dispatched={dispatched} />
@@ -832,6 +867,9 @@ export default function DispatchConsole({
           )}
         </div>
       </div>
+
+      {routeId && <PlannedVisits routeId={routeId} visits={plannedVisits} />}
+      {routeId && <NearbyVisits routeId={routeId} items={nearbyVisits} initialAdded={plannedVisitIds} />}
 
       <RecentDispatches routes={recentRoutes} />
 

@@ -5,6 +5,8 @@ import { getLastManifestScan } from "@/lib/actions/manifest";
 import { easternToday } from "@/lib/date";
 import DispatchConsole, { type InitialStop } from "@/components/DispatchConsole";
 import type { DeliveryDay } from "@/lib/deliveryDay";
+import { isOverdueForVisit } from "@/lib/prospectVisit";
+import type { Prospect } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -137,6 +139,31 @@ export default async function DispatchPage() {
     delivery_days: c.delivery_days ?? [],
   }));
 
+  // Overdue prospects (with coordinates) — candidates to surface near the route.
+  const { data: prospectRows } = await supabase
+    .from("prospects")
+    .select("id,name,lat,lng,status,town,created_at,touchpoints:prospect_touchpoints(type,created_at)")
+    .is("deleted_at", null)
+    .in("status", ["new", "working", "active"])
+    .not("lat", "is", null);
+  const overdueProspects = ((prospectRows ?? []) as unknown as Prospect[])
+    .filter(isOverdueForVisit)
+    .map((p) => ({ id: p.id, name: p.name, lat: p.lat as number, lng: p.lng as number, town: p.town ?? null }));
+
+  // Prospect visits attached to today's route (tolerant of the
+  // route_prospect_visits migration not having run yet).
+  let plannedVisits: { id: string; prospectId: string; name: string; status: string; notes: string | null }[] = [];
+  if (route?.id) {
+    const { data: pv } = await supabase
+      .from("route_prospect_visits")
+      .select("id, prospect_id, status, notes, prospects(name)")
+      .eq("route_id", route.id);
+    plannedVisits = ((pv ?? []) as unknown as {
+      id: string; prospect_id: string; status: string; notes: string | null; prospects: { name: string } | null;
+    }[]).map((r) => ({ id: r.id, prospectId: r.prospect_id, name: r.prospects?.name ?? "Prospect", status: r.status, notes: r.notes }));
+  }
+  const plannedVisitIds = plannedVisits.map((v) => v.prospectId);
+
   const dateLabel = new Date(today + "T12:00:00").toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
@@ -154,6 +181,9 @@ export default async function DispatchPage() {
       allCustomers={allCustomers}
       dispatchDow={dispatchDow}
       recentRoutes={recentRoutes}
+      overdueProspects={overdueProspects}
+      plannedVisitIds={plannedVisitIds}
+      plannedVisits={plannedVisits}
       today={route ? { id: route.id, status: route.status, stops } : null}
     />
   );
