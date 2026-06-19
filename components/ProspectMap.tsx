@@ -8,11 +8,14 @@ import type { Prospect, ProspectStatus } from "@/lib/types";
 const GREEN = "#02733e";
 const GOLD = "#d59a29";
 const GRAY = "#9a958c";
+const BLACK = "#1a1a1a";
 
-// Active = green (our customers), new/working targets = gold, on hold/dead = gray.
+// Active = green (our customers), new/working targets = gold, on hold = grey,
+// dead = black.
 export function pinColor(status: ProspectStatus): string {
   if (status === "active") return GREEN;
-  if (status === "on_hold" || status === "dead") return GRAY;
+  if (status === "dead") return BLACK;
+  if (status === "on_hold") return GRAY;
   return GOLD;
 }
 
@@ -80,7 +83,8 @@ export default function ProspectMap({
         {[
           { c: GOLD, l: "Targeting" },
           { c: GREEN, l: "Active customer" },
-          { c: GRAY, l: "On hold / dead" },
+          { c: GRAY, l: "On hold" },
+          { c: BLACK, l: "Dead" },
         ].map((x) => (
           <div key={x.l} className="flex items-center gap-2">
             <span style={{ width: 10, height: 10, borderRadius: "50%", background: x.c, border: "1.5px solid #fff", boxShadow: "0 0 2px rgba(0,0,0,0.3)" }} />

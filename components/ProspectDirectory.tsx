@@ -22,6 +22,7 @@ import type {
   Prospect,
   ProspectStatus,
   ProspectBusinessType,
+  ProspectPriority,
   ProspectService,
   ProspectTouchpoint,
   TouchpointType,
@@ -98,18 +99,33 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
-type ProspectSort = "town" | "name" | "touched";
+type ProspectSort = "priority" | "town" | "name" | "touched";
 const SORTS: { id: ProspectSort; label: string }[] = [
+  { id: "priority", label: "Priority" },
   { id: "town", label: "Town" },
   { id: "name", label: "A–Z" },
   { id: "touched", label: "Last touch" },
 ];
 const prospectTown = (p: Prospect) => p.town ?? townFromAddress(p.address);
 
+const PRIORITIES: { id: ProspectPriority; label: string }[] = [
+  { id: "high", label: "High" },
+  { id: "medium", label: "Medium" },
+  { id: "low", label: "Low" },
+];
+const priorityRank = (p: ProspectPriority | null | undefined) =>
+  p === "high" ? 0 : p === "low" ? 2 : 1; // medium default
+function priorityStyle(p: ProspectPriority | null | undefined) {
+  if (p === "high") return "bg-red-100 text-red-700";
+  if (p === "low") return "bg-cream-dark text-charcoal/50";
+  return "bg-gold-primary/20 text-gold-dark"; // medium
+}
+
 export default function ProspectDirectory({ prospects: initial }: { prospects: Prospect[] }) {
   const [prospects, setProspects] = useState(initial);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | ProspectStatus>("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | ProspectBusinessType>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [view, setView] = useState<"list" | "map">("list");
@@ -119,6 +135,7 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
   const filtered = prospects
     .filter((p) => {
       if (filter !== "all" && p.status !== filter) return false;
+      if (typeFilter !== "all" && p.business_type !== typeFilter) return false;
       if (query) {
         const q = query.toLowerCase();
         return (
@@ -135,6 +152,10 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
       const oa = isOverdueForVisit(a);
       const ob = isOverdueForVisit(b);
       if (oa !== ob) return oa ? -1 : 1;
+      if (sort === "priority") {
+        const pr = priorityRank(a.priority) - priorityRank(b.priority);
+        return pr !== 0 ? pr : a.name.localeCompare(b.name);
+      }
       if (sort === "name") return a.name.localeCompare(b.name);
       if (sort === "town") {
         const at = prospectTown(a);
@@ -170,6 +191,22 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
     </div>
   );
 
+  const TypeFilter = () => (
+    <div className="flex items-center gap-2">
+      <span className="text-[11px] text-charcoal/40 font-body uppercase tracking-widest shrink-0">Type</span>
+      <select
+        value={typeFilter}
+        onChange={(e) => setTypeFilter(e.target.value as "all" | ProspectBusinessType)}
+        className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-xs focus:outline-none focus:border-green-primary"
+      >
+        <option value="all">All types</option>
+        {TYPES.map((t) => (
+          <option key={t.id} value={t.id}>{t.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+
   // ── Map view: every business, colored by status ──
   if (view === "map") {
     const pinned = filtered.filter((p) => p.lat != null && p.lng != null);
@@ -191,13 +228,30 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
               </button>
             ))}
           </div>
+          <TypeFilter />
         </div>
         <div className="relative flex-1 min-h-[65vh]">
           <ProspectMap
             prospects={pinned}
             targetId={selectedId}
-            onSelect={(id) => { setSelectedId(id); setView("list"); }}
+            onSelect={(id) => setSelectedId(id)}
           />
+          {/* Tapping a pin opens the detail over the map; Back returns to the map. */}
+          {selected && (
+            <div className="absolute inset-0 z-30 bg-cream overflow-auto">
+              <Detail
+                key={selected.id}
+                p={selected}
+                onBack={() => setSelectedId(null)}
+                onPatch={(f) => patch(selected.id, f)}
+                onDelete={() => {
+                  setProspects((ps) => ps.filter((x) => x.id !== selected.id));
+                  setSelectedId(null);
+                  startTransition(() => { deleteProspect(selected.id); });
+                }}
+              />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -248,9 +302,10 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-2">
+          <TypeFilter />
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[11px] text-charcoal/40 font-body uppercase tracking-widest shrink-0">Sort</span>
-            <div className="inline-flex rounded-lg bg-cream-dark/60 p-0.5 text-xs font-body">
+            <div className="inline-flex rounded-lg bg-cream-dark/60 p-0.5 text-xs font-body flex-wrap">
               {SORTS.map((s) => (
                 <button
                   key={s.id}
@@ -295,6 +350,11 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
                   </p>
                 </div>
                 <div className="shrink-0 flex flex-col items-end gap-1">
+                  {p.priority && p.priority !== "medium" && (
+                    <span className={`text-[10px] font-body uppercase tracking-wider px-2 py-0.5 rounded-full ${priorityStyle(p.priority)}`}>
+                      {p.priority === "high" ? "High" : "Low"}
+                    </span>
+                  )}
                   <span className={`text-[10px] font-body uppercase tracking-wider px-2 py-0.5 rounded-full ${statusStyle(p.status)}`}>
                     {STATUSES.find((s) => s.id === p.status)?.label}
                   </span>
@@ -430,6 +490,11 @@ function Detail({
     startTransition(() => { updateProspect(p.id, { services }); });
   }
 
+  function setPriority(priority: ProspectPriority) {
+    onPatch({ priority });
+    startTransition(() => { updateProspect(p.id, { priority }); });
+  }
+
   async function saveTouch() {
     if (!touchType) return;
     setBusy(true);
@@ -551,6 +616,22 @@ function Detail({
           <p className="text-xs font-body text-charcoal">Overdue for a visit — log a Visit below to clear this.</p>
         </div>
       )}
+
+      {/* Priority */}
+      <div>
+        <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-2">Priority</p>
+        <div className="flex gap-1.5">
+          {PRIORITIES.map((pr) => (
+            <button
+              key={pr.id}
+              onClick={() => setPriority(pr.id)}
+              className={`min-h-tap px-3.5 py-1.5 rounded-full text-xs font-body ${(p.priority ?? "medium") === pr.id ? priorityStyle(pr.id) + " ring-1 ring-green-primary/40" : "bg-cream border border-cream-dark text-charcoal/50"}`}
+            >
+              {pr.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Status pipeline */}
       <div>

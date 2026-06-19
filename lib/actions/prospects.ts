@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/session";
 import { geocodeBusiness } from "@/lib/prospectGeo";
 import { townFromAddress } from "@/lib/town";
-import type { ProspectBusinessType, ProspectService, ProspectStatus, TouchpointType } from "@/lib/types";
+import type { ProspectBusinessType, ProspectPriority, ProspectService, ProspectStatus, TouchpointType } from "@/lib/types";
 
 interface ProspectInput {
   name: string;
@@ -17,15 +17,45 @@ interface ProspectInput {
   town?: string;
   website?: string;
   business_type?: ProspectBusinessType;
+  priority?: ProspectPriority;
   services?: ProspectService[];
   notes?: string;
 }
 
-// True when an error is the prospect_town migration not having run yet. Covers
-// both Postgres ("column ... does not exist", 42703) and PostgREST
-// ("Could not find the 'town' column ... in the schema cache", PGRST204).
-const missingTown = (msg: string | undefined) =>
-  !!msg && /town/i.test(msg) && /(does not exist|schema cache|could not find)/i.test(msg);
+// Columns added by later migrations that may not exist yet on a given DB.
+const OPTIONAL_COLS = ["town", "priority"];
+// Which optional column a missing-column error refers to (Postgres 42703
+// "column ... does not exist" or PostgREST PGRST204 "could not find ... schema
+// cache"), or null if the error is something else.
+function missingOptionalCol(msg: string | undefined): string | null {
+  if (!msg || !/(does not exist|schema cache|could not find)/i.test(msg)) return null;
+  return OPTIONAL_COLS.find((c) => new RegExp(`\\b${c}\\b`, "i").test(msg)) ?? null;
+}
+
+// Insert/update with graceful degradation: if the DB is missing an optional
+// column, drop it and retry (loops so multiple missing cols are handled).
+async function insertTolerant(supabase: ReturnType<typeof createAdminClient>, row: Record<string, unknown>) {
+  const attempt = { ...row };
+  for (let i = 0; i < OPTIONAL_COLS.length + 1; i++) {
+    const res = await supabase.from("prospects").insert(attempt).select().single();
+    if (!res.error) return res;
+    const miss = missingOptionalCol(res.error.message);
+    if (!miss || !(miss in attempt)) return res;
+    delete attempt[miss];
+  }
+  return supabase.from("prospects").insert(attempt).select().single();
+}
+async function updateTolerant(supabase: ReturnType<typeof createAdminClient>, id: string, patch: Record<string, unknown>) {
+  const attempt = { ...patch };
+  for (let i = 0; i < OPTIONAL_COLS.length + 1; i++) {
+    const res = await supabase.from("prospects").update(attempt).eq("id", id);
+    if (!res.error) return res;
+    const miss = missingOptionalCol(res.error.message);
+    if (!miss || !(miss in attempt)) return res;
+    delete attempt[miss];
+  }
+  return supabase.from("prospects").update(attempt).eq("id", id);
+}
 
 export async function createProspect(input: ProspectInput) {
   await requireSession("dispatcher");
@@ -41,14 +71,10 @@ export async function createProspect(input: ProspectInput) {
     town: input.town?.trim() || townFromAddress(input.address) || null,
     website: input.website || null,
     business_type: input.business_type || "other",
+    priority: input.priority || "medium",
     notes: input.notes || null,
   };
-  let { data, error } = await supabase.from("prospects").insert(row).select().single();
-  if (error && missingTown(error.message)) {
-    const { town, ...rest } = row;
-    void town;
-    ({ data, error } = await supabase.from("prospects").insert(rest).select().single());
-  }
+  const { data, error } = await insertTolerant(supabase, row);
   if (error) return { error: error.message };
   revalidatePath("/sales/prospects");
   return { prospect: data };
@@ -70,12 +96,7 @@ export async function updateProspect(
     if (fields.town === undefined) patch.town = townFromAddress(fields.address);
   }
   if (typeof patch.town === "string") patch.town = (patch.town as string).trim() || null;
-  let { error } = await supabase.from("prospects").update(patch).eq("id", id);
-  if (error && missingTown(error.message)) {
-    const { town, ...rest } = patch;
-    void town;
-    ({ error } = await supabase.from("prospects").update(rest).eq("id", id));
-  }
+  const { error } = await updateTolerant(supabase, id, patch);
   if (error) return { error: error.message };
   revalidatePath("/sales/prospects");
   return { success: true };

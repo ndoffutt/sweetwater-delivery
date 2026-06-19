@@ -85,6 +85,7 @@ export type ProspectBusinessType =
   | "prop_manager"
   | "other";
 export type TouchpointType = "call" | "email" | "text" | "visit" | "delivery" | "note";
+export type ProspectPriority = "low" | "medium" | "high";
 
 export interface Prospect {
   id: string;
@@ -100,6 +101,7 @@ export interface Prospect {
   lng: number | null;
   business_type: ProspectBusinessType;
   status: ProspectStatus;
+  priority?: ProspectPriority | null;
   services: ProspectService[];
   notes: string | null;
   customer_id: string | null;

@@ -31,6 +31,8 @@ create table prospects (
     check (status in ('new', 'working', 'active', 'on_hold', 'dead')),
   -- what an active account buys: employees / linen / referral
   services text[] not null default '{}',
+  -- sales priority: low / medium / high
+  priority text not null default 'medium' check (priority in ('low', 'medium', 'high')),
   notes text,                -- persistent notes, kept for life of the relationship
   customer_id uuid references customers(id),
   hubspot_id text,
