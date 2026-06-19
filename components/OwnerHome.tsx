@@ -137,18 +137,28 @@ export default function OwnerHome({
             {activity.length === 0 ? (
               <p className="text-sm text-charcoal/40 font-body p-5 text-center">No activity yet.</p>
             ) : (
-              activity.map((a) => (
-                <div key={a.id} className="flex items-center gap-3 px-4 py-3">
-                  <span className="shrink-0 text-lg">{a.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-body text-sm text-charcoal truncate">{a.title}</p>
-                    <p className="text-xs text-charcoal/45 font-body truncate">
-                      {a.detail}{a.who ? ` · ${a.who}` : ""}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-[11px] text-charcoal/35 font-body">{ago(a.at)}</span>
-                </div>
-              ))
+              activity.map((a) => {
+                const inner = (
+                  <>
+                    <span className="shrink-0 text-lg">{a.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-body text-sm text-charcoal truncate">{a.title}</p>
+                      <p className="text-xs text-charcoal/45 font-body truncate">
+                        {a.detail}{a.who ? ` · ${a.who}` : ""}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-[11px] text-charcoal/35 font-body">{ago(a.at)}</span>
+                    {a.href && <span className="shrink-0 text-charcoal/30">›</span>}
+                  </>
+                );
+                return a.href ? (
+                  <Link key={a.id} href={a.href} className="flex items-center gap-3 px-4 py-3 hover:bg-cream-dark/30 active:bg-cream-dark/40 transition-colors">
+                    {inner}
+                  </Link>
+                ) : (
+                  <div key={a.id} className="flex items-center gap-3 px-4 py-3">{inner}</div>
+                );
+              })
             )}
           </div>
         </div>

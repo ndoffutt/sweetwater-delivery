@@ -7,6 +7,7 @@ export interface ActivityItem {
   detail: string;
   who: string | null;
   at: string; // ISO
+  href?: string; // set for clickable items (e.g. a delivery's detail page)
 }
 
 const TOUCH_ICON: Record<string, string> = {
@@ -58,6 +59,7 @@ export async function getRecentActivity(limit = 20): Promise<ActivityItem[]> {
       detail,
       who: null,
       at: s.completed_at,
+      href: `/dispatch/delivery/${s.id}`,
     });
   }
 

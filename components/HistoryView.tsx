@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 export interface HistoryStop {
+  id: string;
   order: number;
   name: string;
   address: string;
@@ -63,12 +65,12 @@ export default function HistoryView({ routes }: { routes: HistoryRoute[] }) {
                 {expanded && (
                   <div className="px-4 pb-4 space-y-2 border-t border-cream-dark pt-3">
                     {r.stops.map((s) => (
-                      <div key={s.order} className="flex gap-3">
+                      <div key={s.id} className="flex gap-3">
                         <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-body ${s.status === "completed" ? "bg-green-primary text-cream" : s.status === "skipped" ? "bg-gold-primary/30 text-gold-dark" : "bg-cream-dark text-charcoal/50"}`}>
                           {s.status === "completed" ? "✓" : s.status === "skipped" ? "!" : s.order}
                         </span>
                         <div className="flex-1 min-w-0">
-                          <div className="font-body text-sm font-medium text-charcoal">{s.name}</div>
+                          <Link href={`/dispatch/delivery/${s.id}`} className="font-body text-sm font-medium text-charcoal underline-offset-2 hover:underline">{s.name} ›</Link>
                           <div className="text-xs text-charcoal/40 font-body">{s.address}</div>
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-[11px] font-body text-charcoal/50">
                             <span>Arrived {time(s.arrivedAt)} → {time(s.completedAt)}</span>

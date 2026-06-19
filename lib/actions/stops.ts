@@ -269,3 +269,42 @@ export async function sendSms(stopId: string, message: string) {
   if (res.status === "failed") return { error: res.error || "Couldn't send" };
   return { success: true };
 }
+
+// Edit a delivery (route stop) after the fact — drop-off/pickup, piece count,
+// notes, and status. Manager/owner only. Used by the delivery detail page that
+// the "Recent activity" delivery cards link to.
+export async function updateDelivery(
+  stopId: string,
+  fields: {
+    has_dropoff?: boolean;
+    has_pickup?: boolean;
+    piece_count?: number;
+    notes?: string | null;
+    status?: StopStatus;
+  }
+) {
+  await requireSession("dispatcher");
+  const supabase = createAdminClient();
+
+  const patch: Record<string, unknown> = {};
+  if (fields.has_dropoff !== undefined) patch.has_dropoff = fields.has_dropoff;
+  if (fields.has_pickup !== undefined) patch.has_pickup = fields.has_pickup;
+  if (fields.piece_count !== undefined) patch.piece_count = Math.max(0, Math.round(fields.piece_count));
+  if (fields.notes !== undefined) patch.notes = fields.notes?.toString().trim() || null;
+  if (fields.status !== undefined) patch.status = fields.status;
+
+  const { data: stop, error } = await supabase
+    .from("route_stops")
+    .update(patch)
+    .eq("id", stopId)
+    .select("route_id")
+    .single();
+  if (error) return { error: error.message };
+
+  revalidatePath(`/dispatch/delivery/${stopId}`);
+  revalidatePath("/owner");
+  revalidatePath("/dispatch/history");
+  revalidatePath("/dispatch/customers");
+  if (stop?.route_id) revalidatePath(`/dispatch/route/${stop.route_id}`);
+  return { success: true };
+}

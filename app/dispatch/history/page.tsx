@@ -6,6 +6,7 @@ import HistoryView, { type HistoryRoute } from "@/components/HistoryView";
 export const dynamic = "force-dynamic";
 
 interface RawStop {
+  id: string;
   stop_order: number;
   status: string;
   arrived_at: string | null;
@@ -32,7 +33,7 @@ export default async function HistoryPage() {
   const { data } = await supabase
     .from("routes")
     .select(
-      "id,date,completed_at,route_stops(stop_order,status,arrived_at,completed_at,dropoff_confirmed,pickup_confirmed,notes,piece_count,customers(name,address),stop_photos(storage_path))"
+      "id,date,completed_at,route_stops(id,stop_order,status,arrived_at,completed_at,dropoff_confirmed,pickup_confirmed,notes,piece_count,customers(name,address),stop_photos(storage_path))"
     )
     .eq("status", "completed")
     .order("date", { ascending: false })
@@ -47,6 +48,7 @@ export default async function HistoryPage() {
     date: r.date,
     completedAt: r.completed_at,
     stops: (r.route_stops ?? []).map((s) => ({
+      id: s.id,
       order: s.stop_order,
       name: s.customers?.name ?? "Unknown",
       address: s.customers?.address ?? "",

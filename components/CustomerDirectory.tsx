@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useTransition } from "react";
+import Link from "next/link";
 import {
   createCustomer,
   updateCustomer,
@@ -20,6 +21,7 @@ import { RUN_DAYS, DAY_LABEL, DAY_INITIAL, formatDays } from "@/lib/deliveryDay"
 import { googleVoiceCallHref } from "@/lib/phone";
 
 export interface Activity {
+  id: string;
   date: string;
   dropoff: boolean;
   pickup: boolean;
@@ -612,14 +614,15 @@ function Detail({
           <p className="text-sm text-charcoal/40 font-body">No deliveries yet.</p>
         ) : (
           <div className="space-y-2">
-            {activity.slice(0, 6).map((a, i) => (
-              <div key={i} className="bg-cream rounded-lg border border-cream-dark p-3">
-                <div className="flex items-center gap-2 text-sm font-body text-charcoal">
+            {activity.slice(0, 6).map((a) => (
+              <div key={a.id} className="bg-cream rounded-lg border border-cream-dark p-3">
+                <Link href={`/dispatch/delivery/${a.id}`} className="flex items-center gap-2 text-sm font-body text-charcoal hover:underline underline-offset-2">
                   <span className="text-charcoal/50">{new Date(a.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
                   {a.dropoff && <span className="text-xs text-green-primary">↓ Drop</span>}
                   {a.pickup && <span className="text-xs text-gold-dark">↑ Pick</span>}
                   {a.pieces > 0 && <span className="text-xs text-charcoal/40">{a.pieces} pcs</span>}
-                </div>
+                  <span className="ml-auto text-charcoal/30">›</span>
+                </Link>
                 {a.photos.length > 0 && (
                   <div className="flex gap-2 mt-2">
                     {a.photos.map((u, j) => (

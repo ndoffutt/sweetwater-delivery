@@ -8,6 +8,7 @@ import type { Customer } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 interface StopRow {
+  id: string;
   customer_id: string | null;
   completed_at: string | null;
   has_dropoff: boolean;
@@ -48,7 +49,7 @@ export default async function CustomersPage() {
 
   const { data: stops } = await supabase
     .from("route_stops")
-    .select("customer_id,completed_at,has_dropoff,has_pickup,piece_count,stop_photos(storage_path),routes(date)")
+    .select("id,customer_id,completed_at,has_dropoff,has_pickup,piece_count,stop_photos(storage_path),routes(date)")
     .eq("status", "completed")
     .order("completed_at", { ascending: false })
     .limit(600);
@@ -60,6 +61,7 @@ export default async function CustomersPage() {
   for (const s of (stops ?? []) as unknown as StopRow[]) {
     if (!s.customer_id || !s.completed_at) continue;
     (activity[s.customer_id] ??= []).push({
+      id: s.id,
       date: s.completed_at,
       dropoff: s.has_dropoff,
       pickup: s.has_pickup,
