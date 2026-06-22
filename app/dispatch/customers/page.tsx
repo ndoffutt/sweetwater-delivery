@@ -18,7 +18,11 @@ interface StopRow {
   routes: { date: string } | null;
 }
 
-export default async function CustomersPage() {
+export default async function CustomersPage({
+  searchParams,
+}: {
+  searchParams?: { id?: string };
+}) {
   const session = await getSession();
   if (!session) redirect("/");
 
@@ -74,6 +78,7 @@ export default async function CustomersPage() {
     <CustomerDirectory
       customers={(customers ?? []) as Customer[]}
       activity={activity}
+      initialSelectedId={searchParams?.id ?? null}
     />
   );
 }

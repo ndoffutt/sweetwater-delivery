@@ -16,6 +16,7 @@ interface DeliveryStop {
   notes: string | null;
   arrivedAt: string | null;
   completedAt: string | null;
+  customerId: string | null;
   customerName: string;
   address: string;
   phone?: string | null;
@@ -73,7 +74,13 @@ export default function DeliveryDetail({ stop }: { stop: DeliveryStop }) {
       <Link href="/owner" className="text-xs text-charcoal/50 font-body uppercase tracking-widest">← Back</Link>
 
       <div>
-        <h2 className="font-serif text-3xl font-light text-charcoal">{stop.customerName}</h2>
+        {stop.customerId ? (
+          <Link href={`/dispatch/customers?id=${stop.customerId}`} className="font-serif text-3xl font-light text-charcoal hover:underline underline-offset-2">
+            {stop.customerName} ›
+          </Link>
+        ) : (
+          <h2 className="font-serif text-3xl font-light text-charcoal">{stop.customerName}</h2>
+        )}
         <p className="text-xs text-charcoal/40 font-body mt-1">
           Delivery · {fmtDate(stop.date)}{fmtTime(stop.completedAt) ? ` · delivered ${fmtTime(stop.completedAt)}` : ""}
         </p>

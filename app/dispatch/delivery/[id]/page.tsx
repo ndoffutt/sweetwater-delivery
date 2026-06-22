@@ -14,7 +14,7 @@ export default async function DeliveryDetailPage({ params }: { params: { id: str
   const { data: stop } = await supabase
     .from("route_stops")
     .select(
-      "id, status, has_dropoff, has_pickup, piece_count, notes, arrived_at, completed_at, customers(name, address, phone), routes(date), stop_photos(storage_path)"
+      "id, status, has_dropoff, has_pickup, piece_count, notes, arrived_at, completed_at, customers(id, name, address, phone), routes(date), stop_photos(storage_path)"
     )
     .eq("id", params.id)
     .single();
@@ -26,7 +26,7 @@ export default async function DeliveryDetailPage({ params }: { params: { id: str
     id: string; status: string; has_dropoff: boolean; has_pickup: boolean;
     piece_count: number | null; notes: string | null; arrived_at: string | null;
     completed_at: string | null;
-    customers: { name: string; address: string; phone: string | null } | null;
+    customers: { id: string; name: string; address: string; phone: string | null } | null;
     routes: { date: string } | null;
     stop_photos: { storage_path: string }[] | null;
   };
@@ -42,6 +42,7 @@ export default async function DeliveryDetailPage({ params }: { params: { id: str
         notes: s.notes,
         arrivedAt: s.arrived_at,
         completedAt: s.completed_at,
+        customerId: s.customers?.id ?? null,
         customerName: s.customers?.name ?? "Customer",
         address: s.customers?.address ?? "",
         phone: s.customers?.phone ?? null,

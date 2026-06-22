@@ -474,7 +474,13 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
           <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
             <NumBadge n={target.stop_order} active />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: C.serif, fontSize: 24, fontWeight: 500, color: C.charcoal, lineHeight: 1.06 }}>{cust.name}</div>
+              {isManager ? (
+                <a href={`/dispatch/customers?id=${cust.id}`} style={{ fontFamily: C.serif, fontSize: 24, fontWeight: 500, color: C.charcoal, lineHeight: 1.06, textDecoration: "none" }}>
+                  {cust.name} ›
+                </a>
+              ) : (
+                <div style={{ fontFamily: C.serif, fontSize: 24, fontWeight: 500, color: C.charcoal, lineHeight: 1.06 }}>{cust.name}</div>
+              )}
               <div style={{ fontSize: 13.5, color: "rgba(26,26,26,0.5)", marginTop: 2 }}>{cust.address}</div>
             </div>
           </div>

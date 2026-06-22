@@ -35,7 +35,7 @@ export async function getRecentActivity(limit = 20): Promise<ActivityItem[]> {
 
   const touchesP = supabase
     .from("prospect_touchpoints")
-    .select("id, type, note, created_by, created_at, prospects(name)")
+    .select("id, type, note, created_by, created_at, prospect_id, prospects(name)")
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -65,7 +65,7 @@ export async function getRecentActivity(limit = 20): Promise<ActivityItem[]> {
 
   for (const t of (touches ?? []) as unknown as {
     id: string; type: string; note: string | null; created_by: string | null;
-    created_at: string; prospects: { name: string } | null;
+    created_at: string; prospect_id: string; prospects: { name: string } | null;
   }[]) {
     const label = t.type.charAt(0).toUpperCase() + t.type.slice(1);
     items.push({
@@ -75,6 +75,7 @@ export async function getRecentActivity(limit = 20): Promise<ActivityItem[]> {
       detail: t.note ? `${label} — ${t.note}` : label,
       who: t.created_by,
       at: t.created_at,
+      href: `/sales/prospects?id=${t.prospect_id}`,
     });
   }
 

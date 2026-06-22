@@ -121,12 +121,18 @@ function priorityStyle(p: ProspectPriority | null | undefined) {
   return "bg-gold-primary/20 text-gold-dark"; // medium
 }
 
-export default function ProspectDirectory({ prospects: initial }: { prospects: Prospect[] }) {
+export default function ProspectDirectory({
+  prospects: initial,
+  initialSelectedId = null,
+}: {
+  prospects: Prospect[];
+  initialSelectedId?: string | null;
+}) {
   const [prospects, setProspects] = useState(initial);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | ProspectStatus>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | ProspectBusinessType>("all");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   const [adding, setAdding] = useState(false);
   const [view, setView] = useState<"list" | "map">("list");
   const [sort, setSort] = useState<ProspectSort>("town");
@@ -676,7 +682,9 @@ function Detail({
           </button>
         )}
         {p.customer_id && (
-          <p className="mt-2 text-xs text-green-primary font-body">✓ In the customer directory</p>
+          <a href={`/dispatch/customers?id=${p.customer_id}`} className="mt-2 text-xs text-green-primary font-body underline underline-offset-2 inline-block">
+            ✓ In the customer directory — open profile ›
+          </a>
         )}
       </div>
 

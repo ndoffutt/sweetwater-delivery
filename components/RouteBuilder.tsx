@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { RouteStop, Customer, RouteStatus } from "@/lib/types";
 import {
   addStopToRoute,
@@ -136,14 +137,17 @@ export default function RouteBuilder({
               {stop.status === "completed" ? "✓" : i + 1}
             </span>
 
-            {/* Info */}
+            {/* Info — name links to the stop's delivery detail (photos + notes);
+                 the address line links to the customer profile. */}
             <div className="flex-1 min-w-0">
-              <p className="font-body font-medium text-charcoal truncate">
-                {stop.customer?.name}
-              </p>
-              <p className="text-xs text-charcoal/40 font-body truncate">
-                {stop.customer?.address}
-              </p>
+              <Link href={`/dispatch/delivery/${stop.id}`} className="font-body font-medium text-charcoal truncate block hover:underline underline-offset-2">
+                {stop.customer?.name} ›
+              </Link>
+              {stop.customer?.id && (
+                <Link href={`/dispatch/customers?id=${stop.customer.id}`} className="text-xs text-charcoal/40 font-body truncate block hover:underline">
+                  {stop.customer?.address}
+                </Link>
+              )}
               <div className="flex gap-2 mt-1">
                 {stop.has_dropoff && (
                   <span className="text-xs text-charcoal/40">↓ Drop-off</span>

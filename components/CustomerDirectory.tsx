@@ -39,14 +39,16 @@ function fmtDate(iso: string) {
 export default function CustomerDirectory({
   customers: initial,
   activity,
+  initialSelectedId = null,
 }: {
   customers: Customer[];
   activity: Record<string, Activity[]>;
+  initialSelectedId?: string | null;
 }) {
   const [customers, setCustomers] = useState(initial);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("All");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   const [adding, setAdding] = useState(false);
   const [view, setView] = useState<"list" | "map">("list");
   const [sort, setSort] = useState<"name" | "route">("name");

@@ -7,7 +7,11 @@ import type { Prospect } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProspectsPage() {
+export default async function ProspectsPage({
+  searchParams,
+}: {
+  searchParams?: { id?: string };
+}) {
   const session = await getSession();
   if (!session) redirect("/");
 
@@ -43,5 +47,5 @@ export default async function ProspectsPage() {
     ),
   })) as Prospect[];
 
-  return <ProspectDirectory prospects={prospects} />;
+  return <ProspectDirectory prospects={prospects} initialSelectedId={searchParams?.id ?? null} />;
 }
