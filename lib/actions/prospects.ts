@@ -151,12 +151,16 @@ export async function logTouchpoint(
       .single());
   }
   if (error) return { error: error.message };
-  // First contact moves a fresh prospect along the pipeline automatically.
-  await supabase
-    .from("prospects")
-    .update({ status: "working" })
-    .eq("id", prospectId)
-    .eq("status", "new");
+  // First real outreach moves a fresh prospect along the pipeline automatically.
+  // Notes don't count — they're internal annotations, not engagement, so a note
+  // alone shouldn't advance status.
+  if (type !== "note") {
+    await supabase
+      .from("prospects")
+      .update({ status: "working" })
+      .eq("id", prospectId)
+      .eq("status", "new");
+  }
   revalidatePath("/sales/prospects");
   return { touchpoint: data };
 }

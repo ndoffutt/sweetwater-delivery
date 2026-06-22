@@ -12,16 +12,24 @@ export function overdueDaysFor(priority: ProspectPriority | null | undefined): n
 
 const SCOPE = new Set<Prospect["status"]>(["new", "working", "active"]);
 
-/** Most recent in-person visit or delivery, or null if never visited. */
-export function lastVisitAt(touchpoints: ProspectTouchpoint[] | undefined): string | null {
+// Types that count as a real outreach touchpoint (reset the overdue clock).
+// Notes are internal annotations — they're persistent context, not engagement,
+// so they're intentionally NOT in this set.
+const ENGAGEMENT_TYPES = new Set(["visit", "delivery", "call", "email", "text"]);
+
+/** Most recent engagement touchpoint, or null if never. */
+export function lastEngagementAt(touchpoints: ProspectTouchpoint[] | undefined): string | null {
   let latest: string | null = null;
   for (const t of touchpoints ?? []) {
-    if ((t.type === "visit" || t.type === "delivery") && (!latest || t.created_at > latest)) {
+    if (ENGAGEMENT_TYPES.has(t.type) && (!latest || t.created_at > latest)) {
       latest = t.created_at;
     }
   }
   return latest;
 }
+
+/** @deprecated kept as an alias of lastEngagementAt during rename. */
+export const lastVisitAt = lastEngagementAt;
 
 type VisitInput = Pick<Prospect, "status" | "created_at"> & {
   priority?: ProspectPriority | null;
