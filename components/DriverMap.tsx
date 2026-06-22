@@ -14,6 +14,7 @@ import PhotoCapture from "@/components/PhotoCapture";
 import RouteMap from "@/components/RouteMap";
 import type { RouteStop } from "@/lib/types";
 import { googleVoiceCallHref } from "@/lib/phone";
+import ProspectVisitSheet from "@/components/ProspectVisitSheet";
 
 const C = {
   green: "#02733e",
@@ -454,6 +455,19 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
             <div style={{ fontFamily: C.serif, fontSize: 28, color: C.green, fontWeight: 500 }}>Route Complete</div>
             <div style={{ fontSize: 14, color: "rgba(26,26,26,0.5)", marginTop: 3 }}>All {stops.length} stops done. Head back to the shop.</div>
           </div>
+        </BottomShell>
+      ) : target && target.kind === "prospect_visit" && target.prospect_visit ? (
+        <BottomShell onGrip={() => setSheet(sheet === "peek" ? "full" : "peek")} expanded={sheet === "full"}>
+          <ProspectVisitSheet
+            stop={target}
+            expanded={sheet === "full"}
+            onLogged={() => {
+              patch(target.id, { status: "completed", completed_at: new Date().toISOString() });
+              flash("Visit logged");
+              setSheet("peek");
+              router.refresh();
+            }}
+          />
         </BottomShell>
       ) : target && cust && (
         <BottomShell onGrip={() => setSheet(sheet === "peek" ? "full" : "peek")} expanded={sheet === "full"}>

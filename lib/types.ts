@@ -60,6 +60,19 @@ export interface RouteStop {
   created_at: string;
   customer?: Customer;
   photos?: StopPhoto[];
+  // Optional: when set, this stop isn't a delivery — it's a planned prospect
+  // visit rendered into the same driver flow.
+  kind?: "delivery" | "prospect_visit";
+  prospect_visit?: {
+    id: string;            // route_prospect_visits.id (for completeProspectVisit)
+    prospect_id: string;
+    name: string;
+    address: string | null;
+    phone: string | null;
+    notes_summary: string | null;       // most recent prospect notes
+    last_visit_at: string | null;       // null if never
+    history: { id: string; type: string; note: string | null; created_by: string | null; created_at: string }[];
+  };
 }
 
 export interface StopPhoto {
