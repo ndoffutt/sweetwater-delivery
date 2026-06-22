@@ -12,7 +12,7 @@ import {
 } from "@/lib/actions/prospects";
 import { townFromAddress } from "@/lib/town";
 import { googleVoiceCallHref } from "@/lib/phone";
-import { isOverdueForVisit, OVERDUE_DAYS } from "@/lib/prospectVisit";
+import { isOverdueForVisit, overdueDaysFor } from "@/lib/prospectVisit";
 import { getRoutePositioning, saveRoutePosition } from "@/lib/actions/customers";
 import RouteMap from "@/components/RouteMap";
 import ProspectMap, { pinColor } from "@/components/ProspectMap";
@@ -323,7 +323,7 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
             <div className="flex items-start gap-2 bg-gold-primary/15 border border-gold-primary/40 rounded-xl px-3 py-2.5 mb-1">
               <span className="text-gold-dark">🔔</span>
               <p className="text-xs font-body text-charcoal">
-                <b>{overdueCount}</b> prospect{overdueCount === 1 ? "" : "s"} not visited in {OVERDUE_DAYS}+ days — pinned to the top.
+                <b>{overdueCount}</b> prospect{overdueCount === 1 ? "" : "s"} overdue for a visit — pinned to the top.
               </p>
             </div>
           )}
@@ -340,7 +340,7 @@ export default function ProspectDirectory({ prospects: initial }: { prospects: P
                 <span className="shrink-0 w-2.5 h-2.5 rounded-full" style={{ background: pinColor(p.status) }} />
                 <div className="flex-1 min-w-0">
                   <span className="font-body font-medium text-charcoal truncate block">
-                    {overdue && <span className="text-gold-dark" title={`Not visited in ${OVERDUE_DAYS}+ days`}>🔔 </span>}
+                    {overdue && <span className="text-gold-dark" title={`Overdue — ${overdueDaysFor(p.priority)}-day window`}>🔔 </span>}
                     {p.name}
                   </span>
                   <p className="text-xs text-charcoal/40 font-body truncate">
@@ -613,13 +613,13 @@ function Detail({
       {isOverdueForVisit(p) && (
         <div className="flex items-center gap-2 bg-gold-primary/15 border border-gold-primary/40 rounded-xl px-3 py-2.5">
           <span className="text-gold-dark">🔔</span>
-          <p className="text-xs font-body text-charcoal">Overdue for a visit — log a Visit below to clear this.</p>
+          <p className="text-xs font-body text-charcoal">Overdue for a visit ({overdueDaysFor(p.priority)}-day window) — log a Visit below to clear this.</p>
         </div>
       )}
 
-      {/* Priority */}
+      {/* Priority — sets the visit cadence (High 30d · Medium 60d · Low 90d) */}
       <div>
-        <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-2">Priority</p>
+        <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-2">Priority · visit cadence</p>
         <div className="flex gap-1.5">
           {PRIORITIES.map((pr) => (
             <button
@@ -627,7 +627,7 @@ function Detail({
               onClick={() => setPriority(pr.id)}
               className={`min-h-tap px-3.5 py-1.5 rounded-full text-xs font-body ${(p.priority ?? "medium") === pr.id ? priorityStyle(pr.id) + " ring-1 ring-green-primary/40" : "bg-cream border border-cream-dark text-charcoal/50"}`}
             >
-              {pr.label}
+              {pr.label} · {overdueDaysFor(pr.id)}d
             </button>
           ))}
         </div>

@@ -142,7 +142,7 @@ export default async function DispatchPage() {
   // Overdue prospects (with coordinates) — candidates to surface near the route.
   const { data: prospectRows } = await supabase
     .from("prospects")
-    .select("id,name,lat,lng,status,town,created_at,touchpoints:prospect_touchpoints(type,created_at)")
+    .select("id,name,lat,lng,status,priority,town,created_at,touchpoints:prospect_touchpoints(type,created_at)")
     .is("deleted_at", null)
     .in("status", ["new", "working", "active"])
     .not("lat", "is", null);

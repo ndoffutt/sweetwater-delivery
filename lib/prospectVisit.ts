@@ -1,9 +1,14 @@
-import type { Prospect, ProspectTouchpoint } from "@/lib/types";
+import type { Prospect, ProspectPriority, ProspectTouchpoint } from "@/lib/types";
 
 // Reinforce field visits: a prospect we're pursuing or serving (New / Working /
-// Active) that hasn't been visited in this many days is "overdue" — it floats
-// to the top of the list, gets flagged, and feeds the reminder count.
-export const OVERDUE_DAYS = 30;
+// Active) that hasn't been visited within its priority window is "overdue" — it
+// floats to the top of the list, gets flagged, and feeds the reminder count.
+// The window scales with priority: chase the important ones more often.
+export function overdueDaysFor(priority: ProspectPriority | null | undefined): number {
+  if (priority === "high") return 30;
+  if (priority === "low") return 90;
+  return 60; // medium / unset
+}
 
 const SCOPE = new Set<Prospect["status"]>(["new", "working", "active"]);
 
@@ -19,6 +24,7 @@ export function lastVisitAt(touchpoints: ProspectTouchpoint[] | undefined): stri
 }
 
 type VisitInput = Pick<Prospect, "status" | "created_at"> & {
+  priority?: ProspectPriority | null;
   touchpoints?: ProspectTouchpoint[];
 };
 
@@ -34,5 +40,5 @@ export function daysSinceVisit(p: VisitInput): number {
 
 export function isOverdueForVisit(p: VisitInput): boolean {
   if (!SCOPE.has(p.status)) return false;
-  return daysSinceVisit(p) >= OVERDUE_DAYS;
+  return daysSinceVisit(p) >= overdueDaysFor(p.priority);
 }

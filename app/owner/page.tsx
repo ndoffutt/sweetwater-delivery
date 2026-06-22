@@ -17,7 +17,7 @@ export default async function HomePage() {
   const supabase = createAdminClient();
   const { data } = await supabase
     .from("prospects")
-    .select("status, created_at, touchpoints:prospect_touchpoints(type, created_at)")
+    .select("status, priority, created_at, touchpoints:prospect_touchpoints(type, created_at)")
     .is("deleted_at", null)
     .in("status", ["new", "working", "active"]);
   const overdueCount = ((data ?? []) as unknown as Prospect[]).filter(isOverdueForVisit).length;
