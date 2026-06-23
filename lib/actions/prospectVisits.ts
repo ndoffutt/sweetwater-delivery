@@ -45,10 +45,12 @@ export async function completeProspectVisit(id: string, prospectId: string, note
   const supabase = createAdminClient();
   const who = session.role === "admin" ? "Nate" : session.role === "dispatcher" ? "Ahsin" : session.name;
 
-  const { error } = await supabase
+  const { data: pv, error } = await supabase
     .from("route_prospect_visits")
     .update({ status: "visited", visited_at: new Date().toISOString(), notes: trimmed })
-    .eq("id", id);
+    .eq("id", id)
+    .select("route_id")
+    .single();
   if (error) return { error: missingTable(error.message) ? NEEDS_MIGRATION : error.message };
 
   // Visit touchpoint (best-effort) — drives the visit history + overdue logic.
@@ -60,6 +62,27 @@ export async function completeProspectVisit(id: string, prospectId: string, note
     created_by: who,
   });
   await supabase.from("prospects").update({ status: "working" }).eq("id", prospectId).eq("status", "new");
+
+  // If this was the last open work on the route (all deliveries done + every
+  // planned prospect visit logged), flip the route to completed.
+  if (pv?.route_id) {
+    const { data: openStops } = await supabase
+      .from("route_stops")
+      .select("id")
+      .eq("route_id", pv.route_id)
+      .in("status", ["pending", "arrived"]);
+    const { data: openVisits } = await supabase
+      .from("route_prospect_visits")
+      .select("id")
+      .eq("route_id", pv.route_id)
+      .eq("status", "planned");
+    if ((openStops?.length ?? 0) === 0 && (openVisits?.length ?? 0) === 0) {
+      await supabase
+        .from("routes")
+        .update({ status: "completed", completed_at: new Date().toISOString() })
+        .eq("id", pv.route_id);
+    }
+  }
 
   revalidatePath("/driver");
   revalidatePath("/dispatch");

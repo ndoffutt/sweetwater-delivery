@@ -548,9 +548,14 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
             )}
             {target.status === "arrived" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <button onClick={() => canComplete && complete(target)} disabled={!canComplete} style={{ width: "100%", minHeight: 60, borderRadius: 16, border: `1.5px solid ${canComplete ? C.green : "rgba(26,26,26,0.12)"}`, background: canComplete ? C.green : "rgba(26,26,26,0.05)", color: canComplete ? C.cream : "rgba(26,26,26,0.3)", fontSize: 15, fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", cursor: canComplete ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-                  <Icon name="check" size={20} color={canComplete ? C.cream : "rgba(26,26,26,0.3)"} /> Complete Stop
-                </button>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button onClick={() => canComplete && complete(target)} disabled={!canComplete} style={{ flex: 1, minHeight: 60, borderRadius: 16, border: `1.5px solid ${canComplete ? C.green : "rgba(26,26,26,0.12)"}`, background: canComplete ? C.green : "rgba(26,26,26,0.05)", color: canComplete ? C.cream : "rgba(26,26,26,0.3)", fontSize: 15, fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", cursor: canComplete ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                    <Icon name="check" size={20} color={canComplete ? C.cream : "rgba(26,26,26,0.3)"} /> Complete Stop
+                  </button>
+                  <button onClick={() => setProblemFor(target)} title="Cancel delivery" style={{ width: 60, minHeight: 60, borderRadius: 16, background: "#fff", border: `1px solid ${C.creamDark}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Icon name="alert" size={22} color={C.goldDark} />
+                  </button>
+                </div>
                 {!canComplete && (
                   <div style={{ textAlign: "center", fontSize: 12.5, color: "rgba(26,26,26,0.45)" }}>
                     {photoCount(target) === 0 ? "Snap a photo to finish" : "Check drop-off or pick-up"}

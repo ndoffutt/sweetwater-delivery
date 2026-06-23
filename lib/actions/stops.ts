@@ -111,6 +111,41 @@ async function logDeliveryVisit(
   }
 }
 
+// Mark the route completed ONLY if both real delivery stops AND any planned
+// prospect visits attached to it are done. Without the prospect-visit check,
+// completing the last delivery would flip the route to "completed", causing
+// the driver page (which only loads dispatched/in_progress routes) to drop the
+// whole route — including any still-unlogged prospect visits.
+async function maybeCompleteRoute(
+  supabase: ReturnType<typeof createAdminClient>,
+  routeId: string
+) {
+  const { data: openStops } = await supabase
+    .from("route_stops")
+    .select("id")
+    .eq("route_id", routeId)
+    .in("status", ["pending", "arrived"]);
+  if ((openStops?.length ?? 0) > 0) return;
+
+  // Planned prospect visits keep the route open. Tolerant of the
+  // route_prospect_visits table not existing yet.
+  try {
+    const { data: openVisits } = await supabase
+      .from("route_prospect_visits")
+      .select("id")
+      .eq("route_id", routeId)
+      .eq("status", "planned");
+    if ((openVisits?.length ?? 0) > 0) return;
+  } catch {
+    /* table absent — fall through and complete the route */
+  }
+
+  await supabase
+    .from("routes")
+    .update({ status: "completed", completed_at: new Date().toISOString() })
+    .eq("id", routeId);
+}
+
 export async function updateStopStatus(stopId: string, status: StopStatus) {
   const session = await requireSession();
   const supabase = createAdminClient();
@@ -150,21 +185,7 @@ export async function updateStopStatus(stopId: string, status: StopStatus) {
 
   // Check if all stops are completed/skipped to complete the route
   if (status === "completed" || status === "skipped") {
-    const { data: remaining } = await supabase
-      .from("route_stops")
-      .select("id")
-      .eq("route_id", stop.route_id)
-      .in("status", ["pending", "arrived"]);
-
-    if (remaining && remaining.length === 0) {
-      await supabase
-        .from("routes")
-        .update({
-          status: "completed",
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", stop.route_id);
-    }
+    await maybeCompleteRoute(supabase, stop.route_id);
   }
 
   // Auto-text the customer on arrive / complete (per the map-first flow).
@@ -201,17 +222,7 @@ export async function flagStop(stopId: string, reason: string) {
 
   if (error) return { error: error.message };
 
-  const { data: remaining } = await supabase
-    .from("route_stops")
-    .select("id")
-    .eq("route_id", stop.route_id)
-    .in("status", ["pending", "arrived"]);
-  if (remaining && remaining.length === 0) {
-    await supabase
-      .from("routes")
-      .update({ status: "completed", completed_at: new Date().toISOString() })
-      .eq("id", stop.route_id);
-  }
+  await maybeCompleteRoute(supabase, stop.route_id);
 
   revalidatePath("/driver");
   revalidatePath(`/dispatch/route/${stop.route_id}`);

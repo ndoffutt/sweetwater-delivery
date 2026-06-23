@@ -33,9 +33,14 @@ export async function getRecentActivity(limit = 20): Promise<ActivityItem[]> {
     .order("completed_at", { ascending: false })
     .limit(limit);
 
+  // Exclude type='delivery' — those are auto-logged alongside every route_stop
+  // completion, so including them here would double every delivery in the feed.
+  // The route_stops query above is the authoritative record (carries photos +
+  // notes + a working /dispatch/delivery/[id] link).
   const touchesP = supabase
     .from("prospect_touchpoints")
     .select("id, type, note, created_by, created_at, prospect_id, prospects(name)")
+    .neq("type", "delivery")
     .order("created_at", { ascending: false })
     .limit(limit);
 
