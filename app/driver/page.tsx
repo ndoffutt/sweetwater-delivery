@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { easternToday } from "@/lib/date";
+import { cheapestInsertion } from "@/lib/geo";
 import Header from "@/components/Header";
 import DriverMap from "@/components/DriverMap";
 import type { RouteStop } from "@/lib/types";
@@ -73,10 +74,11 @@ export default async function DriverPage() {
       } | null;
     };
 
-    const startSeq = (baseStops[baseStops.length - 1]?.stop_order ?? 0);
+    // stop_order is assigned later, after we interleave them with deliveries
+    // by geography. Keep a placeholder of 0 for now.
     prospectStops = ((pv ?? []) as unknown as Row[])
       .filter((r) => r.prospects)
-      .map((r, i) => {
+      .map((r) => {
         const p = r.prospects!;
         // Newest visit/delivery sets "last visit"; full history is shown to driver.
         const history = (p.touchpoints ?? []).slice().sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -85,7 +87,7 @@ export default async function DriverPage() {
           id: `pv-${r.id}`,
           route_id: route.id,
           customer_id: p.id, // unused, kept non-null for the type
-          stop_order: startSeq + i + 1,
+          stop_order: 0,
           status: r.status === "visited" ? "completed" : "pending",
           has_dropoff: false,
           has_pickup: false,
@@ -121,7 +123,35 @@ export default async function DriverPage() {
     /* route_prospect_visits table not present — driver flow continues unchanged */
   }
 
-  const stops: RouteStop[] = [...baseStops, ...prospectStops];
+  // Interleave prospect visits geographically into the delivery sequence using
+  // cheapest-insertion: each prospect gets dropped between the two delivery
+  // stops where it adds the least detour. Prospects without coords get
+  // appended at the end (no way to position them). Final pass renumbers
+  // everything 1..N so the driver sees a single, ordered sequence.
+  const ordered: RouteStop[] = [...baseStops].sort((a, b) => a.stop_order - b.stop_order);
+  for (const pv of prospectStops) {
+    const lat = pv.customer?.lat;
+    const lng = pv.customer?.lng;
+    if (lat == null || lng == null) {
+      ordered.push(pv);
+      continue;
+    }
+    const positioned = ordered
+      .map((s, i) => ({ s, i, lat: s.customer?.lat, lng: s.customer?.lng }))
+      .filter((x) => x.lat != null && x.lng != null) as { s: RouteStop; i: number; lat: number; lng: number }[];
+    if (positioned.length === 0) { ordered.push(pv); continue; }
+    const idxInPositioned = cheapestInsertion(
+      positioned.map((x) => ({ lat: x.lat, lng: x.lng })),
+      { lat, lng }
+    );
+    // Translate the index from "positioned-only" space back to the full ordered array.
+    const insertAt =
+      idxInPositioned >= positioned.length
+        ? ordered.length
+        : positioned[idxInPositioned].i;
+    ordered.splice(insertAt, 0, pv);
+  }
+  const stops: RouteStop[] = ordered.map((s, i) => ({ ...s, stop_order: i + 1 }));
 
   return <DriverMap initialStops={stops} isManager={isManager} canMessage={session.role === "admin"} />;
 }
