@@ -106,6 +106,7 @@ create table route_stops (
   dropoff_confirmed boolean not null default false,
   pickup_confirmed boolean not null default false,
   notes text,
+  piece_count integer,
   arrived_at timestamptz,
   completed_at timestamptz,
   created_at timestamptz not null default now(),
