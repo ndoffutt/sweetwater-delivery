@@ -36,6 +36,7 @@ export default function ProspectVisitSheet({
   const pv = stop.prospect_visit!;
   const done = stop.status === "completed";
   const [note, setNote] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [, start] = useTransition();
@@ -72,6 +73,54 @@ export default function ProspectVisitSheet({
         </div>
       </div>
 
+      {/* ── Always visible action zone: big LOG VISIT button → notes inline ── */}
+      {!done ? (
+        <div style={{ marginTop: 14 }}>
+          {!formOpen ? (
+            <button
+              onClick={() => setFormOpen(true)}
+              style={{ width: "100%", minHeight: 60, borderRadius: 16, border: "none", background: "#02733e", color: "#FAF6EC", fontSize: 15, fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}
+            >
+              📝 Log Visit
+            </button>
+          ) : (
+            <div>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={4}
+                autoFocus
+                placeholder="What happened? Who you spoke with, next step…"
+                style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: "1px solid #E1DBCC", background: "#fff", fontSize: 15, color: "#1a1a1a", resize: "none", outline: "none", fontFamily: "inherit" }}
+              />
+              {error && <div style={{ fontSize: 12.5, color: "#dc2626", marginTop: 6 }}>{error}</div>}
+              <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+                <button
+                  onClick={save}
+                  disabled={busy || !note.trim()}
+                  style={{ flex: 1, minHeight: 56, borderRadius: 16, border: "none", background: note.trim() && !busy ? "#02733e" : "rgba(26,26,26,0.05)", color: note.trim() && !busy ? "#FAF6EC" : "rgba(26,26,26,0.3)", fontSize: 15, fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", cursor: note.trim() && !busy ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}
+                >
+                  {busy ? "Saving…" : "✓ Save visit"}
+                </button>
+                <button
+                  onClick={() => { setFormOpen(false); setNote(""); setError(""); }}
+                  disabled={busy}
+                  style={{ minHeight: 56, padding: "0 18px", borderRadius: 16, border: `1px solid #E1DBCC`, background: "#fff", color: "rgba(26,26,26,0.55)", fontSize: 12, fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", cursor: "pointer" }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ marginTop: 14, background: "rgba(2,115,62,0.08)", border: "1px solid rgba(2,115,62,0.3)", borderRadius: 13, padding: "12px 14px" }}>
+          <div style={{ fontSize: 13.5, color: "#02733e", fontWeight: 500 }}>✓ Visit logged</div>
+          {stop.notes && <div style={{ fontSize: 13, color: "rgba(26,26,26,0.65)", marginTop: 4, lineHeight: 1.4 }}>{stop.notes}</div>}
+        </div>
+      )}
+
+      {/* ── Reference info (expand the sheet to see) ── */}
       {expanded && (
         <div style={{ marginTop: 14, borderTop: "1px solid #E1DBCC", paddingTop: 14 }}>
           {pv.notes_summary && (
@@ -111,34 +160,6 @@ export default function ProspectVisitSheet({
             )}
           </div>
 
-          {/* Log visit */}
-          {!done ? (
-            <div>
-              <div style={{ fontSize: 11, letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(26,26,26,0.4)", fontWeight: 600, marginBottom: 8 }}>
-                Log this visit <span style={{ color: "#a37314" }}>· required</span>
-              </div>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={3}
-                placeholder="What happened? Who you spoke with, next step…"
-                style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 12, border: "1px solid #E1DBCC", background: "#fff", fontSize: 14, color: "#1a1a1a", resize: "none", outline: "none" }}
-              />
-              {error && <div style={{ fontSize: 12.5, color: "#dc2626", marginTop: 6 }}>{error}</div>}
-              <button
-                onClick={save}
-                disabled={busy || !note.trim()}
-                style={{ width: "100%", marginTop: 10, minHeight: 56, borderRadius: 16, border: "none", background: note.trim() && !busy ? "#02733e" : "rgba(26,26,26,0.05)", color: note.trim() && !busy ? "#FAF6EC" : "rgba(26,26,26,0.3)", fontSize: 15, fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", cursor: note.trim() && !busy ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}
-              >
-                {busy ? "Saving…" : "✓ Log visit"}
-              </button>
-            </div>
-          ) : (
-            <div style={{ background: "rgba(2,115,62,0.08)", border: "1px solid rgba(2,115,62,0.3)", borderRadius: 13, padding: "12px 14px" }}>
-              <div style={{ fontSize: 13.5, color: "#02733e", fontWeight: 500 }}>✓ Visit logged</div>
-              {stop.notes && <div style={{ fontSize: 13, color: "rgba(26,26,26,0.65)", marginTop: 4, lineHeight: 1.4 }}>{stop.notes}</div>}
-            </div>
-          )}
         </div>
       )}
     </div>
