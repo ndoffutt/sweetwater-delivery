@@ -13,9 +13,12 @@ alter default privileges in schema public grant all on routines to anon, authent
 
 -- Storage lives in the 'storage' schema (not reset above) — clear any
 -- conflicting policies a prior run created, then ensure both buckets exist.
-do $$ begin
-  for r in (select policyname from pg_policies where schemaname='storage' and tablename='objects')
-  loop execute format('drop policy if exists %I on storage.objects', r.policyname); end loop;
+do $$
+declare r record;
+begin
+  for r in (select policyname from pg_policies where schemaname='storage' and tablename='objects') loop
+    execute format('drop policy if exists %I on storage.objects', r.policyname);
+  end loop;
 end $$;
 insert into storage.buckets (id, name, public) values ('stop-photos', 'stop-photos', true) on conflict (id) do nothing;
 insert into storage.buckets (id, name, public) values ('manifests',   'manifests',   false) on conflict (id) do nothing;
