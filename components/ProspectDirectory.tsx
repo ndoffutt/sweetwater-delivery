@@ -14,8 +14,9 @@ import {
 } from "@/lib/actions/prospects";
 import { townFromAddress } from "@/lib/town";
 import { googleVoiceCallHref } from "@/lib/phone";
-import { isOverdueForVisit, overdueDaysFor, hasManualRequest, needsAttention } from "@/lib/prospectVisit";
+import { isOverdueForVisit, overdueDaysFor, hasManualRequest, needsAttention, lastEngagementAt } from "@/lib/prospectVisit";
 import { getRoutePositioning, saveRoutePosition } from "@/lib/actions/customers";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- staged for the "force onto today's route" button (WIP)
 import { addProspectToTodaysRoute } from "@/lib/actions/prospectVisits";
 import RouteMap from "@/components/RouteMap";
 import ProspectMap, { pinColor } from "@/components/ProspectMap";
@@ -81,8 +82,13 @@ function statusStyle(s: ProspectStatus) {
 // Out of the working pipeline (sorted below the call list).
 const closed = (s: ProspectStatus) => s === "active" || s === "on_hold" || s === "dead";
 
+// "Last touched" for list display + sort. Excludes notes — a note is an
+// internal annotation, not an outreach event, so prospects with only notes
+// should not look like they were just touched. Mirrors the overdue clock
+// (lib/prospectVisit.ts), so the list display and the 🔔 badge tell the same
+// story: a prospect that's been "noted" but never engaged is correctly cold.
 function lastTouch(p: Prospect): string | null {
-  return p.touchpoints?.[0]?.created_at ?? null;
+  return lastEngagementAt(p.touchpoints);
 }
 
 function daysSince(iso: string | null): number | null {
