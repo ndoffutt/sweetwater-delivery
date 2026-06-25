@@ -132,6 +132,7 @@ export default function ProspectDirectory({
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | ProspectStatus>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | ProspectBusinessType>("all");
+  const [callOnly, setCallOnly] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   const [adding, setAdding] = useState(false);
   const [view, setView] = useState<"list" | "map">("list");
@@ -142,6 +143,8 @@ export default function ProspectDirectory({
     .filter((p) => {
       if (filter !== "all" && p.status !== filter) return false;
       if (typeFilter !== "all" && p.business_type !== typeFilter) return false;
+      // Call-only = no map location; these can't go on a route, work them by phone.
+      if (callOnly && p.lat != null && p.lng != null) return false;
       if (query) {
         const q = query.toLowerCase();
         return (
@@ -185,6 +188,7 @@ export default function ProspectDirectory({
   const selected = prospects.find((p) => p.id === selectedId) || null;
   const counts = STATUSES.map((s) => ({ ...s, n: prospects.filter((p) => p.status === s.id).length }));
   const overdueCount = prospects.filter(isOverdueForVisit).length;
+  const callOnlyCount = prospects.filter((p) => p.lat == null || p.lng == null).length;
 
   function patch(id: string, fields: Partial<Prospect>) {
     setProspects((ps) => ps.map((p) => (p.id === id ? { ...p, ...fields } : p)));
@@ -307,6 +311,15 @@ export default function ProspectDirectory({
                 {s.label} {s.n > 0 && <span className="opacity-60">{s.n}</span>}
               </button>
             ))}
+            {callOnlyCount > 0 && (
+              <button
+                onClick={() => setCallOnly((v) => !v)}
+                className={`px-3 py-1 rounded-full text-xs font-body ${callOnly ? "bg-green-primary text-cream" : "bg-cream-dark text-charcoal/60"}`}
+                title="Prospects with no map location — work these by phone"
+              >
+                📞 Call-only <span className="opacity-60">{callOnlyCount}</span>
+              </button>
+            )}
           </div>
           <TypeFilter />
           <div className="flex items-center gap-2 flex-wrap">
@@ -350,6 +363,7 @@ export default function ProspectDirectory({
                     {p.name}
                   </span>
                   <p className="text-xs text-charcoal/40 font-body truncate">
+                    {(p.lat == null || p.lng == null) && <span className="text-green-primary" title="No map location — call only">📞 </span>}
                     {(p.town ?? townFromAddress(p.address)) ? `${p.town ?? townFromAddress(p.address)} · ` : ""}
                     {typeLabel(p.business_type)}
                     {p.contact_name ? ` · ${p.contact_name}` : ""}
@@ -822,6 +836,11 @@ function Detail({
           >
             🌐 {p.website.replace(/^https?:\/\//, "")}
           </a>
+        )}
+        {(p.lat == null || p.lng == null) && (
+          <p className="text-xs text-green-primary font-body bg-green-primary/5 border border-green-primary/20 rounded-lg px-2.5 py-1.5">
+            📞 Call-only — no map location, so this prospect won&apos;t appear on the map or a route. Reach out by phone/email.
+          </p>
         )}
       </div>
 

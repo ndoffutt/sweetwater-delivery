@@ -345,7 +345,9 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
     flash(online ? `✓ Texted ${firstName(s.customer!.name)}: “On our way”` : "Saved on phone, will sync when signal returns");
     startTransition(async () => {
       await runStopAction({ kind: "status", stopId: s.id, status: "arrived" });
-      router.refresh();
+      // Only refetch when online — an RSC refresh with no signal throws and
+      // blanks the driver view. Offline, the optimistic UI + replay queue cover it.
+      if (navigator.onLine) router.refresh();
     });
   }
 
@@ -357,7 +359,7 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
     flash(online ? `✓ Delivered, ${firstName(s.customer!.name)} notified` : "Saved on phone, will sync when signal returns");
     startTransition(async () => {
       await runStopAction({ kind: "status", stopId: s.id, status: "completed" });
-      router.refresh();
+      if (navigator.onLine) router.refresh();
     });
   }
 
@@ -383,7 +385,7 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
     flash("Dispatch notified");
     startTransition(async () => {
       await runStopAction({ kind: "flag", stopId: s.id, reason });
-      router.refresh();
+      if (navigator.onLine) router.refresh();
     });
   }
 
@@ -467,7 +469,7 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
               patch(target.id, { status: "completed", completed_at: new Date().toISOString() });
               flash("Visit logged");
               setSheet("peek");
-              router.refresh();
+              if (navigator.onLine) router.refresh();
             }}
           />
         </BottomShell>

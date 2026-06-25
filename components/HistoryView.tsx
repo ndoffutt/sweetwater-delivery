@@ -6,6 +6,8 @@ import DriverPathMap from "@/components/DriverPathMap";
 
 export interface HistoryStop {
   id: string;
+  kind: "delivery" | "prospect";
+  prospectId?: string | null;
   order: number;
   name: string;
   address: string;
@@ -87,23 +89,40 @@ export default function HistoryView({ routes }: { routes: HistoryRoute[] }) {
                         />
                       </div>
                     )}
-                    {r.stops.map((s, i) => (
+                    {r.stops.map((s, i) => {
+                      const isProspect = s.kind === "prospect";
+                      const badgeCls = isProspect
+                        ? "bg-gold-primary/25 text-gold-dark"
+                        : s.status === "completed" ? "bg-green-primary text-cream"
+                        : s.status === "skipped" ? "bg-gold-primary/30 text-gold-dark"
+                        : "bg-cream-dark text-charcoal/50";
+                      const href = isProspect ? `/sales/prospects?id=${s.prospectId}` : `/dispatch/delivery/${s.id}`;
+                      const prevDone = i > 0 ? r.stops[i - 1].completedAt : null;
+                      return (
                       <div key={s.id} className="flex gap-3">
-                        <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-body ${s.status === "completed" ? "bg-green-primary text-cream" : s.status === "skipped" ? "bg-gold-primary/30 text-gold-dark" : "bg-cream-dark text-charcoal/50"}`}>
-                          {s.status === "completed" ? "✓" : s.status === "skipped" ? "!" : s.order}
+                        <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-body font-semibold ${badgeCls}`}>
+                          {i + 1}
                         </span>
                         <div className="flex-1 min-w-0">
-                          <Link href={`/dispatch/delivery/${s.id}`} className="font-body text-sm font-medium text-charcoal underline-offset-2 hover:underline">{s.name} ›</Link>
+                          <Link href={href} className="font-body text-sm font-medium text-charcoal underline-offset-2 hover:underline">{s.name} ›</Link>
+                          {isProspect && <span className="ml-1.5 text-[10px] font-body uppercase tracking-wider px-1.5 py-0.5 rounded bg-gold-primary/20 text-gold-dark align-middle">🔔 Prospect</span>}
                           <div className="text-xs text-charcoal/40 font-body">{s.address}</div>
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-[11px] font-body text-charcoal/50">
-                            <span>Arrived {time(s.arrivedAt)} → {time(s.completedAt)}</span>
-                            {dur(mins(s.arrivedAt, s.completedAt)) && <span className="text-green-primary">⏱ {dur(mins(s.arrivedAt, s.completedAt))} on site</span>}
-                            {i > 0 && dur(mins(r.stops[i - 1].completedAt, s.arrivedAt)) && <span className="text-charcoal/40">🚐 {dur(mins(r.stops[i - 1].completedAt, s.arrivedAt))} drive</span>}
+                            {isProspect ? (
+                              <span className="text-gold-dark">{s.status === "completed" ? `Visited ${time(s.completedAt)}` : "Not visited"}</span>
+                            ) : (
+                              <span>Arrived {time(s.arrivedAt)} → {time(s.completedAt)}</span>
+                            )}
+                            {!isProspect && dur(mins(s.arrivedAt, s.completedAt)) && <span className="text-green-primary">⏱ {dur(mins(s.arrivedAt, s.completedAt))} on site</span>}
+                            {i > 0 && dur(mins(prevDone, s.arrivedAt ?? s.completedAt)) && <span className="text-charcoal/40">🚐 {dur(mins(prevDone, s.arrivedAt ?? s.completedAt))} drive</span>}
                             {s.dropoff && <span className="text-green-primary">↓ Drop-off</span>}
                             {s.pickup && <span className="text-gold-dark">↑ Pick-up</span>}
                             {s.pieces > 0 && <span className="text-charcoal/40">{s.pieces} pcs</span>}
                           </div>
-                          {s.status === "skipped" && s.notes && (
+                          {isProspect && s.notes && (
+                            <div className="text-[11px] text-charcoal/60 font-body mt-0.5">📝 {s.notes}</div>
+                          )}
+                          {!isProspect && s.status === "skipped" && s.notes && (
                             <div className="text-[11px] text-gold-dark font-body mt-0.5">⚠ {s.notes}</div>
                           )}
                           {s.photos.length > 0 && (
@@ -118,7 +137,8 @@ export default function HistoryView({ routes }: { routes: HistoryRoute[] }) {
                           )}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
