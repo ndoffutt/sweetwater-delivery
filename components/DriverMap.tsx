@@ -459,6 +459,8 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
       ) : target && target.kind === "prospect_visit" && target.prospect_visit ? (
         <BottomShell onGrip={() => setSheet(sheet === "peek" ? "full" : "peek")} expanded={sheet === "full"}>
           <ProspectVisitSheet
+            // Remount per stop so the note box never carries a prior prospect's text.
+            key={target.id}
             stop={target}
             expanded={sheet === "full"}
             onLogged={() => {
