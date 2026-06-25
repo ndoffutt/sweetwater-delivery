@@ -78,9 +78,8 @@ export default function RouteBuilder({
     });
   }
 
-  const completedCount = stops.filter(
-    (s) => s.status === "completed" || s.status === "skipped"
-  ).length;
+  const completedCount = stops.filter((s) => s.status === "completed").length;
+  const skippedCount = stops.filter((s) => s.status === "skipped").length;
 
   return (
     <div className="space-y-4">
@@ -88,6 +87,7 @@ export default function RouteBuilder({
       <div className="flex items-center justify-between">
         <p className="font-body text-sm text-charcoal/50">
           {stops.length} stops · {completedCount} completed
+          {skippedCount > 0 && ` · ${skippedCount} skipped`}
         </p>
       </div>
 

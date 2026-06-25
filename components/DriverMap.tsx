@@ -327,6 +327,27 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
   }, []);
   // Background sync state: pending photo uploads + queued status changes.
   useEffect(() => subscribeSync((s) => setSync(s)), []);
+  // Net-failure safety net. The optimistic patch + offline queue already cover
+  // the user's intent, so any RSC refetch / fetch that loses signal mid-flight
+  // should never blow up the driver view. Captive-portal Wi-Fi reports
+  // navigator.onLine=true while every fetch hangs/fails, which is the case
+  // that previously crashed the screen mid-swipe.
+  useEffect(() => {
+    const swallow = (e: PromiseRejectionEvent) => {
+      const msg = String(e.reason?.message ?? e.reason ?? "");
+      if (/fetch|network|abort|load failed|nettype|err_/i.test(msg)) e.preventDefault();
+    };
+    window.addEventListener("unhandledrejection", swallow);
+    return () => window.removeEventListener("unhandledrejection", swallow);
+  }, []);
+
+  // Wrap router.refresh — when offline-but-think-online, the deferred RSC fetch
+  // fails async and unmounts the tree. The optimistic patch + cache covers the
+  // UI; refreshing is best-effort only.
+  function safeRefresh() {
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    try { router.refresh(); } catch { /* offline / RSC fetch failed */ }
+  }
 
   function flash(msg: string) { setToast(msg); if (tt.current) clearTimeout(tt.current); tt.current = setTimeout(() => setToast(null), 2600); }
   function patch(id: string, f: Partial<RouteStop>) { setStops((arr) => arr.map((s) => (s.id === id ? { ...s, ...f } : s))); }
@@ -347,7 +368,7 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
       await runStopAction({ kind: "status", stopId: s.id, status: "arrived" });
       // Only refetch when online — an RSC refresh with no signal throws and
       // blanks the driver view. Offline, the optimistic UI + replay queue cover it.
-      if (navigator.onLine) router.refresh();
+      safeRefresh();
     });
   }
 
@@ -359,7 +380,7 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
     flash(online ? `✓ Delivered, ${firstName(s.customer!.name)} notified` : "Saved on phone, will sync when signal returns");
     startTransition(async () => {
       await runStopAction({ kind: "status", stopId: s.id, status: "completed" });
-      if (navigator.onLine) router.refresh();
+      safeRefresh();
     });
   }
 
@@ -385,7 +406,7 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
     flash("Dispatch notified");
     startTransition(async () => {
       await runStopAction({ kind: "flag", stopId: s.id, reason });
-      if (navigator.onLine) router.refresh();
+      safeRefresh();
     });
   }
 
@@ -469,7 +490,7 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
               patch(target.id, { status: "completed", completed_at: new Date().toISOString() });
               flash("Visit logged");
               setSheet("peek");
-              if (navigator.onLine) router.refresh();
+              safeRefresh();
             }}
           />
         </BottomShell>

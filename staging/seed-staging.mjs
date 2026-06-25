@@ -1,17 +1,18 @@
 // Copy prod Supabase data → staging Supabase via REST.
 //
-// Reads creds from /tmp/sw-prod.env (the vercel env pull output) and
-// /tmp/sw-staging.env (the file you created with STAGING_URL +
-// STAGING_PUBLISHABLE_KEY + STAGING_SECRET_KEY). Run AFTER bootstrap.sql.
+// Reads creds from ~/.sweetwater/prod.env and ~/.sweetwater/staging.env.
+// Both files hold NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SECRET_KEY. Run
+// AFTER bootstrap.sql.
 //
 //   node staging/seed-staging.mjs              # dry-run (counts only)
 //   node staging/seed-staging.mjs --apply      # actually copy
 
 import { readFileSync } from "node:fs";
+import os from "node:os";
 
 const parseEnv = (p) =>
   Object.fromEntries(
-    readFileSync(p, "utf8").split("\n").filter((l) => l.includes("=")).map((l) => {
+    readFileSync(p, "utf8").split("\n").filter((l) => l.includes("=") && !l.startsWith("#")).map((l) => {
       const i = l.indexOf("=");
       let v = l.slice(i + 1).trim().replace(/^["']|["']$/g, "");
       v = v.replace(/\\n$/, "").trim();
@@ -19,24 +20,25 @@ const parseEnv = (p) =>
     })
   );
 
-// Prod creds — pulled from sw-prod.env where Vercel marks sensitive vars
-// blank. Fall back to reading them via the Vercel env API.
+const PROD_PATH = `${os.homedir()}/.sweetwater/prod.env`;
+const STG_PATH = `${os.homedir()}/.sweetwater/staging.env`;
+
 let PROD_URL, PROD_KEY;
 try {
-  const prod = parseEnv("/tmp/sw-prod.env");
+  const prod = parseEnv(PROD_PATH);
   PROD_URL = prod.NEXT_PUBLIC_SUPABASE_URL;
   PROD_KEY = prod.SUPABASE_SECRET_KEY || prod.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 } catch {}
 if (!PROD_URL || !PROD_KEY) {
-  console.error("✗ Couldn't read prod creds from /tmp/sw-prod.env (or the values are blank — Vercel sensitive vars don't survive env pull). Paste them into /tmp/sw-prod.env first.");
+  console.error(`✗ Couldn't read prod creds from ${PROD_PATH}. Vercel marks Supabase keys sensitive — pull them from the prod Supabase dashboard (Settings → API) and paste into ${PROD_PATH}.`);
   process.exit(1);
 }
 
-const stg = parseEnv("/tmp/sw-staging.env");
-const STG_URL = stg.STAGING_URL;
-const STG_KEY = stg.STAGING_SECRET_KEY || stg.STAGING_PUBLISHABLE_KEY;
+const stg = parseEnv(STG_PATH);
+const STG_URL = stg.NEXT_PUBLIC_SUPABASE_URL;
+const STG_KEY = stg.SUPABASE_SECRET_KEY || stg.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 if (!STG_URL || !STG_KEY) {
-  console.error("✗ /tmp/sw-staging.env missing STAGING_URL or STAGING_SECRET_KEY");
+  console.error(`✗ ${STG_PATH} missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SECRET_KEY`);
   process.exit(1);
 }
 

@@ -9,11 +9,14 @@ import {
   deleteTouchpoint,
   deleteProspect,
   convertProspectToCustomer,
+  flagManualRequest,
+  clearManualRequest,
 } from "@/lib/actions/prospects";
 import { townFromAddress } from "@/lib/town";
 import { googleVoiceCallHref } from "@/lib/phone";
-import { isOverdueForVisit, overdueDaysFor } from "@/lib/prospectVisit";
+import { isOverdueForVisit, overdueDaysFor, hasManualRequest, needsAttention } from "@/lib/prospectVisit";
 import { getRoutePositioning, saveRoutePosition } from "@/lib/actions/customers";
+import { addProspectToTodaysRoute } from "@/lib/actions/prospectVisits";
 import RouteMap from "@/components/RouteMap";
 import ProspectMap, { pinColor } from "@/components/ProspectMap";
 import type { RouteStop } from "@/lib/types";
@@ -139,12 +142,16 @@ export default function ProspectDirectory({
   const [sort, setSort] = useState<ProspectSort>("town");
   const [, startTransition] = useTransition();
 
+  // Explicit dispatcher-set flag takes priority; fall back to "no map pin" so
+  // legacy prospects without lat/lng still surface here.
+  const isCallOnly = (p: Prospect) => p.call_only ?? (p.lat == null || p.lng == null);
+
   const filtered = prospects
     .filter((p) => {
       if (filter !== "all" && p.status !== filter) return false;
       if (typeFilter !== "all" && p.business_type !== typeFilter) return false;
-      // Call-only = no map location; these can't go on a route, work them by phone.
-      if (callOnly && p.lat != null && p.lng != null) return false;
+      // Call-only = no physical location; these can't go on a route, work them by phone.
+      if (callOnly && !isCallOnly(p)) return false;
       if (query) {
         const q = query.toLowerCase();
         return (
@@ -156,10 +163,10 @@ export default function ProspectDirectory({
       return true;
     })
     .sort((a, b) => {
-      // Overdue-for-a-visit always floats to the very top, then the chosen sort
-      // orders within each group.
-      const oa = isOverdueForVisit(a);
-      const ob = isOverdueForVisit(b);
+      // Needs-attention (overdue OR manual request) floats to the top, then the
+      // chosen sort orders within each group.
+      const oa = needsAttention(a);
+      const ob = needsAttention(b);
       if (oa !== ob) return oa ? -1 : 1;
       if (sort === "priority") {
         const pr = priorityRank(a.priority) - priorityRank(b.priority);
@@ -187,8 +194,8 @@ export default function ProspectDirectory({
 
   const selected = prospects.find((p) => p.id === selectedId) || null;
   const counts = STATUSES.map((s) => ({ ...s, n: prospects.filter((p) => p.status === s.id).length }));
-  const overdueCount = prospects.filter(isOverdueForVisit).length;
-  const callOnlyCount = prospects.filter((p) => p.lat == null || p.lng == null).length;
+  const overdueCount = prospects.filter(needsAttention).length;
+  const callOnlyCount = prospects.filter(isCallOnly).length;
 
   function patch(id: string, fields: Partial<Prospect>) {
     setProspects((ps) => ps.map((p) => (p.id === id ? { ...p, ...fields } : p)));
@@ -342,7 +349,7 @@ export default function ProspectDirectory({
             <div className="flex items-start gap-2 bg-gold-primary/15 border border-gold-primary/40 rounded-xl px-3 py-2.5 mb-1">
               <span className="text-gold-dark">🔔</span>
               <p className="text-xs font-body text-charcoal">
-                <b>{overdueCount}</b> prospect{overdueCount === 1 ? "" : "s"} overdue for a visit — pinned to the top.
+                <b>{overdueCount}</b> prospect{overdueCount === 1 ? "" : "s"} need attention — overdue or manually flagged 🚩 — pinned to the top.
               </p>
             </div>
           )}
@@ -350,20 +357,23 @@ export default function ProspectDirectory({
             const days = daysSince(lastTouch(p));
             const cold = !closed(p.status) && (days == null || days > 30);
             const overdue = isOverdueForVisit(p);
+            const manualReq = hasManualRequest(p);
+            const flagged = overdue || manualReq;
             return (
               <button
                 key={p.id}
                 onClick={() => { setSelectedId(p.id); setAdding(false); }}
-                className={`w-full text-left flex items-center gap-3 p-3 rounded-xl border transition-colors ${selectedId === p.id ? "bg-green-primary/5 border-green-primary/30" : overdue ? "bg-gold-primary/5 border-gold-primary/40" : "bg-cream border-cream-dark"}`}
+                className={`w-full text-left flex items-center gap-3 p-3 rounded-xl border transition-colors ${selectedId === p.id ? "bg-green-primary/5 border-green-primary/30" : flagged ? "bg-gold-primary/5 border-gold-primary/40" : "bg-cream border-cream-dark"}`}
               >
                 <span className="shrink-0 w-2.5 h-2.5 rounded-full" style={{ background: pinColor(p.status) }} />
                 <div className="flex-1 min-w-0">
                   <span className="font-body font-medium text-charcoal truncate block">
-                    {overdue && <span className="text-gold-dark" title={`Overdue — ${overdueDaysFor(p.priority)}-day window`}>🔔 </span>}
+                    {manualReq && <span className="text-red-600" title="Manual request — dispatcher flagged for outreach">🚩 </span>}
+                    {overdue && !manualReq && <span className="text-gold-dark" title={`Overdue — ${overdueDaysFor(p.priority)}-day window`}>🔔 </span>}
                     {p.name}
                   </span>
                   <p className="text-xs text-charcoal/40 font-body truncate">
-                    {(p.lat == null || p.lng == null) && <span className="text-green-primary" title="No map location — call only">📞 </span>}
+                    {isCallOnly(p) && <span className="text-green-primary" title="Call-only — no physical location">📞 </span>}
                     {(p.town ?? townFromAddress(p.address)) ? `${p.town ?? townFromAddress(p.address)} · ` : ""}
                     {typeLabel(p.business_type)}
                     {p.contact_name ? ` · ${p.contact_name}` : ""}
@@ -630,11 +640,42 @@ function Detail({
         </button>
       </div>
 
-      {isOverdueForVisit(p) && (
+      {isOverdueForVisit(p) && !hasManualRequest(p) && (
         <div className="flex items-center gap-2 bg-gold-primary/15 border border-gold-primary/40 rounded-xl px-3 py-2.5">
           <span className="text-gold-dark">🔔</span>
           <p className="text-xs font-body text-charcoal">Overdue for a visit ({overdueDaysFor(p.priority)}-day window) — log a Visit below to clear this.</p>
         </div>
+      )}
+
+      {hasManualRequest(p) && (
+        <div className="flex items-center gap-2 bg-red-50 border border-red-300 rounded-xl px-3 py-2.5">
+          <span>🚩</span>
+          <p className="text-xs font-body text-charcoal flex-1">
+            <b>Manual request</b> — flagged for outreach. Any call / email / text / visit clears it.
+          </p>
+          <button
+            onClick={() => {
+              onPatch({ manual_request_at: null });
+              startTransition(() => { clearManualRequest(p.id); });
+            }}
+            className="text-[11px] font-body text-charcoal/50 uppercase tracking-widest"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
+      {!hasManualRequest(p) && (
+        <button
+          onClick={() => {
+            const now = new Date().toISOString();
+            onPatch({ manual_request_at: now });
+            startTransition(() => { flagManualRequest(p.id); });
+          }}
+          className="w-full min-h-tap text-xs font-body uppercase tracking-widest text-charcoal/50 border border-dashed border-cream-dark rounded-xl py-2 hover:bg-cream"
+        >
+          🚩 Request outreach
+        </button>
       )}
 
       {/* Priority — sets the visit cadence (High 30d · Medium 60d · Low 90d) */}
@@ -988,6 +1029,7 @@ function EditProspect({
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
   const [businessType, setBusinessType] = useState<ProspectBusinessType>(p.business_type);
+  const [callOnly, setCallOnly] = useState<boolean>(p.call_only ?? false);
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -1003,6 +1045,7 @@ function EditProspect({
       town: val("town") || undefined,
       website: val("website") || undefined,
       business_type: businessType,
+      call_only: callOnly,
     };
     start(async () => {
       const res = await updateProspect(p.id, fields);
@@ -1017,6 +1060,7 @@ function EditProspect({
         town: fields.town ?? townFromAddress(fields.address) ?? null,
         website: fields.website ?? null,
         business_type: businessType,
+        call_only: callOnly,
       });
     });
   }
@@ -1062,10 +1106,21 @@ function EditProspect({
         <span className={label}>Email</span>
         <input name="email" type="email" defaultValue={p.email ?? ""} className={field} />
       </div>
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={callOnly}
+          onChange={(e) => setCallOnly(e.target.checked)}
+          className="w-5 h-5 accent-green-primary"
+        />
+        <span className="text-sm font-body text-charcoal">📞 Call-only — phone/email outreach, no physical location</span>
+      </label>
       <div>
-        <span className={label}>Address</span>
+        <span className={label}>Address {callOnly && <span className="text-charcoal/30 normal-case">(optional)</span>}</span>
         <input name="address" defaultValue={p.address ?? ""} className={field} />
-        <p className="text-[11px] text-charcoal/40 font-body mt-1">Changing the address re-pins them on the map.</p>
+        <p className="text-[11px] text-charcoal/40 font-body mt-1">
+          {callOnly ? "Hidden from the map while Call-only is on." : "Changing the address re-pins them on the map."}
+        </p>
       </div>
       <div>
         <span className={label}>Town</span>
