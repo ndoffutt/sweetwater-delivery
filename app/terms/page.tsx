@@ -24,7 +24,7 @@ export default function TermsPage() {
           <p>
             <strong>Opt-in:</strong> You consent to receive these messages by checking the SMS
             consent box on our{" "}
-            <a href="/signup" className="text-green-primary underline underline-offset-2">online sign-up form</a>,
+            <a href="/sms" className="text-green-primary underline underline-offset-2">online sign-up form</a>,
             by giving consent in person at our store, or by texting our business number first.
             Consent is not a condition of purchase, and text notifications are not required to
             receive delivery service.
@@ -51,6 +51,12 @@ export default function TermsPage() {
             parties for marketing purposes.
           </p>
         </div>
+
+        <nav className="mt-10 pt-6 border-t border-cream-dark font-body text-sm text-green-primary flex flex-wrap gap-x-4 gap-y-2">
+          <a href="/sms" className="underline underline-offset-2">Text Sign-Up</a>
+          <a href="/privacy" className="underline underline-offset-2">Privacy Policy</a>
+          <span className="text-charcoal/40">Sweetwater&apos;s Cleaners · Wainscott &amp; Hampton Bays, NY</span>
+        </nav>
       </div>
     </main>
   );
