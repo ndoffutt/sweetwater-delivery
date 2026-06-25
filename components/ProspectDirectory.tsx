@@ -16,8 +16,10 @@ import { townFromAddress } from "@/lib/town";
 import { googleVoiceCallHref } from "@/lib/phone";
 import { isOverdueForVisit, overdueDaysFor, hasManualRequest, needsAttention, lastEngagementAt } from "@/lib/prospectVisit";
 import { getRoutePositioning, saveRoutePosition } from "@/lib/actions/customers";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- staged for the "force onto today's route" button (WIP)
-import { addProspectToTodaysRoute } from "@/lib/actions/prospectVisits";
+// NOTE: addProspectToTodaysRoute is staged in lib/actions/prospectVisits.ts
+// (uncommitted) for the "force onto today's route" button — re-add this
+// import when you wire it. Removed for now so the build server (which only
+// sees committed code) doesn't fail on the missing export.
 import RouteMap from "@/components/RouteMap";
 import ProspectMap, { pinColor } from "@/components/ProspectMap";
 import type { RouteStop } from "@/lib/types";
