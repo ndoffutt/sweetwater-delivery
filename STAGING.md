@@ -97,13 +97,18 @@ records or you mutate things in staging. To re-snapshot from current prod:
 node staging/seed-staging.mjs --apply
 ```
 
-The script reads prod creds from `/tmp/sw-prod.env` (which holds
-`NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SECRET_KEY`) and writes to staging
-using `/tmp/sw-staging.env`. It's idempotent (uses upsert) and
-self-adapting (drops columns staging doesn't have, in case of schema
-drift). `push_subscriptions` is intentionally excluded — prod browser
-endpoints can't ring drivers' phones from staging anyway, and copying them
-risks confusion.
+The script reads prod creds from `~/.sweetwater/prod.env` and staging creds
+from `~/.sweetwater/staging.env` (both hold `NEXT_PUBLIC_SUPABASE_URL` +
+`SUPABASE_SECRET_KEY`). It's idempotent (uses upsert) and self-adapting
+(drops columns staging doesn't have, in case of schema drift).
+`push_subscriptions` is intentionally excluded — prod browser endpoints
+can't ring drivers' phones from staging anyway, and copying them risks
+confusion.
+
+> The earlier `/tmp/sw-prod.env` / `/tmp/sw-staging.env` paths are gone.
+> `/tmp` doesn't survive reboots — `~/.sweetwater/` persists across
+> sessions. See `CLAUDE.md` "Credentials" section for the file layout +
+> Node parsing snippet.
 
 ### Wiping staging back to bootstrap
 
@@ -119,7 +124,8 @@ rebuilds from scratch. Then re-run the seed.
 | Check what's deployed where | `vercel ls sweetwater-delivery` / `vercel ls sweetwater-delivery-staging` |
 | See staging build logs | `vercel logs sweetwater-delivery-staging` |
 | See prod build logs | `vercel logs sweetwater-delivery` |
-| Pull staging env vars | (links to staging) `vercel env pull /tmp/sw-staging.env` |
+| Read staging keys | `cat ~/.sweetwater/staging.env` (Supabase URL + publishable + secret) |
+| Read prod keys (diagnostics only) | `cat ~/.sweetwater/prod.env` |
 | Roll back staging | `git revert` on the `staging` branch + push |
 | Roll back prod | `git revert` on `main` + push, OR Vercel dashboard "Promote previous deployment" |
 

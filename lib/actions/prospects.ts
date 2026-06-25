@@ -20,10 +20,11 @@ interface ProspectInput {
   priority?: ProspectPriority;
   services?: ProspectService[];
   notes?: string;
+  call_only?: boolean;
 }
 
 // Columns added by later migrations that may not exist yet on a given DB.
-const OPTIONAL_COLS = ["town", "priority"];
+const OPTIONAL_COLS = ["town", "priority", "call_only"];
 // Which optional column a missing-column error refers to (Postgres 42703
 // "column ... does not exist" or PostgREST PGRST204 "could not find ... schema
 // cache"), or null if the error is something else.
@@ -73,6 +74,7 @@ export async function createProspect(input: ProspectInput) {
     business_type: input.business_type || "other",
     priority: input.priority || "medium",
     notes: input.notes || null,
+    call_only: input.call_only ?? false,
   };
   const { data, error } = await insertTolerant(supabase, row);
   if (error) return { error: error.message };
@@ -105,11 +107,24 @@ export async function updateProspect(
   }
   // Address changed → re-pin on the map (null falls back to page-load
   // geocoding) and re-derive the town tag unless one was set explicitly.
+  // Skip the geocode for call-only prospects — they're not on the map, no
+  // point spending the Mapbox quota on them.
   if (fields.address !== undefined) {
-    const coords = await geocodeBusiness(fields.name ?? "", fields.address ?? null);
-    patch.lat = coords?.lat ?? null;
-    patch.lng = coords?.lng ?? null;
+    if (fields.call_only) {
+      patch.lat = null;
+      patch.lng = null;
+    } else {
+      const coords = await geocodeBusiness(fields.name ?? "", fields.address ?? null);
+      patch.lat = coords?.lat ?? null;
+      patch.lng = coords?.lng ?? null;
+    }
     if (fields.town === undefined) patch.town = townFromAddress(fields.address);
+  }
+  // Flipping a prospect TO call-only without touching the address still needs
+  // to drop them off the map.
+  if (fields.call_only === true && fields.address === undefined) {
+    patch.lat = null;
+    patch.lng = null;
   }
   if (typeof patch.town === "string") patch.town = (patch.town as string).trim() || null;
   const { error } = await updateTolerant(supabase, id, patch);
@@ -161,8 +176,42 @@ export async function logTouchpoint(
       .eq("id", prospectId)
       .eq("status", "new");
   }
+  // Clearing manual_request_at on engagement is enforced by the DB trigger
+  // (see supabase/prospects_call_only_and_manual_request.sql) so it stays
+  // correct even when touchpoints are inserted from a script. No client-side
+  // patch needed.
   revalidatePath("/sales/prospects");
   return { touchpoint: data };
+}
+
+/**
+ * Force a prospect into the overdue list with a "MANUAL REQUEST" badge.
+ * Cleared automatically by the DB trigger on the next non-note touchpoint
+ * (so logging a call/email/text/visit/delivery satisfies the request).
+ */
+export async function flagManualRequest(prospectId: string) {
+  await requireSession("dispatcher");
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("prospects")
+    .update({ manual_request_at: new Date().toISOString() })
+    .eq("id", prospectId);
+  if (error) return { error: error.message };
+  revalidatePath("/sales/prospects");
+  return { success: true };
+}
+
+/** Undo a manual request before any touchpoint has cleared it. */
+export async function clearManualRequest(prospectId: string) {
+  await requireSession("dispatcher");
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("prospects")
+    .update({ manual_request_at: null })
+    .eq("id", prospectId);
+  if (error) return { error: error.message };
+  revalidatePath("/sales/prospects");
+  return { success: true };
 }
 
 /** Edit a previously logged touch (type / note / date). Keeps the original author. */

@@ -34,6 +34,7 @@ export const lastVisitAt = lastEngagementAt;
 type VisitInput = Pick<Prospect, "status" | "created_at"> & {
   priority?: ProspectPriority | null;
   touchpoints?: ProspectTouchpoint[];
+  manual_request_at?: string | null;
 };
 
 // We measure staleness from the last visit, or — if never visited — from when
@@ -49,4 +50,16 @@ export function daysSinceVisit(p: VisitInput): number {
 export function isOverdueForVisit(p: VisitInput): boolean {
   if (!SCOPE.has(p.status)) return false;
   return daysSinceVisit(p) >= overdueDaysFor(p.priority);
+}
+
+/** Dispatcher manually flagged this prospect for outreach. The DB trigger
+ * clears the flag automatically on the next non-note touchpoint. */
+export function hasManualRequest(p: VisitInput): boolean {
+  return !!p.manual_request_at;
+}
+
+/** Anything that should bubble to the top of the prospects list and into the
+ * "overdue" callout — either time-based overdue OR a manual request. */
+export function needsAttention(p: VisitInput): boolean {
+  return hasManualRequest(p) || isOverdueForVisit(p);
 }

@@ -119,6 +119,15 @@ export interface Prospect {
   notes: string | null;
   customer_id: string | null;
   created_at: string;
+  // Prospect outreach is phone/email only — no physical location to visit.
+  // Address becomes optional, the prospect is hidden from the map, and the
+  // overdue badge shows a phone icon instead of a pin.
+  call_only?: boolean | null;
+  // Dispatcher-set "please reach out" flag. When set, the prospect appears in
+  // the overdue list regardless of cadence, with a "MANUAL REQUEST" badge.
+  // Cleared automatically by the next non-note touchpoint (call/email/text/
+  // visit/delivery).
+  manual_request_at?: string | null;
   touchpoints?: ProspectTouchpoint[];
 }
 

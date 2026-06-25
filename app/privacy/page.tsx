@@ -47,7 +47,7 @@ export default function PrivacyPage() {
           <h2 className="font-serif text-2xl font-light text-charcoal pt-2">Text messaging</h2>
           <p>
             You opt in to text notifications by checking the SMS consent box on our{" "}
-            <a href="/signup" className="text-green-primary underline underline-offset-2">sign-up form</a>,
+            <a href="/sms" className="text-green-primary underline underline-offset-2">sign-up form</a>,
             by giving consent in person at our store, or by texting our business number first. Text
             notifications are optional and not required to receive service. Message frequency varies
             with your deliveries. Message and data rates may apply. Reply <strong>STOP</strong> at any
@@ -64,6 +64,12 @@ export default function PrivacyPage() {
             our Wainscott or Hampton Bays locations, or text or call our business number.
           </p>
         </div>
+
+        <nav className="mt-10 pt-6 border-t border-cream-dark font-body text-sm text-green-primary flex flex-wrap gap-x-4 gap-y-2">
+          <a href="/sms" className="underline underline-offset-2">Text Sign-Up</a>
+          <a href="/terms" className="underline underline-offset-2">Messaging Terms</a>
+          <span className="text-charcoal/40">Sweetwater&apos;s Cleaners · Wainscott &amp; Hampton Bays, NY</span>
+        </nav>
       </div>
     </main>
   );
