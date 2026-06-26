@@ -159,12 +159,15 @@ export default async function DispatchPage() {
   // Overdue prospects (with coordinates) — candidates to surface near the route.
   const { data: prospectRows } = await supabase
     .from("prospects")
-    .select("id,name,lat,lng,status,priority,town,created_at,touchpoints:prospect_touchpoints(type,created_at)")
+    .select("id,name,lat,lng,status,priority,town,created_at,call_only,touchpoints:prospect_touchpoints(type,created_at)")
     .is("deleted_at", null)
     .in("status", ["new", "working", "active"])
-    .not("lat", "is", null);
+    .not("lat", "is", null)
+    // Call-only prospects are phone/email outreach only — never route or visit
+    // them, even if they happen to have an address on file.
+    .eq("call_only", false);
   const overdueProspects = ((prospectRows ?? []) as unknown as Prospect[])
-    .filter(isOverdueForVisit)
+    .filter((p) => !p.call_only && isOverdueForVisit(p))
     .map((p) => ({ id: p.id, name: p.name, lat: p.lat as number, lng: p.lng as number, town: p.town ?? null }));
 
   // Prospect visits attached to today's route (tolerant of the
