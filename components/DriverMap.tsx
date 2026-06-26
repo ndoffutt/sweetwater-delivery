@@ -525,8 +525,10 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
               setTargetId(next ? next.id : target.id);
               flash(outcome === "skipped" ? "Visit skipped — dispatch notified" : "Touchpoint logged");
               setSheet("peek");
-              safeRefresh();
+              // NB: no safeRefresh() here — the sheet calls onSynced after the write
+              // lands so we don't refetch stale "planned" data and undo the advance.
             }}
+            onSynced={safeRefresh}
           />
         </BottomShell>
       ) : target && cust && (

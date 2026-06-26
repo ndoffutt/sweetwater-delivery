@@ -38,10 +38,12 @@ export default function ProspectVisitSheet({
   stop,
   expanded,
   onLogged,
+  onSynced,
 }: {
   stop: RouteStop;
   expanded: boolean;
   onLogged: (outcome: "logged" | "skipped") => void;
+  onSynced?: () => void;
 }) {
   const pv = stop.prospect_visit!;
   const done = stop.status === "completed" || stop.status === "skipped";
@@ -63,12 +65,21 @@ export default function ProspectVisitSheet({
   function save() {
     if (!note.trim()) { setError("Add a quick note about the touchpoint."); return; }
     onLogged("logged");
-    start(() => runStopAction({ kind: "prospectVisit", stopId: stop.id, visitId: pv.id, prospectId: pv.prospect_id, notes: note, touchType: kind }));
+    // Refresh only AFTER the write lands — refreshing first would refetch the
+    // still-"planned" visit and snap the optimistic completion back, killing the
+    // auto-advance. Offline, runStopAction queues + resolves and safeRefresh no-ops.
+    start(async () => {
+      await runStopAction({ kind: "prospectVisit", stopId: stop.id, visitId: pv.id, prospectId: pv.prospect_id, notes: note, touchType: kind });
+      onSynced?.();
+    });
   }
 
   function skip() {
     onLogged("skipped");
-    start(() => runStopAction({ kind: "prospectSkip", stopId: stop.id, visitId: pv.id, reason: skipReason }));
+    start(async () => {
+      await runStopAction({ kind: "prospectSkip", stopId: stop.id, visitId: pv.id, reason: skipReason });
+      onSynced?.();
+    });
   }
 
   return (
