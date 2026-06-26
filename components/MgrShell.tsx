@@ -21,9 +21,9 @@ const ITEMS: Record<NavId, NavItem> = {
 // Manager keeps the ops tabs + Sales so Ahsin can work prospects. Messages is
 // owner-only for now while it's being tested.
 const NAV_BY_ROLE: Record<"dispatcher" | "admin", NavItem[]> = {
-  admin: [ITEMS.dispatch, ITEMS.customers, ITEMS.messages, ITEMS.history],
-  // ITEMS.live and ITEMS.reports hidden for the manager for now — re-add them
-  // here to restore those tabs.
+  admin: [ITEMS.dispatch, ITEMS.customers, ITEMS.messages, ITEMS.history, ITEMS.reports],
+  // Reports is owner-only for now; ITEMS.live also hidden from the manager —
+  // re-add them here to restore those tabs.
   dispatcher: [ITEMS.dispatch, ITEMS.customers, ITEMS.sales, ITEMS.history],
 };
 
