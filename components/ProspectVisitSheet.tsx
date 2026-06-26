@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { completeProspectVisit, skipProspectVisit } from "@/lib/actions/prospectVisits";
+import { runStopAction } from "@/lib/offline";
 import { googleVoiceCallHref } from "@/lib/phone";
 import SlideToConfirm from "@/components/SlideToConfirm";
 import type { RouteStop } from "@/lib/types";
@@ -50,31 +50,21 @@ export default function ProspectVisitSheet({
   const [note, setNote] = useState("");
   const [skipOpen, setSkipOpen] = useState(false);
   const [skipReason, setSkipReason] = useState("");
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [, start] = useTransition();
+  const [busy, start] = useTransition();
 
+  // Offline-first: update the UI now, queue the write (replays in the background
+  // when signal returns). Service is unreliable in the field, so logging must
+  // never block on or be lost to the network.
   function save() {
     if (!note.trim()) { setError("Add a quick note about the touchpoint."); return; }
-    setBusy(true);
-    setError("");
-    start(async () => {
-      const res = await completeProspectVisit(pv.id, pv.prospect_id, note, kind);
-      setBusy(false);
-      if (res.error) { setError(res.error); return; }
-      onLogged();
-    });
+    onLogged();
+    start(() => runStopAction({ kind: "prospectVisit", stopId: stop.id, visitId: pv.id, prospectId: pv.prospect_id, notes: note, touchType: kind }));
   }
 
   function skip() {
-    setBusy(true);
-    setError("");
-    start(async () => {
-      const res = await skipProspectVisit(pv.id, skipReason);
-      setBusy(false);
-      if (res.error) { setError(res.error); return; }
-      onLogged();
-    });
+    onLogged();
+    start(() => runStopAction({ kind: "prospectSkip", stopId: stop.id, visitId: pv.id, reason: skipReason }));
   }
 
   return (

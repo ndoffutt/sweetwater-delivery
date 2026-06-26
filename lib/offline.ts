@@ -20,6 +20,7 @@ import {
   confirmPickup,
   flagStop,
 } from "@/lib/actions/stops";
+import { completeProspectVisit, skipProspectVisit } from "@/lib/actions/prospectVisits";
 import type { StopStatus } from "@/lib/types";
 
 // ── Types ──────────────────────────────────────────────────────
@@ -35,7 +36,12 @@ export interface QueuedPhoto {
 export type StopActionInput =
   | { kind: "status"; stopId: string; status: StopStatus }
   | { kind: "dropoff" | "pickup"; stopId: string; confirmed: boolean }
-  | { kind: "flag"; stopId: string; reason: string };
+  | { kind: "flag"; stopId: string; reason: string }
+  // Prospect-visit stops carry the route_prospect_visits id + prospect id so the
+  // server action can run on replay. stopId is the synthetic `pv-…` id, used only
+  // as the compaction key.
+  | { kind: "prospectVisit"; stopId: string; visitId: string; prospectId: string; notes: string; touchType: string }
+  | { kind: "prospectSkip"; stopId: string; visitId: string; reason: string };
 
 export type QueuedAction = StopActionInput & { id: string };
 
@@ -195,6 +201,8 @@ async function dispatchAction(a: QueuedAction): Promise<void> {
   else if (a.kind === "dropoff") result = await confirmDropoff(a.stopId, a.confirmed);
   else if (a.kind === "pickup") result = await confirmPickup(a.stopId, a.confirmed);
   else if (a.kind === "flag") result = await flagStop(a.stopId, a.reason);
+  else if (a.kind === "prospectVisit") result = await completeProspectVisit(a.visitId, a.prospectId, a.notes, a.touchType);
+  else if (a.kind === "prospectSkip") result = await skipProspectVisit(a.visitId, a.reason);
   // A server-side rejection (e.g. stop deleted because the route was cleared,
   // which surfaces as Supabase's "no rows returned") is permanent: don't keep
   // retrying it forever.
