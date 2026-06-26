@@ -27,9 +27,10 @@ export async function getRecentActivity(limit = 20): Promise<ActivityItem[]> {
 
   const stopsP = supabase
     .from("route_stops")
-    .select("id, completed_at, has_dropoff, has_pickup, customers(name)")
+    .select("id, completed_at, has_dropoff, has_pickup, customers(name), deleted_at")
     .eq("status", "completed")
     .not("completed_at", "is", null)
+    .is("deleted_at", null)
     .order("completed_at", { ascending: false })
     .limit(limit);
 
@@ -37,10 +38,13 @@ export async function getRecentActivity(limit = 20): Promise<ActivityItem[]> {
   // completion, so including them here would double every delivery in the feed.
   // The route_stops query above is the authoritative record (carries photos +
   // notes + a working /dispatch/delivery/[id] link).
+  // Also exclude soft-deleted touchpoints (the deletion is captured in
+  // deletion_audit / Settings → Recently Deleted, not the activity feed).
   const touchesP = supabase
     .from("prospect_touchpoints")
-    .select("id, type, note, created_by, created_at, prospect_id, prospects(name)")
+    .select("id, type, note, created_by, created_at, prospect_id, prospects(name), deleted_at")
     .neq("type", "delivery")
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(limit);
 

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
-import SettingsPanel, { type TeamMember } from "@/components/SettingsPanel";
+import SettingsPanel, { type TeamMember, type DeletionEntry } from "@/components/SettingsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +18,25 @@ export default async function SettingsPage() {
     .order("role")
     .order("created_at");
 
+  // Recently Deleted — most recent 50 soft-deletes across every audited
+  // table. Tolerant of the deletion_audit table not yet existing on an
+  // un-migrated environment.
+  let deletions: DeletionEntry[] = [];
+  try {
+    const { data: dels } = await supabase
+      .from("deletion_audit")
+      .select("id, table_name, row_id, before_state, deleted_by, deleted_by_name, deleted_at")
+      .order("deleted_at", { ascending: false })
+      .limit(50);
+    deletions = (dels ?? []) as DeletionEntry[];
+  } catch { /* deletion_audit migration pending */ }
+
   return (
     <SettingsPanel
       meId={session.id}
       viewerRole={session.role as "admin" | "dispatcher"}
       team={(data ?? []) as TeamMember[]}
+      deletions={deletions}
     />
   );
 }

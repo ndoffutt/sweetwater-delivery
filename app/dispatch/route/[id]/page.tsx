@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import RouteBuilder from "@/components/RouteBuilder";
+import type { RouteStop } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,74 @@ export default async function RouteDetailPage({
     .single();
 
   if (!route) notFound();
+
+  // Pull planned prospect visits and merge into the same numbered sequence
+  // as delivery stops, sorted by the persisted stop_order. Tolerant of the
+  // stop_order column being missing on an unmigrated environment — those
+  // visits just appear at the head (stop_order=0).
+  let prospectStops: RouteStop[] = [];
+  try {
+    const { data: pv } = await supabase
+      .from("route_prospect_visits")
+      .select(
+        "id, prospect_id, status, notes, created_at, stop_order, prospects(id, name, address, phone, lat, lng)"
+      )
+      .eq("route_id", route.id)
+      .is("deleted_at", null);
+    type Row = {
+      id: string; prospect_id: string; status: string; notes: string | null;
+      created_at: string; stop_order: number | null;
+      prospects: { id: string; name: string; address: string | null; phone: string | null; lat: number | null; lng: number | null } | null;
+    };
+    prospectStops = ((pv ?? []) as unknown as Row[])
+      .filter((r) => r.prospects)
+      .map((r) => {
+        const p = r.prospects!;
+        return {
+          id: `pv-${r.id}`,
+          route_id: route.id,
+          customer_id: p.id,
+          stop_order: r.stop_order ?? 0,
+          status: r.status === "visited" ? "completed" : "pending",
+          has_dropoff: false,
+          has_pickup: false,
+          dropoff_confirmed: false,
+          pickup_confirmed: false,
+          notes: r.notes,
+          arrived_at: null,
+          completed_at: r.status === "visited" ? r.created_at : null,
+          created_at: r.created_at,
+          customer: {
+            id: p.id, name: p.name, address: p.address ?? "", phone: p.phone,
+            lat: p.lat, lng: p.lng,
+            gate_code: null, delivery_notes: null, tags: null,
+            spot_account: null, account_type: null, route_seq: null,
+            active: true, created_at: r.created_at,
+          } as unknown as RouteStop["customer"],
+          photos: [],
+          kind: "prospect_visit",
+          prospect_visit: {
+            id: r.id, prospect_id: p.id, name: p.name, address: p.address,
+            phone: p.phone, notes_summary: null, last_visit_at: null, history: [],
+          },
+        } as RouteStop;
+      });
+  } catch {
+    /* route_prospect_visits absent — dispatcher view continues with deliveries only */
+  }
+
+  // Drop soft-deleted stops from the view. The trigger has already captured
+  // them in deletion_audit (visible in Settings → Recently Deleted), so the
+  // route list reflects what's actually still on the route.
+  const liveDeliveryStops = ((route.route_stops ?? []) as RouteStop[])
+    .filter((s) => !(s as RouteStop & { deleted_at?: string | null }).deleted_at);
+  const liveProspectStops = prospectStops.filter(
+    (s) => !(s as RouteStop & { deleted_at?: string | null }).deleted_at
+  );
+  const mergedStops: RouteStop[] = [
+    ...liveDeliveryStops,
+    ...liveProspectStops,
+  ].sort((a, b) => a.stop_order - b.stop_order);
 
   const { data: customers } = await supabase
     .from("customers")
@@ -90,7 +159,7 @@ export default async function RouteDetailPage({
         <RouteBuilder
           routeId={route.id}
           routeStatus={route.status}
-          stops={route.route_stops || []}
+          stops={mergedStops}
           customers={customers || []}
         />
       </div>

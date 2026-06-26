@@ -696,7 +696,7 @@ export default function DispatchConsole({
           <div className="flex items-center justify-between px-4 py-3.5 border-b border-cream-dark">
             <span className="inline-flex items-center gap-2 text-gold-dark">
               <Ic d={I.sparkle} size={15} fill />
-              <span className="font-body text-[11px] uppercase tracking-widest text-charcoal/45">Route built by Claude · reorder</span>
+              <span className="font-body text-[11px] uppercase tracking-widest text-charcoal/45">Route set by order · reorder</span>
             </span>
             <div className="flex items-center gap-3">
               {!dispatched && allCustomers.length > 0 && (

@@ -54,13 +54,19 @@ export async function addStopToRoute(
 }
 
 export async function removeStop(routeId: string, stopId: string) {
-  await requireSession("dispatcher");
+  const session = await requireSession("dispatcher");
   const supabase = createAdminClient();
 
-  const { error } = await supabase
+  // Soft delete — the audit trigger captures the dropped stop in
+  // deletion_audit so it can be reviewed (and reversed) from Settings.
+  // Falls back to hard delete on a pre-migration environment.
+  let { error } = await supabase
     .from("route_stops")
-    .delete()
+    .update({ deleted_at: new Date().toISOString(), deleted_by: session.id })
     .eq("id", stopId);
+  if (error && /deleted_at|deleted_by/i.test(error.message) && /(does not exist|schema cache|could not find)/i.test(error.message)) {
+    ({ error } = await supabase.from("route_stops").delete().eq("id", stopId));
+  }
 
   if (error) return { error: error.message };
   revalidatePath(`/dispatch/route/${routeId}`);
