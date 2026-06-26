@@ -25,6 +25,8 @@ function fmtTime(iso: string): string {
   });
 }
 
+const STORAGE_BASE = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/storage/v1/object/public/stop-photos/`;
+
 export default function RouteBuilder({
   routeId,
   routeStatus,
@@ -34,6 +36,9 @@ export default function RouteBuilder({
   const [stops, setStops] = useState(initialStops);
   const [showAdd, setShowAdd] = useState(false);
   const [isPending, startTransition] = useTransition();
+  // Tapping a delivery card opens its details here (a popup), instead of
+  // navigating off to a separate delivery/customer screen.
+  const [detailStop, setDetailStop] = useState<RouteStop | null>(null);
   const router = useRouter();
 
   // Re-sync local state when the server sends fresh stops after router.refresh()
@@ -148,33 +153,34 @@ export default function RouteBuilder({
               {i + 1}
             </span>
 
-            {/* Info — name links to the stop's delivery detail (photos + notes);
-                 the address line links to the customer profile. */}
-            <div className="flex-1 min-w-0">
-              <Link href={`/dispatch/delivery/${stop.id}`} className="font-body font-medium text-charcoal truncate block hover:underline underline-offset-2">
+            {/* Info — the whole block opens this stop's details in a popup
+                (proof photos, notes, times) instead of navigating off to a
+                separate delivery/customer screen. */}
+            <button
+              type="button"
+              onClick={() => setDetailStop(stop)}
+              className="flex-1 min-w-0 text-left"
+            >
+              <span className="font-body font-medium text-charcoal truncate block">
                 {stop.customer?.name} ›
-              </Link>
-              {stop.customer?.id && (
-                <Link href={`/dispatch/customers?id=${stop.customer.id}`} className="text-xs text-charcoal/40 font-body truncate block hover:underline">
-                  {stop.customer?.address}
-                </Link>
+              </span>
+              {stop.customer?.address && (
+                <span className="text-xs text-charcoal/40 font-body truncate block">
+                  {stop.customer.address}
+                </span>
               )}
-              <div className="flex gap-2 mt-1">
-                {stop.has_dropoff && (
-                  <span className="text-xs text-charcoal/40">↓ Drop-off</span>
-                )}
-                {stop.has_pickup && (
-                  <span className="text-xs text-charcoal/40">↑ Pick-up</span>
-                )}
-              </div>
+              <span className="flex gap-2 mt-1">
+                {stop.has_dropoff && <span className="text-xs text-charcoal/40">↓ Drop-off</span>}
+                {stop.has_pickup && <span className="text-xs text-charcoal/40">↑ Pick-up</span>}
+              </span>
               {(stop.completed_at || stop.arrived_at) && (
-                <p className="text-xs text-green-primary font-body mt-1">
+                <span className="block text-xs text-green-primary font-body mt-1">
                   {stop.completed_at
                     ? `Delivered ${fmtTime(stop.completed_at)}`
                     : `Arrived ${fmtTime(stop.arrived_at!)}`}
-                </p>
+                </span>
               )}
-            </div>
+            </button>
 
             {/* Status */}
             <div className="text-right shrink-0">
@@ -270,6 +276,82 @@ export default function RouteBuilder({
           Dispatch Route to Driver
         </button>
       )}
+
+      {/* Delivery details popup — opened by tapping a stop card. Read-only view
+          of what happened at the stop; the customer profile is one explicit tap
+          away in the footer (rather than the card silently jumping there). */}
+      {detailStop && (() => {
+        const s = detailStop;
+        const isProspect = s.kind === "prospect_visit";
+        const photos = (s.photos ?? []).filter(Boolean);
+        const pieces = (s as RouteStop & { piece_count?: number | null }).piece_count ?? 0;
+        return (
+          <div className="fixed inset-0 z-50 bg-charcoal/40 flex items-end md:items-center justify-center md:p-6" onClick={() => setDetailStop(null)}>
+            <div className="bg-cream w-full md:max-w-lg rounded-t-2xl md:rounded-2xl max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="px-5 py-4 border-b border-cream-dark flex items-start justify-between gap-3 shrink-0">
+                <div className="min-w-0">
+                  <h3 className="font-serif text-xl font-light text-charcoal truncate">{s.customer?.name}</h3>
+                  {s.customer?.address && <p className="font-body text-xs text-charcoal/50 mt-0.5 truncate">{s.customer.address}</p>}
+                </div>
+                <button onClick={() => setDetailStop(null)} className="text-charcoal/40 p-1 shrink-0 text-lg leading-none">✕</button>
+              </div>
+
+              <div className="overflow-auto p-5 flex-1 space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`text-xs font-body px-2.5 py-1 rounded-full ${
+                    s.status === "completed" ? "bg-green-primary/10 text-green-primary"
+                    : s.status === "skipped" ? "bg-charcoal/5 text-charcoal/40"
+                    : s.status === "arrived" ? "bg-gold-primary/20 text-gold-dark"
+                    : "bg-cream-dark text-charcoal/50"}`}>{isProspect ? "🔔 Prospect visit" : s.status}</span>
+                  {s.has_dropoff && <span className="text-xs font-body px-2.5 py-1 rounded-full bg-cream-dark text-charcoal/60">↓ Drop-off</span>}
+                  {s.has_pickup && <span className="text-xs font-body px-2.5 py-1 rounded-full bg-cream-dark text-charcoal/60">↑ Pick-up</span>}
+                  {!isProspect && pieces > 0 && <span className="text-xs font-body px-2.5 py-1 rounded-full bg-cream-dark text-charcoal/60">{pieces} piece{pieces === 1 ? "" : "s"}</span>}
+                </div>
+
+                {(s.completed_at || s.arrived_at) && (
+                  <div className="font-body text-sm">
+                    {s.completed_at && <p className="text-green-primary">✓ {isProspect ? "Visited" : "Delivered"} {fmtTime(s.completed_at)}</p>}
+                    {s.arrived_at && <p className="text-charcoal/45 text-xs mt-0.5">Arrived {fmtTime(s.arrived_at)}</p>}
+                  </div>
+                )}
+
+                {s.notes && (
+                  <div>
+                    <p className="font-body text-[11px] uppercase tracking-widest text-charcoal/35 mb-1">Notes</p>
+                    <p className="font-body text-sm text-charcoal/75 whitespace-pre-wrap">{s.notes}</p>
+                  </div>
+                )}
+
+                {photos.length > 0 && (
+                  <div>
+                    <p className="font-body text-[11px] uppercase tracking-widest text-charcoal/35 mb-2">Proof photos</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {photos.map((p) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <a key={p.id} href={STORAGE_BASE + p.storage_path} target="_blank" rel="noopener noreferrer" className="block aspect-square rounded-lg overflow-hidden border border-cream-dark">
+                          <img src={STORAGE_BASE + p.storage_path} alt="delivery proof" className="w-full h-full object-cover" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!s.notes && photos.length === 0 && !s.completed_at && !s.arrived_at && (
+                  <p className="font-body text-sm text-charcoal/40">No additional details recorded for this stop.</p>
+                )}
+              </div>
+
+              {s.customer?.id && !isProspect && (
+                <div className="p-4 border-t border-cream-dark shrink-0">
+                  <Link href={`/dispatch/customers?id=${s.customer.id}`} className="w-full inline-flex items-center justify-center gap-2 border border-cream-dark text-green-primary rounded-xl py-3 font-body text-xs uppercase tracking-widest">
+                    View customer profile →
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

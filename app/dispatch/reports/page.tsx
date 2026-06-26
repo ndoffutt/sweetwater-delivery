@@ -31,6 +31,8 @@ function weekStart(d: Date) {
 export default async function ReportsPage() {
   const session = await getSession();
   if (!session) redirect("/");
+  // Reports hidden from the manager for now — block direct URL access too.
+  if (session.role === "dispatcher") redirect("/dispatch");
 
   const supabase = createAdminClient();
 
