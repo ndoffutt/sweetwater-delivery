@@ -126,7 +126,7 @@ export default function ProspectVisitSheet({
               onClick={() => window.open(mapsHref, "_blank")}
               style={{ flex: 1, minHeight: 54, borderRadius: 15, background: "#d59a29", color: "#1A1A1A", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
             >
-              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11" /></svg>
+              <svg width={18} height={18} viewBox="0 0 24 24" style={{ display: "block" }}><path fill="none" stroke="#1A1A1A" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M21 4L3 11l7 2.5L12.5 21 21 4z" /></svg>
               Navigate
             </button>
             <button
@@ -134,7 +134,7 @@ export default function ProspectVisitSheet({
               title="Couldn't reach · skip"
               style={{ width: 54, minHeight: 54, borderRadius: 15, background: "#fff", border: "1px solid #F0EBE1", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
             >
-              <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#b8821f" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+              <svg width={20} height={20} viewBox="0 0 24 24" style={{ display: "block" }}><g fill="none" stroke="#b8821f" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l9.5 16.5H2.5L12 3z" /><path d="M12 10v4" /></g><circle cx="12" cy="17" r="0.4" fill="#b8821f" /></svg>
             </button>
           </div>
           <SlideToConfirm label="Slide to log touchpoint" onConfirm={() => setArmed(true)} />
