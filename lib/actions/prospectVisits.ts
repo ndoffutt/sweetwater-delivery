@@ -11,6 +11,19 @@ const missingTable = (msg: string | undefined) =>
 
 const NEEDS_MIGRATION = "Run supabase/route_prospect_visits.sql first";
 
+// Call-only prospects are phone/email outreach — they must never be routed.
+async function isCallOnly(
+  supabase: ReturnType<typeof createAdminClient>,
+  prospectId: string
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("prospects")
+    .select("call_only")
+    .eq("id", prospectId)
+    .maybeSingle();
+  return !!(data as { call_only?: boolean | null } | null)?.call_only;
+}
+
 /**
  * Pick the persisted stop_order for a new prospect visit on a route AND bump
  * the subsequent stops in BOTH tables (route_stops + route_prospect_visits)
@@ -116,6 +129,12 @@ export async function addProspectToTodaysRoute(prospectId: string) {
   const supabase = createAdminClient();
   const today = easternToday();
 
+  // Call-only prospects are phone/email outreach — they must never be put on a
+  // route, even if they have an address.
+  if (await isCallOnly(supabase, prospectId)) {
+    return { error: "This is a call-only prospect — reach out by phone/email instead of routing a visit." };
+  }
+
   const { data: route } = await supabase
     .from("routes")
     .select("id, status")
@@ -174,6 +193,11 @@ export async function addProspectToTodaysRoute(prospectId: string) {
 export async function addProspectVisit(routeId: string, prospectId: string) {
   await requireSession("dispatcher");
   const supabase = createAdminClient();
+
+  // Call-only prospects never get routed (phone/email outreach only).
+  if (await isCallOnly(supabase, prospectId)) {
+    return { error: "This is a call-only prospect — reach out by phone/email instead of routing a visit." };
+  }
 
   const { data: existing } = await supabase
     .from("route_prospect_visits")
