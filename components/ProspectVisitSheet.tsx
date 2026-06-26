@@ -1,13 +1,23 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { completeProspectVisit } from "@/lib/actions/prospectVisits";
+import { runStopAction } from "@/lib/offline";
 import { googleVoiceCallHref } from "@/lib/phone";
+import SlideToConfirm from "@/components/SlideToConfirm";
 import type { RouteStop } from "@/lib/types";
 
 const ICON: Record<string, string> = {
   visit: "🚪", delivery: "🚐", call: "📞", email: "✉️", text: "💬", note: "📝",
 };
+
+// Touchpoint kinds the driver can log for a prospect stop. Visit is the default.
+type TouchKind = "visit" | "call" | "email" | "text";
+const TOUCH_KINDS: { id: TouchKind; label: string; icon: string }[] = [
+  { id: "visit", label: "Visit", icon: "🚪" },
+  { id: "call", label: "Call", icon: "📞" },
+  { id: "email", label: "Email", icon: "✉️" },
+  { id: "text", label: "Text", icon: "💬" },
+];
 
 const fmt = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -28,28 +38,47 @@ export default function ProspectVisitSheet({
   stop,
   expanded,
   onLogged,
+  onSynced,
 }: {
   stop: RouteStop;
   expanded: boolean;
-  onLogged: () => void;
+  onLogged: (outcome: "logged" | "skipped") => void;
+  onSynced?: () => void;
 }) {
   const pv = stop.prospect_visit!;
-  const done = stop.status === "completed";
+  const done = stop.status === "completed" || stop.status === "skipped";
+  const lat = stop.customer?.lat, lng = stop.customer?.lng;
+  const mapsHref = `https://www.google.com/maps/dir/?api=1&destination=${
+    lat != null && lng != null ? `${lat},${lng}` : encodeURIComponent(pv.address || pv.name)
+  }`;
+  const [armed, setArmed] = useState(false);   // slid → showing the detail form
+  const [kind, setKind] = useState<TouchKind>("visit");
   const [note, setNote] = useState("");
-  const [formOpen, setFormOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [skipOpen, setSkipOpen] = useState(false);
+  const [skipReason, setSkipReason] = useState("");
   const [error, setError] = useState("");
-  const [, start] = useTransition();
+  const [busy, start] = useTransition();
 
+  // Offline-first: update the UI now, queue the write (replays in the background
+  // when signal returns). Service is unreliable in the field, so logging must
+  // never block on or be lost to the network.
   function save() {
-    if (!note.trim()) { setError("Add a quick note about the visit."); return; }
-    setBusy(true);
-    setError("");
+    if (!note.trim()) { setError("Add a quick note about the touchpoint."); return; }
+    onLogged("logged");
+    // Refresh only AFTER the write lands — refreshing first would refetch the
+    // still-"planned" visit and snap the optimistic completion back, killing the
+    // auto-advance. Offline, runStopAction queues + resolves and safeRefresh no-ops.
     start(async () => {
-      const res = await completeProspectVisit(pv.id, pv.prospect_id, note);
-      setBusy(false);
-      if (res.error) { setError(res.error); return; }
-      onLogged();
+      await runStopAction({ kind: "prospectVisit", stopId: stop.id, visitId: pv.id, prospectId: pv.prospect_id, notes: note, touchType: kind });
+      onSynced?.();
+    });
+  }
+
+  function skip() {
+    onLogged("skipped");
+    start(async () => {
+      await runStopAction({ kind: "prospectSkip", stopId: stop.id, visitId: pv.id, reason: skipReason });
+      onSynced?.();
     });
   }
 
@@ -73,50 +102,97 @@ export default function ProspectVisitSheet({
         </div>
       </div>
 
-      {/* ── Always visible action zone: big LOG VISIT button → notes inline ── */}
-      {!done ? (
+      {/* ── Action zone: slide to log (→ detail) · caution to skip ── */}
+      {done ? (
+        <div style={{ marginTop: 14, background: "rgba(2,115,62,0.08)", border: "1px solid rgba(2,115,62,0.3)", borderRadius: 13, padding: "12px 14px" }}>
+          <div style={{ fontSize: 13.5, color: "#02733e", fontWeight: 500 }}>
+            {stop.status === "skipped" ? "⚠ Skipped" : "✓ Touchpoint logged"}
+          </div>
+          {stop.notes && <div style={{ fontSize: 13, color: "rgba(26,26,26,0.65)", marginTop: 4, lineHeight: 1.4 }}>{stop.notes}</div>}
+        </div>
+      ) : skipOpen ? (
         <div style={{ marginTop: 14 }}>
-          {!formOpen ? (
-            <button
-              onClick={() => setFormOpen(true)}
-              style={{ width: "100%", minHeight: 60, borderRadius: 16, border: "none", background: "#02733e", color: "#FAF6EC", fontSize: 15, fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}
-            >
-              📝 Log Visit
+          <div style={{ fontSize: 11, letterSpacing: "0.16em", textTransform: "uppercase", color: "#b8821f", fontWeight: 600, marginBottom: 8 }}>Why couldn&apos;t you do it?</div>
+          <textarea
+            value={skipReason}
+            onChange={(e) => setSkipReason(e.target.value)}
+            rows={2}
+            autoFocus
+            placeholder="No one available, closed, no answer…"
+            style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: "1px solid #E1DBCC", background: "#fff", fontSize: 15, color: "#1a1a1a", resize: "none", outline: "none", fontFamily: "inherit" }}
+          />
+          <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+            <button onClick={skip} disabled={busy} style={{ flex: 1, minHeight: 56, borderRadius: 16, border: "1px solid #b8821f", background: "#fff", color: "#b8821f", fontSize: 14, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer" }}>
+              {busy ? "Saving…" : "⚠ Mark skipped"}
             </button>
-          ) : (
-            <div>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={4}
-                autoFocus
-                placeholder="What happened? Who you spoke with, next step…"
-                style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: "1px solid #E1DBCC", background: "#fff", fontSize: 15, color: "#1a1a1a", resize: "none", outline: "none", fontFamily: "inherit" }}
-              />
-              {error && <div style={{ fontSize: 12.5, color: "#dc2626", marginTop: 6 }}>{error}</div>}
-              <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-                <button
-                  onClick={save}
-                  disabled={busy || !note.trim()}
-                  style={{ flex: 1, minHeight: 56, borderRadius: 16, border: "none", background: note.trim() && !busy ? "#02733e" : "rgba(26,26,26,0.05)", color: note.trim() && !busy ? "#FAF6EC" : "rgba(26,26,26,0.3)", fontSize: 15, fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", cursor: note.trim() && !busy ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}
-                >
-                  {busy ? "Saving…" : "✓ Save visit"}
-                </button>
-                <button
-                  onClick={() => { setFormOpen(false); setNote(""); setError(""); }}
-                  disabled={busy}
-                  style={{ minHeight: 56, padding: "0 18px", borderRadius: 16, border: `1px solid #E1DBCC`, background: "#fff", color: "rgba(26,26,26,0.55)", fontSize: 12, fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", cursor: "pointer" }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
+            <button onClick={() => { setSkipOpen(false); setSkipReason(""); setError(""); }} disabled={busy} style={{ minHeight: 56, padding: "0 18px", borderRadius: 16, border: "1px solid #E1DBCC", background: "#fff", color: "rgba(26,26,26,0.55)", fontSize: 12, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase", cursor: "pointer" }}>Back</button>
+          </div>
+          {error && <div style={{ fontSize: 12.5, color: "#dc2626", marginTop: 6 }}>{error}</div>}
+        </div>
+      ) : !armed ? (
+        // Same layout as a customer/delivery stop: Navigate + caution row, then slide.
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              onClick={() => window.open(mapsHref, "_blank")}
+              style={{ flex: 1, minHeight: 54, borderRadius: 15, background: "#d59a29", color: "#1A1A1A", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+            >
+              <svg width={18} height={18} viewBox="0 0 24 24" style={{ display: "block" }}><path fill="none" stroke="#1A1A1A" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M21 4L3 11l7 2.5L12.5 21 21 4z" /></svg>
+              Navigate
+            </button>
+            <button
+              onClick={() => setSkipOpen(true)}
+              title="Couldn't reach · skip"
+              style={{ width: 54, minHeight: 54, borderRadius: 15, background: "#fff", border: "1px solid #F0EBE1", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+            >
+              <svg width={20} height={20} viewBox="0 0 24 24" style={{ display: "block" }}><g fill="none" stroke="#b8821f" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l9.5 16.5H2.5L12 3z" /><path d="M12 10v4" /></g><circle cx="12" cy="17" r="0.4" fill="#b8821f" /></svg>
+            </button>
+          </div>
+          <SlideToConfirm label="Slide to log touchpoint" onConfirm={() => setArmed(true)} />
         </div>
       ) : (
-        <div style={{ marginTop: 14, background: "rgba(2,115,62,0.08)", border: "1px solid rgba(2,115,62,0.3)", borderRadius: 13, padding: "12px 14px" }}>
-          <div style={{ fontSize: 13.5, color: "#02733e", fontWeight: 500 }}>✓ Visit logged</div>
-          {stop.notes && <div style={{ fontSize: 13, color: "rgba(26,26,26,0.65)", marginTop: 4, lineHeight: 1.4 }}>{stop.notes}</div>}
+        <div style={{ marginTop: 14 }}>
+          {/* Type selector — default Visit, switch to Call / Email / Text */}
+          <div style={{ fontSize: 11, letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(26,26,26,0.4)", fontWeight: 600, marginBottom: 8 }}>What did you do?</div>
+          <div style={{ display: "flex", gap: 7, marginBottom: 12, flexWrap: "wrap" }}>
+            {TOUCH_KINDS.map((t) => {
+              const on = kind === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setKind(t.id)}
+                  style={{ flex: "1 1 0", minWidth: 64, minHeight: 46, borderRadius: 12, border: on ? "1.5px solid #02733e" : "1px solid #E1DBCC", background: on ? "rgba(2,115,62,0.08)" : "#fff", color: on ? "#02733e" : "rgba(26,26,26,0.6)", fontSize: 13, fontWeight: on ? 600 : 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}
+                >
+                  <span>{t.icon}</span>{t.label}
+                </button>
+              );
+            })}
+          </div>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={4}
+            autoFocus
+            placeholder="What happened? Who you spoke with, next step…"
+            style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 12, border: "1px solid #E1DBCC", background: "#fff", fontSize: 15, color: "#1a1a1a", resize: "none", outline: "none", fontFamily: "inherit" }}
+          />
+          {error && <div style={{ fontSize: 12.5, color: "#dc2626", marginTop: 6 }}>{error}</div>}
+          <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+            <button
+              onClick={save}
+              disabled={busy || !note.trim()}
+              style={{ flex: 1, minHeight: 56, borderRadius: 16, border: "none", background: note.trim() && !busy ? "#02733e" : "rgba(26,26,26,0.05)", color: note.trim() && !busy ? "#FAF6EC" : "rgba(26,26,26,0.3)", fontSize: 15, fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", cursor: note.trim() && !busy ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}
+            >
+              {busy ? "Saving…" : `✓ Log ${TOUCH_KINDS.find((t) => t.id === kind)?.label.toLowerCase()}`}
+            </button>
+            <button
+              onClick={() => { setArmed(false); setNote(""); setError(""); }}
+              disabled={busy}
+              style={{ minHeight: 56, padding: "0 18px", borderRadius: 16, border: "1px solid #E1DBCC", background: "#fff", color: "rgba(26,26,26,0.55)", fontSize: 12, fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase", cursor: "pointer" }}
+            >
+              Back
+            </button>
+          </div>
         </div>
       )}
 

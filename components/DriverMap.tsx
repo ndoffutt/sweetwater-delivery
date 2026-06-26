@@ -297,10 +297,16 @@ function mapsHref(c: { address: string; lat: number | null; lng: number | null }
 }
 
 // ── Main ───────────────────────────────────────────────────────
-export default function DriverMap({ initialStops, isManager, canMessage = false }: { initialStops: RouteStop[]; isManager: boolean; canMessage?: boolean }) {
+export default function DriverMap({ initialStops, isManager, canMessage = false, routeId }: { initialStops: RouteStop[]; isManager: boolean; canMessage?: boolean; routeId: string }) {
   const [stops, setStops] = useState(initialStops);
   const [targetId, setTargetId] = useState(() => (initialStops.find((s) => s.status === "pending" || s.status === "arrived") ?? initialStops[0])?.id ?? "");
-  const [sheet, setSheet] = useState<"peek" | "full">("peek");
+  // Prospect stops open expanded so the standing notes + touch history are
+  // visible by default (the driver wants context before logging a touchpoint);
+  // delivery stops open peeked.
+  const [sheet, setSheet] = useState<"peek" | "full">(() => {
+    const t = (initialStops.find((s) => s.status === "pending" || s.status === "arrived") ?? initialStops[0]);
+    return t?.kind === "prospect_visit" ? "full" : "peek";
+  });
   const [overview, setOverview] = useState(false);
   const [problemFor, setProblemFor] = useState<RouteStop | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -356,9 +362,29 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
   const finished = stops.filter((s) => s.status === "completed" || s.status === "skipped");
   const target = stops.find((s) => s.id === targetId) || remaining[0];
   const allDone = remaining.length === 0;
+
+  // The "Route Complete" screen sticks around all day (the completed route keeps
+  // loading) until the driver taps Done — then we remember the dismissal locally
+  // so reopening the app doesn't shove it back in their face.
+  const DONE_KEY = `sw-route-done-${routeId}`;
+  const [routeDismissed, setRouteDismissed] = useState(false);
+  useEffect(() => {
+    try { setRouteDismissed(localStorage.getItem(DONE_KEY) === "1"); } catch {}
+  }, [DONE_KEY]);
+  function markRouteDone() {
+    try { localStorage.setItem(DONE_KEY, "1"); } catch {}
+    setRouteDismissed(true);
+    // No auto-push to dispatch — the manager lands on the calm "All done for
+    // today" card and taps its own "Back to Dispatch" when ready. Bouncing them
+    // out immediately felt too abrupt.
+  }
   const photoCount = (s: RouteStop) => (s.photos?.length ?? 0) + (photoBump[s.id] ?? 0);
 
-  function selectPin(id: string) { setTargetId(id); setSheet("peek"); }
+  function selectPin(id: string) {
+    setTargetId(id);
+    // Prospect stops open expanded (notes + history in view); deliveries peek.
+    setSheet(stops.find((s) => s.id === id)?.kind === "prospect_visit" ? "full" : "peek");
+  }
 
   function arrive(s: RouteStop) {
     patch(s.id, { status: "arrived", arrived_at: new Date().toISOString() });
@@ -414,6 +440,23 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
   const didSomething = !!target && (target.dropoff_confirmed || target.pickup_confirmed);
   const canComplete = !!target && photoCount(target) > 0 && didSomething;
   const existingPhotos = target ? (target.photos ?? []).map((p) => ({ id: p.id, url: STORAGE_BASE + p.storage_path })) : [];
+
+  // After the driver taps Done on a finished route, show a calm end-of-day card
+  // instead of the map for the rest of the day.
+  if (allDone && routeDismissed) {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "#EAE6DC", fontFamily: C.body, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div style={{ textAlign: "center", maxWidth: 320 }}>
+          <div style={{ width: 80, height: 80, borderRadius: "50%", background: "rgba(2,115,62,0.1)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}><Icon name="check" size={42} color={C.green} strokeWidth={2.4} /></div>
+          <div style={{ fontFamily: C.serif, fontSize: 30, color: C.green, fontWeight: 500 }}>All done for today</div>
+          <div style={{ fontSize: 14.5, color: "rgba(26,26,26,0.55)", marginTop: 6, lineHeight: 1.5 }}>Nice work — every stop on today&apos;s route is complete.</div>
+          {isManager && (
+            <button onClick={() => router.push("/dispatch")} style={{ marginTop: 20, minHeight: 52, padding: "0 28px", borderRadius: 16, background: C.green, color: C.cream, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase" }}>Back to Dispatch</button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ position: "fixed", inset: 0, overflow: "hidden", background: "#EAE6DC", fontFamily: C.body }}>
@@ -477,6 +520,7 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
             <div style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(2,115,62,0.1)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}><Icon name="check" size={38} color={C.green} strokeWidth={2.4} /></div>
             <div style={{ fontFamily: C.serif, fontSize: 28, color: C.green, fontWeight: 500 }}>Route Complete</div>
             <div style={{ fontSize: 14, color: "rgba(26,26,26,0.5)", marginTop: 3 }}>All {stops.length} stops done. Head back to the shop.</div>
+            <button onClick={markRouteDone} style={{ marginTop: 18, width: "100%", minHeight: 56, borderRadius: 16, background: C.green, color: C.cream, border: "none", cursor: "pointer", fontSize: 15, fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase" }}>Done</button>
           </div>
         </BottomShell>
       ) : target && target.kind === "prospect_visit" && target.prospect_visit ? (
@@ -486,12 +530,18 @@ export default function DriverMap({ initialStops, isManager, canMessage = false 
             key={target.id}
             stop={target}
             expanded={sheet === "full"}
-            onLogged={() => {
-              patch(target.id, { status: "completed", completed_at: new Date().toISOString() });
-              flash("Visit logged");
-              setSheet("peek");
-              safeRefresh();
+            onLogged={(outcome) => {
+              patch(target.id, { status: outcome === "skipped" ? "skipped" : "completed", completed_at: new Date().toISOString() });
+              // Auto-advance to the next unfinished stop, just like a delivery.
+              const next = stops.find((x) => (x.status === "pending" || x.status === "arrived") && x.id !== target.id);
+              setTargetId(next ? next.id : target.id);
+              flash(outcome === "skipped" ? "Visit skipped — dispatch notified" : "Touchpoint logged");
+              // Keep a prospect next-stop expanded (notes + history in view).
+              setSheet(next?.kind === "prospect_visit" ? "full" : "peek");
+              // NB: no safeRefresh() here — the sheet calls onSynced after the write
+              // lands so we don't refetch stale "planned" data and undo the advance.
             }}
+            onSynced={safeRefresh}
           />
         </BottomShell>
       ) : target && cust && (

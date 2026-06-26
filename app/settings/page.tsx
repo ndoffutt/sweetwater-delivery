@@ -9,6 +9,8 @@ export default async function SettingsPage() {
   const session = await getSession();
   if (!session) redirect("/");
   if (session.role === "driver") redirect("/driver");
+  // Settings is owner-only for now — keep the manager out, even by direct URL.
+  if (session.role === "dispatcher") redirect("/dispatch");
 
   const supabase = createAdminClient();
   const { data } = await supabase

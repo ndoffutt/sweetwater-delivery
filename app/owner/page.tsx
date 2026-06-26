@@ -24,5 +24,5 @@ export default async function HomePage() {
 
   const activity = await getRecentActivity(20);
 
-  return <OwnerHome name={session.name} overdueCount={overdueCount} activity={activity} />;
+  return <OwnerHome name={session.name} role={session.role} overdueCount={overdueCount} activity={activity} />;
 }

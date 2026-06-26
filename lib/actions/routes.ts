@@ -111,6 +111,63 @@ export async function moveStop(
   return { success: true };
 }
 
+/**
+ * Reorder a route item — delivery stop OR prospect visit — within the SINGLE
+ * woven sequence (both share route stop_order). Loads both tables, sorts by
+ * stop_order, swaps the target with its neighbor (whatever kind it is), then
+ * renumbers everything 1..N so the order stays clean and gap-free. Tolerant of
+ * the route_prospect_visits table / stop_order column not existing yet.
+ */
+export async function moveRouteItem(
+  routeId: string,
+  itemId: string,
+  kind: "stop" | "visit",
+  direction: "up" | "down"
+) {
+  await requireSession("dispatcher");
+  const supabase = createAdminClient();
+
+  type Item = { id: string; stop_order: number | null; kind: "stop" | "visit" };
+  const { data: stopRows } = await supabase
+    .from("route_stops")
+    .select("id, stop_order")
+    .eq("route_id", routeId)
+    .is("deleted_at", null);
+  let visitRows: { id: string; stop_order: number | null }[] = [];
+  try {
+    const { data } = await supabase
+      .from("route_prospect_visits")
+      .select("id, stop_order")
+      .eq("route_id", routeId)
+      .is("deleted_at", null);
+    visitRows = data ?? [];
+  } catch { /* table absent — deliveries only */ }
+
+  const items: Item[] = [
+    ...((stopRows ?? []) as { id: string; stop_order: number | null }[]).map((s) => ({ ...s, kind: "stop" as const })),
+    ...visitRows.map((v) => ({ ...v, kind: "visit" as const })),
+  ].sort((a, b) => (a.stop_order ?? 0) - (b.stop_order ?? 0));
+
+  const idx = items.findIndex((i) => i.kind === kind && i.id === itemId);
+  if (idx === -1) return { error: "Item not found" };
+  const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+  if (swapIdx < 0 || swapIdx >= items.length) return { success: true };
+
+  [items[idx], items[swapIdx]] = [items[swapIdx], items[idx]];
+
+  // Renumber the whole sequence 1..N to its new order.
+  await Promise.all(
+    items.map((it, i) =>
+      supabase.from(it.kind === "stop" ? "route_stops" : "route_prospect_visits")
+        .update({ stop_order: i + 1 })
+        .eq("id", it.id)
+    )
+  );
+
+  revalidatePath(`/dispatch/route/${routeId}`);
+  return { success: true };
+}
+
 export async function dispatchRoute(routeId: string) {
   await requireSession("dispatcher");
   const supabase = createAdminClient();

@@ -48,7 +48,8 @@ export async function resolveManifestStops(
  */
 export async function createRouteFromManifest(
   stops: ManifestStopInput[],
-  status: "draft" | "dispatched" = "draft"
+  status: "draft" | "dispatched" = "draft",
+  source: "manifest" | "manual" = "manifest"
 ) {
   const session = await requireSession("dispatcher");
 
@@ -199,6 +200,11 @@ export async function createRouteFromManifest(
     routeId = created.id;
   }
 
+  // Best-effort: record how the route was built (manifest scan vs manual) so
+  // Recent Dispatches can mark it. Tolerant of the `source` column not being
+  // migrated yet — a failure here must never block the dispatch.
+  await supabase.from("routes").update({ source }).eq("id", routeId);
+
   const rows = resolved.map((r, i) => ({
     route_id: routeId,
     customer_id: r.customerId,
@@ -254,8 +260,8 @@ export async function clearTodaysRoute() {
  * Review → Send: write today's route as `dispatched` (the driver app consumes it)
  * with the stops in the given order. Same match-or-create logic as the draft path.
  */
-export async function dispatchRoute(stops: ManifestStopInput[]) {
-  return createRouteFromManifest(stops, "dispatched");
+export async function dispatchRoute(stops: ManifestStopInput[], source: "manifest" | "manual" = "manifest") {
+  return createRouteFromManifest(stops, "dispatched", source);
 }
 
 /**

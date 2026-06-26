@@ -11,6 +11,7 @@ import { dayForLocation, dayForDow, DAY_LABEL, RUN_DAYS, type DeliveryDay } from
 import RouteMap from "@/components/RouteMap";
 import NearbyVisits, { type NearbyItem } from "@/components/NearbyVisits";
 import PlannedVisits, { type PlannedVisit } from "@/components/PlannedVisits";
+import { addProspectVisit } from "@/lib/actions/prospectVisits";
 import type { RouteStop } from "@/lib/types";
 
 export interface InitialStop {
@@ -27,6 +28,7 @@ export interface InitialStop {
   lng: number | null;
   vip: boolean;
   days?: DeliveryDay[];
+  stopOrder?: number | null;
 }
 
 export interface MasterStop {
@@ -83,7 +85,7 @@ const geoDays = (lng: number | null | undefined): DeliveryDay[] => {
   return d ? [d] : [];
 };
 
-interface RecentRoute { id: string; date: string; status: string; completedAt: string | null; stopCount: number }
+interface RecentRoute { id: string; date: string; status: string; completedAt: string | null; stopCount: number; source: string | null }
 
 export interface NearbyProspect { id: string; name: string; lat: number; lng: number; town: string | null }
 
@@ -109,7 +111,9 @@ function RecentDispatches({ routes }: { routes: RecentRoute[] }) {
           const label = done ? "Completed" : r.status === "in_progress" ? "Out for delivery" : "Dispatched";
           return (
             <Link key={r.id} href={`/dispatch/route/${r.id}`} className="flex items-center gap-3 py-2.5 -mx-1 px-1 rounded-lg hover:bg-cream-dark/30 active:bg-cream-dark/40 transition-colors">
-              <span className="shrink-0 text-charcoal/40"><Ic d={I.truck} size={16} /></span>
+              <span className="shrink-0 text-charcoal/40" title={r.source === "manual" ? "Built manually" : "Scanned from manifest"}>
+                <Ic d={r.source === "manual" ? I.edit : I.file} size={16} />
+              </span>
               <span className="font-body text-sm text-charcoal">{d}</span>
               <span className="font-body text-xs text-charcoal/40">{r.stopCount} stop{r.stopCount === 1 ? "" : "s"}</span>
               <span className={`ml-auto font-body text-[11px] uppercase tracking-wide px-2 py-0.5 rounded-full ${done ? "bg-cream-dark text-charcoal/50" : "bg-green-primary/10 text-green-primary"}`}>
@@ -183,6 +187,7 @@ const I = {
   sparkle: "M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3z",
   truck: "M3 6h10v9H3zM13 9h4l3 3v3h-7z M7 18.6a1.6 1.6 0 100-3.2 1.6 1.6 0 000 3.2z M17 18.6a1.6 1.6 0 100-3.2 1.6 1.6 0 000 3.2z",
   edit: "M4 20h4L18.5 9.5a2 2 0 00-3-3L5 17v3z",
+  bell: "M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9 M13.7 21a2 2 0 01-3.4 0",
 };
 
 export default function DispatchConsole({
@@ -206,7 +211,7 @@ export default function DispatchConsole({
   masterRoute?: MasterStop[];
   allCustomers?: PickCustomer[];
   dispatchDow?: number; // 0-6 weekday (Eastern) of today's route date
-  recentRoutes?: { id: string; date: string; status: string; completedAt: string | null; stopCount: number }[];
+  recentRoutes?: { id: string; date: string; status: string; completedAt: string | null; stopCount: number; source: string | null }[];
   overdueProspects?: NearbyProspect[];
   plannedVisitIds?: string[];
   plannedVisits?: PlannedVisit[];
@@ -253,6 +258,16 @@ export default function DispatchConsole({
   // Key of the new-customer row whose full-route placement is being confirmed.
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
   const [draftSaved, setDraftSaved] = useState(false);
+  // Who's running this route: a plain driver run, or a manager run that can also
+  // knock out overdue prospect visits along the way.
+  const [runBy, setRunBy] = useState<"driver" | "manager">("driver");
+  const [selectedVisitIds, setSelectedVisitIds] = useState<string[]>([]);
+  // The run-by choice + prospect pick happen in a focused popup rather than
+  // inline, so the review stays clean and the send flow reads as one step.
+  const [assignOpen, setAssignOpen] = useState(false);
+  // How this route was built — recorded on the route so Recent Dispatches can
+  // mark scanned-from-manifest vs built-by-hand.
+  const [routeSource, setRouteSource] = useState<"manifest" | "manual">("manifest");
   // Manual route builder: "create" starts a fresh list, "add" appends to the
   // current review list. null = picker closed.
   const [picking, setPicking] = useState<null | "create" | "add">(null);
@@ -330,6 +345,7 @@ export default function DispatchConsole({
       const ordered = orderWithSuggestions(built, masterRoute);
       setRows(ordered);
       setOriginal(ordered);
+      setRouteSource("manifest");
       setPhase("review");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't read that manifest");
@@ -429,12 +445,15 @@ export default function DispatchConsole({
         lng: r.lng ?? null,
         customerId: r.merge ?? r.customerId ?? null,
       }));
-      const result = await dispatchRoute(payload);
-      if (result.error) setError(result.error);
-      else {
-        setPhase("dispatched");
-        router.refresh();
+      const result = await dispatchRoute(payload, routeSource);
+      if (result.error) { setError(result.error); return; }
+      // Manager run: attach the chosen overdue prospects as visits on the route.
+      if (runBy === "manager" && result.routeId && selectedVisitIds.length) {
+        await Promise.all(selectedVisitIds.map((id) => addProspectVisit(result.routeId!, id)));
       }
+      setAssignOpen(false);
+      setPhase("dispatched");
+      router.refresh();
     });
   }
 
@@ -479,6 +498,12 @@ export default function DispatchConsole({
     if (replace) setOriginal([]);
     setPicking(null);
     setPhase("review");
+    // Built by hand → jump straight to the assign popup instead of dropping the
+    // dispatcher back on the review screen (the round-trip read as confusing).
+    if (replace) {
+      setRouteSource("manual");
+      setAssignOpen(true);
+    }
   }
 
   function saveDraft() {
@@ -582,50 +607,6 @@ export default function DispatchConsole({
 
         {error && <p className="text-center text-sm text-red-600 font-body mt-4">{error}</p>}
 
-        {phase === "empty" && lastScan && (
-          <div className="mt-4 bg-cream rounded-2xl border border-cream-dark p-4 md:p-5">
-            <div className="flex items-center justify-between mb-3 gap-2">
-              <span className="inline-flex items-center gap-2 text-charcoal/40">
-                <Ic d={I.file} size={15} />
-                <span className="font-body text-[11px] uppercase tracking-widest text-charcoal/40">
-                  Last scanned manifest · {new Date(lastScan.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}
-                </span>
-              </span>
-              <span className="inline-flex items-center gap-1.5 text-green-primary font-body text-xs font-medium">
-                <Ic d={I.check} size={14} /> {lastScan.stopCount} stops read
-              </span>
-            </div>
-            <div className="flex gap-4 flex-wrap md:flex-nowrap">
-              {lastScan.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={lastScan.imageUrl} alt="scanned manifest" className="w-full md:w-36 shrink-0 rounded-lg border border-cream-dark object-cover max-h-52" />
-              ) : (
-                <div className="w-full md:w-36 shrink-0 rounded-lg border border-cream-dark bg-cream-dark/40 flex items-center justify-center text-charcoal/30 text-xs font-body py-8">
-                  {lastScan.source.toUpperCase()}
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="font-body text-[11px] uppercase tracking-widest text-charcoal/35 mb-2">What Claude pulled from it</p>
-                <div className="space-y-1.5">
-                  {lastScan.stops.slice(0, 5).map((s, i) => (
-                    <div key={i} className="flex items-center gap-2 min-w-0">
-                      <span className="w-5 h-5 shrink-0 rounded-full bg-cream-dark text-charcoal/50 text-[11px] font-body flex items-center justify-center">{i + 1}</span>
-                      <span className="font-body text-sm text-charcoal truncate">{s.customer_name}</span>
-                      <span className="ml-auto flex gap-1 shrink-0">
-                        {s.has_dropoff && <TaskChip drop />}
-                        {s.has_pickup && <TaskChip />}
-                      </span>
-                    </div>
-                  ))}
-                  {lastScan.stops.length > 5 && (
-                    <p className="font-body text-xs text-charcoal/40 pl-7">+ {lastScan.stops.length - 5} more</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {phase === "empty" && <RecentDispatches routes={recentRoutes} />}
 
         {picking && (
@@ -643,6 +624,45 @@ export default function DispatchConsole({
 
   // ── REVIEW / DISPATCHED ──────────────────────────────────────
   const dispatched = phase === "dispatched";
+
+  // Once dispatched, show the route as it actually runs: deliveries + the
+  // attached prospect visits, woven together by their persisted stop_order
+  // (cheapest-insertion set those at attach time) and renumbered 1..N. Driven
+  // off server data (today.stops + plannedVisits) so it stays correct after the
+  // post-send refresh, when the client rows no longer carry stop_order.
+  type WovenStop =
+    | { kind: "delivery"; order: number; name: string; address: string; town: string; vip: boolean; pieces: number; has_dropoff: boolean; has_pickup: boolean }
+    | { kind: "prospect"; order: number; name: string; visited: boolean };
+  const deliveryStops = today?.stops ?? [];
+  const wovenStops: WovenStop[] = dispatched
+    ? [
+        ...deliveryStops.map((s, i) => ({
+          kind: "delivery" as const, order: s.stopOrder ?? i, name: s.name, address: s.address,
+          town: s.town, vip: s.vip, pieces: s.pieces, has_dropoff: s.has_dropoff, has_pickup: s.has_pickup,
+        })),
+        ...plannedVisits.map((v, i) => ({
+          kind: "prospect" as const, order: v.stopOrder ?? 9000 + i, name: v.name, visited: v.status === "visited",
+        })),
+      ].sort((a, b) => a.order - b.order)
+    : [];
+  // Dispatched-view counts (server-authoritative; include prospects).
+  const dispStops = deliveryStops.length + plannedVisits.length;
+  const dispDrops = deliveryStops.filter((s) => s.has_dropoff).length;
+  const dispPicks = deliveryStops.filter((s) => s.has_pickup).length;
+  const prospectCount = plannedVisits.length;
+
+  // Overdue prospects ranked by how "on the route" they are — least detour from
+  // the current stops first. Available during review (no saved route needed) so
+  // a manager can pick which to fold into the run before sending.
+  const routeProspects = overdueProspects
+    .map((p) => {
+      let min = Infinity;
+      for (const r of included) {
+        if (r.lat != null && r.lng != null) min = Math.min(min, milesBetween(p.lat, p.lng, r.lat, r.lng));
+      }
+      return { id: p.id, name: p.name, town: p.town, miles: min };
+    })
+    .sort((a, b) => a.miles - b.miles);
 
   // Overdue prospects sitting within a few miles of any of today's stops.
   const routeId = today?.id ?? null;
@@ -677,10 +697,12 @@ export default function DispatchConsole({
 
       {/* summary strip */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-5">
-        <Stat icon={I.sparkle} value={included.length} label="Stops" />
-        <Stat icon={I.check} value={drops} label="Drop-offs" />
-        <Stat icon={I.send} value={picks} label="Pick-ups" />
-        {totalPieces > 0 ? <Stat icon={I.file} value={totalPieces} label="Items" /> : null}
+        <Stat icon={I.sparkle} value={dispatched ? dispStops : included.length} label="Stops" />
+        <Stat icon={I.check} value={dispatched ? dispDrops : drops} label="Drop-offs" />
+        <Stat icon={I.send} value={dispatched ? dispPicks : picks} label="Pick-ups" />
+        {dispatched && prospectCount > 0
+          ? <Stat icon={I.bell} value={prospectCount} label="Prospect visits" />
+          : totalPieces > 0 ? <Stat icon={I.file} value={totalPieces} label="Items" /> : null}
         <div className="bg-cream rounded-xl border border-cream-dark p-4 flex items-center gap-2.5">
           <span className="text-green-primary"><Ic d={I.truck} size={20} /></span>
           <div className="min-w-0">
@@ -711,7 +733,35 @@ export default function DispatchConsole({
           </div>
 
           <div className="p-2">
-            {included.map((r, i) => (
+            {/* Dispatched: read-only woven route — deliveries + prospect visits
+                in route order, renumbered 1..N. */}
+            {dispatched && wovenStops.map((w, i) => (
+              <div key={i} className={`flex items-start gap-2.5 p-2.5 rounded-xl ${w.kind === "prospect" ? "bg-gold-primary/[0.06]" : ""}`}>
+                <span className={`w-7 h-7 shrink-0 rounded-full text-sm font-body flex items-center justify-center mt-0.5 ${w.kind === "prospect" ? "bg-gold-primary/20 text-gold-dark ring-1 ring-gold-primary/40" : "bg-green-primary text-cream"}`}>{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-body text-[15px] font-medium text-charcoal truncate">{w.name}</span>
+                    {w.kind === "delivery" && w.vip && <span className="text-gold-dark shrink-0"><Ic d={I.star} size={13} fill /></span>}
+                  </div>
+                  {w.kind === "delivery" ? (
+                    <div className="font-body text-xs text-charcoal/45 truncate">{w.address}{w.town ? ` · ${w.town}` : ""}{w.pieces > 0 ? ` · ${w.pieces} pc${w.pieces === 1 ? "" : "s"}` : ""}</div>
+                  ) : (
+                    <div className="font-body text-xs text-gold-dark truncate">{w.visited ? "Prospect visit · visited" : "Prospect visit"}</div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {w.kind === "delivery" ? (
+                    <>
+                      {w.has_dropoff && <TaskChip drop />}
+                      {w.has_pickup && <TaskChip />}
+                    </>
+                  ) : (
+                    <span className="text-[10px] font-body uppercase tracking-wide px-2 py-1 rounded-md bg-gold-primary/15 text-gold-dark">🔔 Prospect</span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {!dispatched && included.map((r, i) => (
               <div
                 key={r.key}
                 onClick={() => setSel(r.key)}
@@ -805,7 +855,9 @@ export default function DispatchConsole({
         {/* map + send */}
         <div className="flex flex-col gap-4 md:sticky md:top-4">
           <div className="bg-cream rounded-2xl border border-cream-dark overflow-hidden">
-            <div className="relative h-52">
+            {/* Map hidden on mobile — it hijacked touch-scroll and made the page
+                hard to scroll past. Still shown on desktop where that's a non-issue. */}
+            <div className="relative h-52 hidden md:block">
               <RouteMap stops={mapStops} targetId={sel} onSelect={setSel} suggestedIds={suggestedIds} />
             </div>
             <div className="flex items-center justify-between px-4 py-3">
@@ -825,7 +877,9 @@ export default function DispatchConsole({
                   <div className="font-body text-xs text-charcoal/55">Sent to {first(driverName)} · {new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</div>
                 </div>
               </div>
-              <button onClick={() => setPhase("review")} className="w-full mt-4 inline-flex items-center justify-center gap-2 border border-cream-dark text-green-primary rounded-xl py-3 font-body text-xs uppercase tracking-widest">
+              {/* Edit the live route in the route editor, where deliveries AND
+                  woven prospect visits can be reordered/removed. */}
+              <button onClick={() => { if (today?.id) router.push(`/dispatch/route/${today.id}`); else setPhase("review"); }} className="w-full mt-4 inline-flex items-center justify-center gap-2 border border-cream-dark text-green-primary rounded-xl py-3 font-body text-xs uppercase tracking-widest">
                 <Ic d={I.edit} size={15} /> Edit route
               </button>
               <button onClick={clearDispatch} disabled={isPending} className="w-full mt-2 inline-flex items-center justify-center gap-2 text-red-500 rounded-xl py-2.5 font-body text-xs uppercase tracking-widest disabled:opacity-60">
@@ -843,11 +897,11 @@ export default function DispatchConsole({
                 </div>
               </div>
               <button
-                onClick={send}
+                onClick={() => setAssignOpen(true)}
                 disabled={isPending || included.length === 0}
                 className="w-full inline-flex items-center justify-center gap-2 bg-green-primary text-cream rounded-xl py-3.5 font-body text-sm uppercase tracking-widest disabled:opacity-60"
               >
-                <Ic d={I.send} size={18} /> {isPending ? "Sending…" : `Send route to ${first(driverName)}`}
+                <Ic d={I.send} size={18} /> Assign &amp; send
               </button>
               <button
                 onClick={saveDraft}
@@ -868,8 +922,10 @@ export default function DispatchConsole({
         </div>
       </div>
 
-      {routeId && <PlannedVisits routeId={routeId} visits={plannedVisits} />}
-      {routeId && <NearbyVisits routeId={routeId} items={nearbyVisits} initialAdded={plannedVisitIds} />}
+      {/* Once dispatched the prospects are woven into the route list above, so
+          the separate planned-visits panel would just duplicate them. */}
+      {routeId && !dispatched && <PlannedVisits routeId={routeId} visits={plannedVisits} />}
+      {routeId && !dispatched && <NearbyVisits routeId={routeId} items={nearbyVisits} initialAdded={plannedVisitIds} />}
 
       <RecentDispatches routes={recentRoutes} />
 
@@ -894,6 +950,86 @@ export default function DispatchConsole({
           onClose={() => setPicking(null)}
           onApply={applyPicked}
         />
+      )}
+
+      {/* Assign & send popup — pick who runs the route, then (for a manager) fold
+          in overdue prospect visits, all in one focused step. */}
+      {assignOpen && !dispatched && (
+        <div className="fixed inset-0 z-50 bg-charcoal/40 flex items-end md:items-center justify-center md:p-6" onClick={() => setAssignOpen(false)}>
+          <div className="bg-cream w-full md:max-w-lg rounded-t-2xl md:rounded-2xl max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-cream-dark flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="font-serif text-xl font-light text-charcoal">Send route</h3>
+                <p className="font-body text-xs text-charcoal/50 mt-0.5">{included.length} stop{included.length === 1 ? "" : "s"} · {first(driverName)}</p>
+              </div>
+              <button onClick={() => setAssignOpen(false)} className="text-charcoal/40 p-1.5"><Ic d={I.x} size={20} /></button>
+            </div>
+
+            <div className="overflow-auto p-5 flex-1 space-y-4">
+              {/* Who's running this route? */}
+              <div>
+                <p className="font-body text-[11px] uppercase tracking-widest text-charcoal/35 mb-2">Who&apos;s running this route?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["driver", "manager"] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setRunBy(m)}
+                      className={`min-h-tap py-3 rounded-xl text-xs font-body uppercase tracking-widest ${runBy === m ? "bg-green-primary text-cream" : "bg-cream border border-cream-dark text-charcoal/55"}`}
+                    >
+                      {m === "driver" ? "Driver" : "Manager"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Manager run: fold in overdue prospect visits, most on-route first */}
+              {runBy === "manager" && (
+                <div>
+                  <p className="font-body text-[11px] uppercase tracking-widest text-gold-dark mb-2">
+                    Add prospect visits
+                    {selectedVisitIds.length > 0 && <span className="text-charcoal/40"> · {selectedVisitIds.length} selected</span>}
+                  </p>
+                  {routeProspects.length === 0 ? (
+                    <p className="font-body text-xs text-charcoal/40">No overdue prospects right now.</p>
+                  ) : (
+                    <div className="max-h-64 overflow-auto divide-y divide-cream-dark border border-cream-dark rounded-xl">
+                      {routeProspects.map((p) => {
+                        const on = selectedVisitIds.includes(p.id);
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setSelectedVisitIds((s) => (on ? s.filter((x) => x !== p.id) : [...s, p.id]))}
+                            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left"
+                          >
+                            <span className={`shrink-0 w-4 h-4 rounded border flex items-center justify-center text-[10px] ${on ? "bg-green-primary border-green-primary text-cream" : "border-charcoal/30"}`}>{on ? "✓" : ""}</span>
+                            <span className="flex-1 min-w-0">
+                              <span className="font-body text-sm text-charcoal truncate block">🔔 {p.name}</span>
+                              <span className="font-body text-[11px] text-charcoal/45">
+                                {p.town ? `${p.town} · ` : ""}{isFinite(p.miles) ? `${p.miles.toFixed(1)} mi from route` : "no location"}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-cream-dark shrink-0">
+              <button
+                onClick={send}
+                disabled={isPending || included.length === 0}
+                className="w-full inline-flex items-center justify-center gap-2 bg-green-primary text-cream rounded-xl py-3.5 font-body text-sm uppercase tracking-widest disabled:opacity-60"
+              >
+                <Ic d={I.send} size={18} /> {isPending ? "Sending…" : runBy === "manager" && selectedVisitIds.length > 0 ? `Send route + ${selectedVisitIds.length} visit${selectedVisitIds.length === 1 ? "" : "s"}` : "Send route"}
+              </button>
+              {error && <p className="text-center text-xs text-red-600 font-body mt-2">{error}</p>}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

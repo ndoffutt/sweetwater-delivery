@@ -16,13 +16,20 @@ export default async function DriverPage() {
   const supabase = createAdminClient();
   const today = easternToday();
 
-  const { data: route } = await supabase
+  const { data: routes } = await supabase
     .from("routes")
     .select(`*, route_stops(*, customer:customers(*), photos:stop_photos(*))`)
     .eq("date", today)
-    .in("status", ["dispatched", "in_progress"])
-    .order("stop_order", { referencedTable: "route_stops" })
-    .single();
+    .in("status", ["dispatched", "in_progress", "completed"])
+    .order("stop_order", { referencedTable: "route_stops" });
+
+  // Prefer an active route; otherwise fall back to today's completed route so the
+  // "Route Complete" screen persists for the whole day until the driver taps Done
+  // (the dismissal itself is remembered client-side).
+  const route =
+    (routes ?? []).find((r) => r.status === "dispatched" || r.status === "in_progress") ??
+    (routes ?? []).find((r) => r.status === "completed") ??
+    null;
 
   if (!route) {
     return (
@@ -93,7 +100,7 @@ export default async function DriverPage() {
           route_id: route.id,
           customer_id: p.id, // unused, kept non-null for the type
           stop_order: (r as unknown as { stop_order: number | null }).stop_order ?? 0,
-          status: r.status === "visited" ? "completed" : "pending",
+          status: r.status === "visited" ? "completed" : r.status === "skipped" ? "skipped" : "pending",
           has_dropoff: false,
           has_pickup: false,
           dropoff_confirmed: false,
@@ -139,5 +146,5 @@ export default async function DriverPage() {
   );
   const stops: RouteStop[] = merged.map((s, i) => ({ ...s, stop_order: i + 1 }));
 
-  return <DriverMap initialStops={stops} isManager={isManager} canMessage={session.role === "admin"} />;
+  return <DriverMap initialStops={stops} isManager={isManager} canMessage={session.role === "admin"} routeId={route.id} />;
 }

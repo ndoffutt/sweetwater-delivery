@@ -69,14 +69,19 @@ function ago(iso: string): string {
 
 export default function OwnerHome({
   name,
+  role = "admin",
   overdueCount = 0,
   activity = [],
 }: {
   name: string;
+  role?: string;
   overdueCount?: number;
   activity?: ActivityItem[];
 }) {
   const router = useRouter();
+
+  // Settings (drivers & team) is owner-only for now — hide it from the manager.
+  const sections = SECTIONS.filter((s) => !(s.href === "/settings" && role !== "admin"));
 
   async function signOut() {
     await logout();
@@ -103,7 +108,7 @@ export default function OwnerHome({
 
         {/* Sections */}
         <div className="grid grid-cols-2 gap-3">
-          {SECTIONS.map((s) => {
+          {sections.map((s) => {
             const showBadge = s.href === "/sales" && overdueCount > 0;
             return (
               <Link

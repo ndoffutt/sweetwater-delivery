@@ -59,7 +59,7 @@ export default async function DispatchPage() {
       .is("deleted_at", null)
       .order("name");
 
-  const [routeRes, lastScan, { count: signupCount }, { data: masterRows }, customersRes, { data: recentRows }] = await Promise.all([
+  const [routeRes, lastScan, { count: signupCount }, { data: masterRows }, customersRes, recentRes] = await Promise.all([
     routeSelect(true),
     getLastManifestScan(),
     supabase
@@ -77,20 +77,36 @@ export default async function DispatchPage() {
     // Recent dispatches (the actually-sent routes), newest first.
     supabase
       .from("routes")
-      .select("id,date,status,completed_at,route_stops(count)")
+      .select("id,date,status,source,completed_at,route_stops(count)")
       .in("status", ["dispatched", "in_progress", "completed"])
       .is("deleted_at", null)
       .order("date", { ascending: false })
       .limit(14),
   ]);
 
+  // Tolerant of the `source` column not being migrated yet — if selecting it
+  // errors, fall back to the same query without it (routes show the default
+  // "scanned" icon until the migration runs).
+  let recentRows: Record<string, unknown>[] | null = recentRes.data;
+  if (recentRes.error) {
+    const fb = await supabase
+      .from("routes")
+      .select("id,date,status,completed_at,route_stops(count)")
+      .in("status", ["dispatched", "in_progress", "completed"])
+      .is("deleted_at", null)
+      .order("date", { ascending: false })
+      .limit(14);
+    recentRows = fb.data;
+  }
+
   const recentRoutes = ((recentRows ?? []) as unknown as {
-    id: string; date: string; status: string; completed_at: string | null;
+    id: string; date: string; status: string; source: string | null; completed_at: string | null;
     route_stops: { count: number }[] | null;
   }[]).map((r) => ({
     id: r.id,
     date: r.date,
     status: r.status,
+    source: r.source ?? null,
     completedAt: r.completed_at,
     stopCount: r.route_stops?.[0]?.count ?? 0,
   }));
@@ -117,6 +133,7 @@ export default async function DispatchPage() {
       lng: s.customers!.lng,
       vip: (s.customers!.tags ?? []).includes("VIP"),
       days: s.customers!.delivery_days ?? [],
+      stopOrder: s.stop_order,
     }));
 
   const masterRoute = ((masterRows ?? []) as { name: string; lat: number | null; lng: number | null; route_seq: number }[])
@@ -152,15 +169,15 @@ export default async function DispatchPage() {
 
   // Prospect visits attached to today's route (tolerant of the
   // route_prospect_visits migration not having run yet).
-  let plannedVisits: { id: string; prospectId: string; name: string; status: string; notes: string | null }[] = [];
+  let plannedVisits: { id: string; prospectId: string; name: string; status: string; notes: string | null; stopOrder: number | null }[] = [];
   if (route?.id) {
     const { data: pv } = await supabase
       .from("route_prospect_visits")
-      .select("id, prospect_id, status, notes, prospects(name)")
+      .select("id, prospect_id, status, notes, stop_order, prospects(name)")
       .eq("route_id", route.id);
     plannedVisits = ((pv ?? []) as unknown as {
-      id: string; prospect_id: string; status: string; notes: string | null; prospects: { name: string } | null;
-    }[]).map((r) => ({ id: r.id, prospectId: r.prospect_id, name: r.prospects?.name ?? "Prospect", status: r.status, notes: r.notes }));
+      id: string; prospect_id: string; status: string; notes: string | null; stop_order: number | null; prospects: { name: string } | null;
+    }[]).map((r) => ({ id: r.id, prospectId: r.prospect_id, name: r.prospects?.name ?? "Prospect", status: r.status, notes: r.notes, stopOrder: r.stop_order }));
   }
   const plannedVisitIds = plannedVisits.map((v) => v.prospectId);
 

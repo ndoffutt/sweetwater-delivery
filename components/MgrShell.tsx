@@ -22,7 +22,9 @@ const ITEMS: Record<NavId, NavItem> = {
 // owner-only for now while it's being tested.
 const NAV_BY_ROLE: Record<"dispatcher" | "admin", NavItem[]> = {
   admin: [ITEMS.dispatch, ITEMS.customers, ITEMS.messages, ITEMS.history],
-  dispatcher: [ITEMS.dispatch, ITEMS.customers, ITEMS.sales, ITEMS.history, ITEMS.live, ITEMS.reports],
+  // ITEMS.live and ITEMS.reports hidden for the manager for now — re-add them
+  // here to restore those tabs.
+  dispatcher: [ITEMS.dispatch, ITEMS.customers, ITEMS.sales, ITEMS.history],
 };
 
 function NavIcon({ id, className = "w-5 h-5" }: { id: NavId; className?: string }) {

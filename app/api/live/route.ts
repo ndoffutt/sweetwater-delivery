@@ -10,7 +10,9 @@ export async function GET(request: NextRequest) {
   if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const user = await verifySessionToken(token.value);
-  if (!user || user.role !== "dispatcher")
+  // Live tracking is for the office side: Manager (dispatcher) and Owner (admin).
+  // The driver is the one being tracked and uses the driver app, not this endpoint.
+  if (!user || (user.role !== "dispatcher" && user.role !== "admin"))
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const supabase = createAdminClient();
