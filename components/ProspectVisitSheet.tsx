@@ -41,10 +41,10 @@ export default function ProspectVisitSheet({
 }: {
   stop: RouteStop;
   expanded: boolean;
-  onLogged: () => void;
+  onLogged: (outcome: "logged" | "skipped") => void;
 }) {
   const pv = stop.prospect_visit!;
-  const done = stop.status === "completed";
+  const done = stop.status === "completed" || stop.status === "skipped";
   const lat = stop.customer?.lat, lng = stop.customer?.lng;
   const mapsHref = `https://www.google.com/maps/dir/?api=1&destination=${
     lat != null && lng != null ? `${lat},${lng}` : encodeURIComponent(pv.address || pv.name)
@@ -62,12 +62,12 @@ export default function ProspectVisitSheet({
   // never block on or be lost to the network.
   function save() {
     if (!note.trim()) { setError("Add a quick note about the touchpoint."); return; }
-    onLogged();
+    onLogged("logged");
     start(() => runStopAction({ kind: "prospectVisit", stopId: stop.id, visitId: pv.id, prospectId: pv.prospect_id, notes: note, touchType: kind }));
   }
 
   function skip() {
-    onLogged();
+    onLogged("skipped");
     start(() => runStopAction({ kind: "prospectSkip", stopId: stop.id, visitId: pv.id, reason: skipReason }));
   }
 
