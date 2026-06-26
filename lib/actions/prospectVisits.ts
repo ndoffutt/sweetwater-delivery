@@ -210,13 +210,22 @@ export async function addProspectVisit(routeId: string, prospectId: string) {
 }
 
 export async function removeProspectVisit(routeId: string, prospectId: string) {
-  await requireSession("dispatcher");
+  const session = await requireSession("dispatcher");
   const supabase = createAdminClient();
-  const { error } = await supabase
+  // Soft delete — captured by the audit trigger. Falls back to hard delete
+  // on a pre-migration environment so the action still succeeds.
+  let { error } = await supabase
     .from("route_prospect_visits")
-    .delete()
+    .update({ deleted_at: new Date().toISOString(), deleted_by: session.id })
     .eq("route_id", routeId)
     .eq("prospect_id", prospectId);
+  if (error && /deleted_at|deleted_by/i.test(error.message) && /(does not exist|schema cache|could not find)/i.test(error.message)) {
+    ({ error } = await supabase
+      .from("route_prospect_visits")
+      .delete()
+      .eq("route_id", routeId)
+      .eq("prospect_id", prospectId));
+  }
   if (error && !missingTable(error.message)) return { error: error.message };
   revalidatePath("/dispatch");
   revalidatePath("/driver");

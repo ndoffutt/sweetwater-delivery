@@ -50,7 +50,10 @@ export default async function DriverPage() {
     );
   }
 
-  const baseStops = (route.route_stops || []) as RouteStop[];
+  // Drop soft-deleted stops — the trigger has already captured them in
+  // deletion_audit for the Settings → Recently Deleted view.
+  const baseStops = ((route.route_stops || []) as RouteStop[])
+    .filter((s) => !(s as RouteStop & { deleted_at?: string | null }).deleted_at);
 
   // Planned prospect visits attached to this route — rendered as stops in the
   // driver flow so the manager can log them in-the-moment. Best-effort: if the
@@ -62,7 +65,8 @@ export default async function DriverPage() {
       .select(
         "id, prospect_id, status, notes, created_at, stop_order, prospects(id, name, address, phone, lat, lng, notes, touchpoints:prospect_touchpoints(id, type, note, created_by, created_at))"
       )
-      .eq("route_id", route.id);
+      .eq("route_id", route.id)
+      .is("deleted_at", null);
 
     type Row = {
       id: string; prospect_id: string; status: string; notes: string | null; created_at: string;

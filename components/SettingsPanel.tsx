@@ -21,6 +21,70 @@ export interface TeamMember {
   created_at: string;
 }
 
+export interface DeletionEntry {
+  id: string;
+  table_name: string;
+  row_id: string;
+  before_state: Record<string, unknown>;
+  deleted_by: string | null;
+  deleted_by_name: string | null;
+  deleted_at: string;
+}
+
+// Pick a user-friendly label for the deleted row from its before_state.
+// Each audited table has a different "main" field; this central map keeps
+// the rendering tidy.
+const TABLE_LABEL: Record<string, string> = {
+  customers: "Customer",
+  prospects: "Prospect",
+  prospect_touchpoints: "Touchpoint",
+  routes: "Route",
+  route_stops: "Route stop",
+  route_prospect_visits: "Prospect visit",
+  stop_photos: "Photo",
+  text_messages: "Text message",
+  users: "Team member",
+};
+
+function deletionTitle(entry: DeletionEntry): string {
+  const s = entry.before_state ?? {};
+  switch (entry.table_name) {
+    case "customers":
+    case "prospects":
+    case "users":
+      return (s.name as string) || "Untitled";
+    case "routes":
+      return (s.date as string) ? `Route on ${s.date}` : "Route";
+    case "route_stops":
+      return (s.customer_name as string) || "Stop";
+    case "route_prospect_visits":
+      return "Prospect visit";
+    case "prospect_touchpoints": {
+      const type = (s.type as string) ?? "touch";
+      const note = (s.note as string) ?? "";
+      return note ? `${type[0].toUpperCase()}${type.slice(1)}: ${note.slice(0, 60)}` : `${type[0].toUpperCase()}${type.slice(1)}`;
+    }
+    case "stop_photos":
+      return "Photo";
+    case "text_messages":
+      return (s.body as string)?.slice(0, 60) ?? "Text message";
+    default:
+      return entry.table_name;
+  }
+}
+
+function timeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
 const ROLE_LABEL: Record<TeamMember["role"], string> = {
   driver: "Driver",
   dispatcher: "Manager",
@@ -37,10 +101,12 @@ export default function SettingsPanel({
   meId,
   viewerRole,
   team,
+  deletions = [],
 }: {
   meId: string;
   viewerRole: "admin" | "dispatcher";
   team: TeamMember[];
+  deletions?: DeletionEntry[];
 }) {
   const router = useRouter();
   const isOwner = viewerRole === "admin";
@@ -213,6 +279,44 @@ export default function SettingsPanel({
               </div>
             ))}
           </div>
+        </section>
+
+        {/* Recently Deleted — surfaces the audit log so anything soft-deleted
+            is visible, attributed, and recoverable. Owner sees all tables;
+            Manager-tier sees the same view (no per-role redaction yet). */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-serif text-2xl font-light text-charcoal">Recently deleted</h2>
+            <span className="font-body text-[10px] uppercase tracking-widest text-charcoal/40">
+              {deletions.length === 0 ? "nothing yet" : `last ${deletions.length}`}
+            </span>
+          </div>
+          <p className="text-xs font-body text-charcoal/50 mb-3">
+            Soft-deleted records. The audit trigger captures what was removed and who removed it. Restore directly from this list.
+          </p>
+          {deletions.length === 0 ? (
+            <div className="bg-cream rounded-xl border border-cream-dark p-4 text-sm font-body text-charcoal/50">
+              No recent deletions.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {deletions.map((d) => (
+                <div key={d.id} className="bg-cream rounded-xl border border-cream-dark p-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-body uppercase tracking-widest px-2 py-0.5 rounded-full bg-charcoal/5 text-charcoal/50">
+                      {TABLE_LABEL[d.table_name] ?? d.table_name}
+                    </span>
+                    <span className="font-body font-medium text-charcoal truncate">{deletionTitle(d)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-1.5 text-[11px] font-body text-charcoal/45 flex-wrap">
+                    <span>by <b className="text-charcoal/70">{d.deleted_by_name ?? "system"}</b></span>
+                    <span>·</span>
+                    <span>{timeAgo(d.deleted_at)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </div>

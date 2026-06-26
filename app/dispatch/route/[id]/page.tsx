@@ -39,7 +39,8 @@ export default async function RouteDetailPage({
       .select(
         "id, prospect_id, status, notes, created_at, stop_order, prospects(id, name, address, phone, lat, lng)"
       )
-      .eq("route_id", route.id);
+      .eq("route_id", route.id)
+      .is("deleted_at", null);
     type Row = {
       id: string; prospect_id: string; status: string; notes: string | null;
       created_at: string; stop_order: number | null;
@@ -82,9 +83,17 @@ export default async function RouteDetailPage({
     /* route_prospect_visits absent — dispatcher view continues with deliveries only */
   }
 
+  // Drop soft-deleted stops from the view. The trigger has already captured
+  // them in deletion_audit (visible in Settings → Recently Deleted), so the
+  // route list reflects what's actually still on the route.
+  const liveDeliveryStops = ((route.route_stops ?? []) as RouteStop[])
+    .filter((s) => !(s as RouteStop & { deleted_at?: string | null }).deleted_at);
+  const liveProspectStops = prospectStops.filter(
+    (s) => !(s as RouteStop & { deleted_at?: string | null }).deleted_at
+  );
   const mergedStops: RouteStop[] = [
-    ...((route.route_stops ?? []) as RouteStop[]),
-    ...prospectStops,
+    ...liveDeliveryStops,
+    ...liveProspectStops,
   ].sort((a, b) => a.stop_order - b.stop_order);
 
   const { data: customers } = await supabase

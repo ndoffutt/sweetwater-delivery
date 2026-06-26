@@ -238,21 +238,40 @@ export async function updateTouchpoint(
 }
 
 export async function deleteTouchpoint(id: string) {
-  await requireSession("dispatcher");
+  const session = await requireSession("dispatcher");
   const supabase = createAdminClient();
-  const { error } = await supabase.from("prospect_touchpoints").delete().eq("id", id);
+  // Soft delete — the audit trigger captures the before-state into
+  // deletion_audit so Settings → Recently Deleted shows what was removed
+  // and who removed it. Tolerant of the deleted_at column being absent on
+  // a pre-migration environment: falls back to hard delete so the action
+  // doesn't fail outright.
+  let { error } = await supabase
+    .from("prospect_touchpoints")
+    .update({ deleted_at: new Date().toISOString(), deleted_by: session.id })
+    .eq("id", id);
+  if (error && /deleted_at|deleted_by/i.test(error.message) && /(does not exist|schema cache|could not find)/i.test(error.message)) {
+    ({ error } = await supabase.from("prospect_touchpoints").delete().eq("id", id));
+  }
   if (error) return { error: error.message };
   revalidatePath("/sales/prospects");
   return { success: true };
 }
 
 export async function deleteProspect(id: string) {
-  await requireSession("dispatcher");
+  const session = await requireSession("dispatcher");
   const supabase = createAdminClient();
-  const { error } = await supabase
+  // Soft delete with attribution — the audit trigger captures who removed
+  // it. Falls back without deleted_by if that column hasn't been added yet.
+  let { error } = await supabase
     .from("prospects")
-    .update({ deleted_at: new Date().toISOString() })
+    .update({ deleted_at: new Date().toISOString(), deleted_by: session.id })
     .eq("id", id);
+  if (error && /deleted_by/i.test(error.message) && /(does not exist|schema cache|could not find)/i.test(error.message)) {
+    ({ error } = await supabase
+      .from("prospects")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", id));
+  }
   if (error) return { error: error.message };
   revalidatePath("/sales/prospects");
   return { success: true };
