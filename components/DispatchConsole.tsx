@@ -258,6 +258,9 @@ export default function DispatchConsole({
   // knock out overdue prospect visits along the way.
   const [runBy, setRunBy] = useState<"driver" | "manager">("driver");
   const [selectedVisitIds, setSelectedVisitIds] = useState<string[]>([]);
+  // The run-by choice + prospect pick happen in a focused popup rather than
+  // inline, so the review stays clean and the send flow reads as one step.
+  const [assignOpen, setAssignOpen] = useState(false);
   // Manual route builder: "create" starts a fresh list, "add" appends to the
   // current review list. null = picker closed.
   const [picking, setPicking] = useState<null | "create" | "add">(null);
@@ -440,6 +443,7 @@ export default function DispatchConsole({
       if (runBy === "manager" && result.routeId && selectedVisitIds.length) {
         await Promise.all(selectedVisitIds.map((id) => addProspectVisit(result.routeId!, id)));
       }
+      setAssignOpen(false);
       setPhase("dispatched");
       router.refresh();
     });
@@ -862,63 +866,12 @@ export default function DispatchConsole({
                   <div className="font-body text-xs text-charcoal/50">Van 1 · available</div>
                 </div>
               </div>
-              {/* Who's running this route? */}
-              <div className="mb-3">
-                <p className="font-body text-[11px] uppercase tracking-widest text-charcoal/35 mb-1.5">Who&apos;s running this route?</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["driver", "manager"] as const).map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setRunBy(m)}
-                      className={`min-h-tap py-2 rounded-lg text-xs font-body uppercase tracking-widest ${runBy === m ? "bg-green-primary text-cream" : "bg-cream border border-cream-dark text-charcoal/55"}`}
-                    >
-                      {m === "driver" ? "Driver" : "Manager"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Manager run: fold in overdue prospect visits, most on-route first */}
-              {runBy === "manager" && (
-                <div className="mb-3">
-                  <p className="font-body text-[11px] uppercase tracking-widest text-gold-dark mb-1.5">
-                    Overdue prospect visits
-                    {selectedVisitIds.length > 0 && <span className="text-charcoal/40"> · {selectedVisitIds.length} selected</span>}
-                  </p>
-                  {routeProspects.length === 0 ? (
-                    <p className="font-body text-xs text-charcoal/40">No overdue prospects right now.</p>
-                  ) : (
-                    <div className="max-h-56 overflow-auto divide-y divide-cream-dark border border-cream-dark rounded-lg">
-                      {routeProspects.map((p) => {
-                        const on = selectedVisitIds.includes(p.id);
-                        return (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => setSelectedVisitIds((s) => (on ? s.filter((x) => x !== p.id) : [...s, p.id]))}
-                            className="w-full flex items-center gap-2.5 px-3 py-2 text-left"
-                          >
-                            <span className={`shrink-0 w-4 h-4 rounded border flex items-center justify-center text-[10px] ${on ? "bg-green-primary border-green-primary text-cream" : "border-charcoal/30"}`}>{on ? "✓" : ""}</span>
-                            <span className="flex-1 min-w-0">
-                              <span className="font-body text-sm text-charcoal truncate block">🔔 {p.name}</span>
-                              <span className="font-body text-[11px] text-charcoal/45">
-                                {p.town ? `${p.town} · ` : ""}{isFinite(p.miles) ? `${p.miles.toFixed(1)} mi from route` : "no location"}
-                              </span>
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
               <button
-                onClick={send}
+                onClick={() => setAssignOpen(true)}
                 disabled={isPending || included.length === 0}
                 className="w-full inline-flex items-center justify-center gap-2 bg-green-primary text-cream rounded-xl py-3.5 font-body text-sm uppercase tracking-widest disabled:opacity-60"
               >
-                <Ic d={I.send} size={18} /> {isPending ? "Sending…" : runBy === "manager" && selectedVisitIds.length > 0 ? `Send route + ${selectedVisitIds.length} visit${selectedVisitIds.length === 1 ? "" : "s"}` : "Send route"}
+                <Ic d={I.send} size={18} /> Assign &amp; send
               </button>
               <button
                 onClick={saveDraft}
@@ -965,6 +918,86 @@ export default function DispatchConsole({
           onClose={() => setPicking(null)}
           onApply={applyPicked}
         />
+      )}
+
+      {/* Assign & send popup — pick who runs the route, then (for a manager) fold
+          in overdue prospect visits, all in one focused step. */}
+      {assignOpen && !dispatched && (
+        <div className="fixed inset-0 z-50 bg-charcoal/40 flex items-end md:items-center justify-center md:p-6" onClick={() => setAssignOpen(false)}>
+          <div className="bg-cream w-full md:max-w-lg rounded-t-2xl md:rounded-2xl max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-cream-dark flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="font-serif text-xl font-light text-charcoal">Send route</h3>
+                <p className="font-body text-xs text-charcoal/50 mt-0.5">{included.length} stop{included.length === 1 ? "" : "s"} · {first(driverName)}</p>
+              </div>
+              <button onClick={() => setAssignOpen(false)} className="text-charcoal/40 p-1.5"><Ic d={I.x} size={20} /></button>
+            </div>
+
+            <div className="overflow-auto p-5 flex-1 space-y-4">
+              {/* Who's running this route? */}
+              <div>
+                <p className="font-body text-[11px] uppercase tracking-widest text-charcoal/35 mb-2">Who&apos;s running this route?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["driver", "manager"] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setRunBy(m)}
+                      className={`min-h-tap py-3 rounded-xl text-xs font-body uppercase tracking-widest ${runBy === m ? "bg-green-primary text-cream" : "bg-cream border border-cream-dark text-charcoal/55"}`}
+                    >
+                      {m === "driver" ? "Driver" : "Manager"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Manager run: fold in overdue prospect visits, most on-route first */}
+              {runBy === "manager" && (
+                <div>
+                  <p className="font-body text-[11px] uppercase tracking-widest text-gold-dark mb-2">
+                    Add prospect visits
+                    {selectedVisitIds.length > 0 && <span className="text-charcoal/40"> · {selectedVisitIds.length} selected</span>}
+                  </p>
+                  {routeProspects.length === 0 ? (
+                    <p className="font-body text-xs text-charcoal/40">No overdue prospects right now.</p>
+                  ) : (
+                    <div className="max-h-64 overflow-auto divide-y divide-cream-dark border border-cream-dark rounded-xl">
+                      {routeProspects.map((p) => {
+                        const on = selectedVisitIds.includes(p.id);
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setSelectedVisitIds((s) => (on ? s.filter((x) => x !== p.id) : [...s, p.id]))}
+                            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left"
+                          >
+                            <span className={`shrink-0 w-4 h-4 rounded border flex items-center justify-center text-[10px] ${on ? "bg-green-primary border-green-primary text-cream" : "border-charcoal/30"}`}>{on ? "✓" : ""}</span>
+                            <span className="flex-1 min-w-0">
+                              <span className="font-body text-sm text-charcoal truncate block">🔔 {p.name}</span>
+                              <span className="font-body text-[11px] text-charcoal/45">
+                                {p.town ? `${p.town} · ` : ""}{isFinite(p.miles) ? `${p.miles.toFixed(1)} mi from route` : "no location"}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-cream-dark shrink-0">
+              <button
+                onClick={send}
+                disabled={isPending || included.length === 0}
+                className="w-full inline-flex items-center justify-center gap-2 bg-green-primary text-cream rounded-xl py-3.5 font-body text-sm uppercase tracking-widest disabled:opacity-60"
+              >
+                <Ic d={I.send} size={18} /> {isPending ? "Sending…" : runBy === "manager" && selectedVisitIds.length > 0 ? `Send route + ${selectedVisitIds.length} visit${selectedVisitIds.length === 1 ? "" : "s"}` : "Send route"}
+              </button>
+              {error && <p className="text-center text-xs text-red-600 font-body mt-2">{error}</p>}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
