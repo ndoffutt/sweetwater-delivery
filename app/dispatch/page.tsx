@@ -133,6 +133,7 @@ export default async function DispatchPage() {
       lng: s.customers!.lng,
       vip: (s.customers!.tags ?? []).includes("VIP"),
       days: s.customers!.delivery_days ?? [],
+      stopOrder: s.stop_order,
     }));
 
   const masterRoute = ((masterRows ?? []) as { name: string; lat: number | null; lng: number | null; route_seq: number }[])
@@ -168,15 +169,15 @@ export default async function DispatchPage() {
 
   // Prospect visits attached to today's route (tolerant of the
   // route_prospect_visits migration not having run yet).
-  let plannedVisits: { id: string; prospectId: string; name: string; status: string; notes: string | null }[] = [];
+  let plannedVisits: { id: string; prospectId: string; name: string; status: string; notes: string | null; stopOrder: number | null }[] = [];
   if (route?.id) {
     const { data: pv } = await supabase
       .from("route_prospect_visits")
-      .select("id, prospect_id, status, notes, prospects(name)")
+      .select("id, prospect_id, status, notes, stop_order, prospects(name)")
       .eq("route_id", route.id);
     plannedVisits = ((pv ?? []) as unknown as {
-      id: string; prospect_id: string; status: string; notes: string | null; prospects: { name: string } | null;
-    }[]).map((r) => ({ id: r.id, prospectId: r.prospect_id, name: r.prospects?.name ?? "Prospect", status: r.status, notes: r.notes }));
+      id: string; prospect_id: string; status: string; notes: string | null; stop_order: number | null; prospects: { name: string } | null;
+    }[]).map((r) => ({ id: r.id, prospectId: r.prospect_id, name: r.prospects?.name ?? "Prospect", status: r.status, notes: r.notes, stopOrder: r.stop_order }));
   }
   const plannedVisitIds = plannedVisits.map((v) => v.prospectId);
 

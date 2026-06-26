@@ -9,6 +9,7 @@ export interface PlannedVisit {
   name: string;
   status: string;
   notes: string | null;
+  stopOrder?: number | null;
 }
 
 // The prospect visits planned for today's route. When the manager gets to one,
