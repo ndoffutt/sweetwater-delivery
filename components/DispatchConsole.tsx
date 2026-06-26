@@ -11,6 +11,7 @@ import { dayForLocation, dayForDow, DAY_LABEL, RUN_DAYS, type DeliveryDay } from
 import RouteMap from "@/components/RouteMap";
 import NearbyVisits, { type NearbyItem } from "@/components/NearbyVisits";
 import PlannedVisits, { type PlannedVisit } from "@/components/PlannedVisits";
+import { addProspectVisit } from "@/lib/actions/prospectVisits";
 import type { RouteStop } from "@/lib/types";
 
 export interface InitialStop {
@@ -253,6 +254,10 @@ export default function DispatchConsole({
   // Key of the new-customer row whose full-route placement is being confirmed.
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
   const [draftSaved, setDraftSaved] = useState(false);
+  // Who's running this route: a plain driver run, or a manager run that can also
+  // knock out overdue prospect visits along the way.
+  const [runBy, setRunBy] = useState<"driver" | "manager">("driver");
+  const [selectedVisitIds, setSelectedVisitIds] = useState<string[]>([]);
   // Manual route builder: "create" starts a fresh list, "add" appends to the
   // current review list. null = picker closed.
   const [picking, setPicking] = useState<null | "create" | "add">(null);
@@ -430,11 +435,13 @@ export default function DispatchConsole({
         customerId: r.merge ?? r.customerId ?? null,
       }));
       const result = await dispatchRoute(payload);
-      if (result.error) setError(result.error);
-      else {
-        setPhase("dispatched");
-        router.refresh();
+      if (result.error) { setError(result.error); return; }
+      // Manager run: attach the chosen overdue prospects as visits on the route.
+      if (runBy === "manager" && result.routeId && selectedVisitIds.length) {
+        await Promise.all(selectedVisitIds.map((id) => addProspectVisit(result.routeId!, id)));
       }
+      setPhase("dispatched");
+      router.refresh();
     });
   }
 
@@ -644,6 +651,19 @@ export default function DispatchConsole({
   // ── REVIEW / DISPATCHED ──────────────────────────────────────
   const dispatched = phase === "dispatched";
 
+  // Overdue prospects ranked by how "on the route" they are — least detour from
+  // the current stops first. Available during review (no saved route needed) so
+  // a manager can pick which to fold into the run before sending.
+  const routeProspects = overdueProspects
+    .map((p) => {
+      let min = Infinity;
+      for (const r of included) {
+        if (r.lat != null && r.lng != null) min = Math.min(min, milesBetween(p.lat, p.lng, r.lat, r.lng));
+      }
+      return { id: p.id, name: p.name, town: p.town, miles: min };
+    })
+    .sort((a, b) => a.miles - b.miles);
+
   // Overdue prospects sitting within a few miles of any of today's stops.
   const routeId = today?.id ?? null;
   const nearbyVisits: NearbyItem[] = routeId
@@ -842,12 +862,63 @@ export default function DispatchConsole({
                   <div className="font-body text-xs text-charcoal/50">Van 1 · available</div>
                 </div>
               </div>
+              {/* Who's running this route? */}
+              <div className="mb-3">
+                <p className="font-body text-[11px] uppercase tracking-widest text-charcoal/35 mb-1.5">Who&apos;s running this route?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["driver", "manager"] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setRunBy(m)}
+                      className={`min-h-tap py-2 rounded-lg text-xs font-body uppercase tracking-widest ${runBy === m ? "bg-green-primary text-cream" : "bg-cream border border-cream-dark text-charcoal/55"}`}
+                    >
+                      {m === "driver" ? "Driver" : "Manager"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Manager run: fold in overdue prospect visits, most on-route first */}
+              {runBy === "manager" && (
+                <div className="mb-3">
+                  <p className="font-body text-[11px] uppercase tracking-widest text-gold-dark mb-1.5">
+                    Overdue prospect visits
+                    {selectedVisitIds.length > 0 && <span className="text-charcoal/40"> · {selectedVisitIds.length} selected</span>}
+                  </p>
+                  {routeProspects.length === 0 ? (
+                    <p className="font-body text-xs text-charcoal/40">No overdue prospects right now.</p>
+                  ) : (
+                    <div className="max-h-56 overflow-auto divide-y divide-cream-dark border border-cream-dark rounded-lg">
+                      {routeProspects.map((p) => {
+                        const on = selectedVisitIds.includes(p.id);
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setSelectedVisitIds((s) => (on ? s.filter((x) => x !== p.id) : [...s, p.id]))}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-left"
+                          >
+                            <span className={`shrink-0 w-4 h-4 rounded border flex items-center justify-center text-[10px] ${on ? "bg-green-primary border-green-primary text-cream" : "border-charcoal/30"}`}>{on ? "✓" : ""}</span>
+                            <span className="flex-1 min-w-0">
+                              <span className="font-body text-sm text-charcoal truncate block">🔔 {p.name}</span>
+                              <span className="font-body text-[11px] text-charcoal/45">
+                                {p.town ? `${p.town} · ` : ""}{isFinite(p.miles) ? `${p.miles.toFixed(1)} mi from route` : "no location"}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <button
                 onClick={send}
                 disabled={isPending || included.length === 0}
                 className="w-full inline-flex items-center justify-center gap-2 bg-green-primary text-cream rounded-xl py-3.5 font-body text-sm uppercase tracking-widest disabled:opacity-60"
               >
-                <Ic d={I.send} size={18} /> {isPending ? "Sending…" : `Send route to ${first(driverName)}`}
+                <Ic d={I.send} size={18} /> {isPending ? "Sending…" : runBy === "manager" && selectedVisitIds.length > 0 ? `Send route + ${selectedVisitIds.length} visit${selectedVisitIds.length === 1 ? "" : "s"}` : "Send route"}
               </button>
               <button
                 onClick={saveDraft}
