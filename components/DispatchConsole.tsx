@@ -829,7 +829,9 @@ export default function DispatchConsole({
         {/* map + send */}
         <div className="flex flex-col gap-4 md:sticky md:top-4">
           <div className="bg-cream rounded-2xl border border-cream-dark overflow-hidden">
-            <div className="relative h-52">
+            {/* Map hidden on mobile — it hijacked touch-scroll and made the page
+                hard to scroll past. Still shown on desktop where that's a non-issue. */}
+            <div className="relative h-52 hidden md:block">
               <RouteMap stops={mapStops} targetId={sel} onSelect={setSel} suggestedIds={suggestedIds} />
             </div>
             <div className="flex items-center justify-between px-4 py-3">
