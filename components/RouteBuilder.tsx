@@ -93,19 +93,26 @@ export default function RouteBuilder({
 
       {/* Stops list */}
       <div className="space-y-2">
-        {stops.map((stop, i) => (
+        {stops.map((stop, i) => {
+          const isProspect = stop.kind === "prospect_visit";
+          return (
           <div
             key={stop.id}
-            className={`bg-cream rounded-xl p-4 border flex items-center gap-3 ${
+            className={`rounded-xl p-4 border flex items-center gap-3 ${
+              isProspect ? "bg-gold-primary/5" : "bg-cream"
+            } ${
               stop.status === "completed"
                 ? "border-green-primary/20 opacity-60"
                 : stop.status === "arrived"
                 ? "border-gold-primary"
+                : isProspect
+                ? "border-gold-primary/30"
                 : "border-cream-dark"
             }`}
           >
-            {/* Order controls */}
-            {isDraft && (
+            {/* Order controls — only for delivery stops in draft; prospect
+                visits reorder via the prospect detail action (a follow-up). */}
+            {isDraft && !isProspect && (
               <div className="flex flex-col gap-1">
                 <button
                   onClick={() => handleMove(stop.id, "up")}
@@ -124,17 +131,21 @@ export default function RouteBuilder({
               </div>
             )}
 
-            {/* Stop number */}
+            {/* Stop number — always show the number; status is conveyed by
+                the badge color + the right-side pill. Prospect visits get a
+                gold ring to set them apart at a glance. */}
             <span
               className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-body shrink-0 ${
                 stop.status === "completed"
                   ? "bg-green-primary text-cream"
                   : stop.status === "arrived"
                   ? "bg-gold-primary text-cream"
+                  : isProspect
+                  ? "bg-gold-primary/15 text-gold-dark ring-1 ring-gold-primary/40"
                   : "bg-cream-dark text-charcoal/50"
               }`}
             >
-              {stop.status === "completed" ? "✓" : i + 1}
+              {i + 1}
             </span>
 
             {/* Info — name links to the stop's delivery detail (photos + notes);
@@ -167,7 +178,12 @@ export default function RouteBuilder({
 
             {/* Status */}
             <div className="text-right shrink-0">
-              {stop.status !== "pending" && (
+              {isProspect && stop.status === "pending" && (
+                <span className="text-xs font-body px-2 py-1 rounded-full bg-gold-primary/15 text-gold-dark">
+                  🔔 Prospect
+                </span>
+              )}
+              {!isProspect && stop.status !== "pending" && (
                 <span
                   className={`text-xs font-body px-2 py-1 rounded-full ${
                     stop.status === "completed"
@@ -180,7 +196,7 @@ export default function RouteBuilder({
                   {stop.status}
                 </span>
               )}
-              {isDraft && (
+              {isDraft && !isProspect && (
                 <button
                   onClick={() => handleRemove(stop.id)}
                   disabled={isPending}
@@ -191,7 +207,8 @@ export default function RouteBuilder({
               )}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Add stop */}
