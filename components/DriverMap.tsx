@@ -300,7 +300,13 @@ function mapsHref(c: { address: string; lat: number | null; lng: number | null }
 export default function DriverMap({ initialStops, isManager, canMessage = false, routeId }: { initialStops: RouteStop[]; isManager: boolean; canMessage?: boolean; routeId: string }) {
   const [stops, setStops] = useState(initialStops);
   const [targetId, setTargetId] = useState(() => (initialStops.find((s) => s.status === "pending" || s.status === "arrived") ?? initialStops[0])?.id ?? "");
-  const [sheet, setSheet] = useState<"peek" | "full">("peek");
+  // Prospect stops open expanded so the standing notes + touch history are
+  // visible by default (the driver wants context before logging a touchpoint);
+  // delivery stops open peeked.
+  const [sheet, setSheet] = useState<"peek" | "full">(() => {
+    const t = (initialStops.find((s) => s.status === "pending" || s.status === "arrived") ?? initialStops[0]);
+    return t?.kind === "prospect_visit" ? "full" : "peek";
+  });
   const [overview, setOverview] = useState(false);
   const [problemFor, setProblemFor] = useState<RouteStop | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -374,7 +380,11 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
   }
   const photoCount = (s: RouteStop) => (s.photos?.length ?? 0) + (photoBump[s.id] ?? 0);
 
-  function selectPin(id: string) { setTargetId(id); setSheet("peek"); }
+  function selectPin(id: string) {
+    setTargetId(id);
+    // Prospect stops open expanded (notes + history in view); deliveries peek.
+    setSheet(stops.find((s) => s.id === id)?.kind === "prospect_visit" ? "full" : "peek");
+  }
 
   function arrive(s: RouteStop) {
     patch(s.id, { status: "arrived", arrived_at: new Date().toISOString() });
@@ -526,7 +536,8 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
               const next = stops.find((x) => (x.status === "pending" || x.status === "arrived") && x.id !== target.id);
               setTargetId(next ? next.id : target.id);
               flash(outcome === "skipped" ? "Visit skipped — dispatch notified" : "Touchpoint logged");
-              setSheet("peek");
+              // Keep a prospect next-stop expanded (notes + history in view).
+              setSheet(next?.kind === "prospect_visit" ? "full" : "peek");
               // NB: no safeRefresh() here — the sheet calls onSynced after the write
               // lands so we don't refetch stale "planned" data and undo the advance.
             }}
