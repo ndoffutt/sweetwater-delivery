@@ -85,7 +85,7 @@ const geoDays = (lng: number | null | undefined): DeliveryDay[] => {
   return d ? [d] : [];
 };
 
-interface RecentRoute { id: string; date: string; status: string; completedAt: string | null; stopCount: number; source: string | null }
+interface RecentRoute { id: string; date: string; status: string; completedAt: string | null; stopCount: number; completedCount: number; source: string | null }
 
 export interface NearbyProspect { id: string; name: string; lat: number; lng: number; town: string | null }
 
@@ -115,7 +115,7 @@ function RecentDispatches({ routes }: { routes: RecentRoute[] }) {
                 <Ic d={r.source === "manual" ? I.edit : I.file} size={16} />
               </span>
               <span className="font-body text-sm text-charcoal">{d}</span>
-              <span className="font-body text-xs text-charcoal/40">{r.stopCount} stop{r.stopCount === 1 ? "" : "s"}</span>
+              <span className="font-body text-xs text-charcoal/40">{r.completedCount}/{r.stopCount} stop{r.stopCount === 1 ? "" : "s"}</span>
               <span className={`ml-auto font-body text-[11px] uppercase tracking-wide px-2 py-0.5 rounded-full ${done ? "bg-cream-dark text-charcoal/50" : "bg-green-primary/10 text-green-primary"}`}>
                 {label}
               </span>
@@ -211,7 +211,7 @@ export default function DispatchConsole({
   masterRoute?: MasterStop[];
   allCustomers?: PickCustomer[];
   dispatchDow?: number; // 0-6 weekday (Eastern) of today's route date
-  recentRoutes?: { id: string; date: string; status: string; completedAt: string | null; stopCount: number; source: string | null }[];
+  recentRoutes?: { id: string; date: string; status: string; completedAt: string | null; stopCount: number; completedCount: number; source: string | null }[];
   overdueProspects?: NearbyProspect[];
   plannedVisitIds?: string[];
   plannedVisits?: PlannedVisit[];
