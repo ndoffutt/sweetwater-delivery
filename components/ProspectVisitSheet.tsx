@@ -36,7 +36,6 @@ function ago(iso: string | null): string {
 // visit with a required note (records a 'visit' touchpoint on the prospect).
 export default function ProspectVisitSheet({
   stop,
-  expanded,
   onLogged,
   onSynced,
 }: {
@@ -196,9 +195,9 @@ export default function ProspectVisitSheet({
         </div>
       )}
 
-      {/* ── Reference info (expand the sheet to see) ── */}
-      {expanded && (
-        <div style={{ marginTop: 14, borderTop: "1px solid #E1DBCC", paddingTop: 14 }}>
+      {/* ── Reference info: standing notes + touch history. Always shown so a
+          prospect stop opens straight into this full context view. ── */}
+      <div style={{ marginTop: 14, borderTop: "1px solid #E1DBCC", paddingTop: 14 }}>
           {pv.notes_summary && (
             <div style={{ background: "rgba(213,154,41,0.10)", border: "1px solid rgba(213,154,41,0.32)", borderRadius: 13, padding: "12px 14px", marginBottom: 12 }}>
               <div style={{ fontSize: 11, letterSpacing: "0.16em", textTransform: "uppercase", color: "#a37314", fontWeight: 600 }}>Standing notes</div>
@@ -236,8 +235,7 @@ export default function ProspectVisitSheet({
             )}
           </div>
 
-        </div>
-      )}
+      </div>
     </div>
   );
 }
