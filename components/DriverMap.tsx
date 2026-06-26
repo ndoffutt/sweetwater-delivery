@@ -368,7 +368,9 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
   function markRouteDone() {
     try { localStorage.setItem(DONE_KEY, "1"); } catch {}
     setRouteDismissed(true);
-    if (isManager) router.push("/dispatch");
+    // No auto-push to dispatch — the manager lands on the calm "All done for
+    // today" card and taps its own "Back to Dispatch" when ready. Bouncing them
+    // out immediately felt too abrupt.
   }
   const photoCount = (s: RouteStop) => (s.photos?.length ?? 0) + (photoBump[s.id] ?? 0);
 
