@@ -76,12 +76,19 @@ create table routes (
   date date not null,
   driver_id uuid not null references users(id),
   status text not null default 'draft' check (status in ('draft', 'dispatched', 'in_progress', 'completed')),
+  -- How the route was built: scanned from a SPOT manifest, or built by hand in
+  -- the dispatch console. Null on routes created before this column existed.
+  source text check (source in ('manifest', 'manual')),
   started_at timestamptz,
   completed_at timestamptz,
   deleted_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Incremental migration for a live DB that predates the `source` column above:
+--   alter table routes add column if not exists source text
+--     check (source in ('manifest', 'manual'));
 
 create unique index routes_date_idx on routes(date) where deleted_at is null;
 

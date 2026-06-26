@@ -84,7 +84,7 @@ const geoDays = (lng: number | null | undefined): DeliveryDay[] => {
   return d ? [d] : [];
 };
 
-interface RecentRoute { id: string; date: string; status: string; completedAt: string | null; stopCount: number }
+interface RecentRoute { id: string; date: string; status: string; completedAt: string | null; stopCount: number; source: string | null }
 
 export interface NearbyProspect { id: string; name: string; lat: number; lng: number; town: string | null }
 
@@ -110,7 +110,9 @@ function RecentDispatches({ routes }: { routes: RecentRoute[] }) {
           const label = done ? "Completed" : r.status === "in_progress" ? "Out for delivery" : "Dispatched";
           return (
             <Link key={r.id} href={`/dispatch/route/${r.id}`} className="flex items-center gap-3 py-2.5 -mx-1 px-1 rounded-lg hover:bg-cream-dark/30 active:bg-cream-dark/40 transition-colors">
-              <span className="shrink-0 text-charcoal/40"><Ic d={I.truck} size={16} /></span>
+              <span className="shrink-0 text-charcoal/40" title={r.source === "manual" ? "Built manually" : "Scanned from manifest"}>
+                <Ic d={r.source === "manual" ? I.edit : I.file} size={16} />
+              </span>
               <span className="font-body text-sm text-charcoal">{d}</span>
               <span className="font-body text-xs text-charcoal/40">{r.stopCount} stop{r.stopCount === 1 ? "" : "s"}</span>
               <span className={`ml-auto font-body text-[11px] uppercase tracking-wide px-2 py-0.5 rounded-full ${done ? "bg-cream-dark text-charcoal/50" : "bg-green-primary/10 text-green-primary"}`}>
@@ -207,7 +209,7 @@ export default function DispatchConsole({
   masterRoute?: MasterStop[];
   allCustomers?: PickCustomer[];
   dispatchDow?: number; // 0-6 weekday (Eastern) of today's route date
-  recentRoutes?: { id: string; date: string; status: string; completedAt: string | null; stopCount: number }[];
+  recentRoutes?: { id: string; date: string; status: string; completedAt: string | null; stopCount: number; source: string | null }[];
   overdueProspects?: NearbyProspect[];
   plannedVisitIds?: string[];
   plannedVisits?: PlannedVisit[];
@@ -261,6 +263,9 @@ export default function DispatchConsole({
   // The run-by choice + prospect pick happen in a focused popup rather than
   // inline, so the review stays clean and the send flow reads as one step.
   const [assignOpen, setAssignOpen] = useState(false);
+  // How this route was built — recorded on the route so Recent Dispatches can
+  // mark scanned-from-manifest vs built-by-hand.
+  const [routeSource, setRouteSource] = useState<"manifest" | "manual">("manifest");
   // Manual route builder: "create" starts a fresh list, "add" appends to the
   // current review list. null = picker closed.
   const [picking, setPicking] = useState<null | "create" | "add">(null);
@@ -338,6 +343,7 @@ export default function DispatchConsole({
       const ordered = orderWithSuggestions(built, masterRoute);
       setRows(ordered);
       setOriginal(ordered);
+      setRouteSource("manifest");
       setPhase("review");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't read that manifest");
@@ -437,7 +443,7 @@ export default function DispatchConsole({
         lng: r.lng ?? null,
         customerId: r.merge ?? r.customerId ?? null,
       }));
-      const result = await dispatchRoute(payload);
+      const result = await dispatchRoute(payload, routeSource);
       if (result.error) { setError(result.error); return; }
       // Manager run: attach the chosen overdue prospects as visits on the route.
       if (runBy === "manager" && result.routeId && selectedVisitIds.length) {
@@ -490,6 +496,12 @@ export default function DispatchConsole({
     if (replace) setOriginal([]);
     setPicking(null);
     setPhase("review");
+    // Built by hand → jump straight to the assign popup instead of dropping the
+    // dispatcher back on the review screen (the round-trip read as confusing).
+    if (replace) {
+      setRouteSource("manual");
+      setAssignOpen(true);
+    }
   }
 
   function saveDraft() {
@@ -592,50 +604,6 @@ export default function DispatchConsole({
         </div>
 
         {error && <p className="text-center text-sm text-red-600 font-body mt-4">{error}</p>}
-
-        {phase === "empty" && lastScan && (
-          <div className="mt-4 bg-cream rounded-2xl border border-cream-dark p-4 md:p-5">
-            <div className="flex items-center justify-between mb-3 gap-2">
-              <span className="inline-flex items-center gap-2 text-charcoal/40">
-                <Ic d={I.file} size={15} />
-                <span className="font-body text-[11px] uppercase tracking-widest text-charcoal/40">
-                  Last scanned manifest · {new Date(lastScan.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}
-                </span>
-              </span>
-              <span className="inline-flex items-center gap-1.5 text-green-primary font-body text-xs font-medium">
-                <Ic d={I.check} size={14} /> {lastScan.stopCount} stops read
-              </span>
-            </div>
-            <div className="flex gap-4 flex-wrap md:flex-nowrap">
-              {lastScan.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={lastScan.imageUrl} alt="scanned manifest" className="w-full md:w-36 shrink-0 rounded-lg border border-cream-dark object-cover max-h-52" />
-              ) : (
-                <div className="w-full md:w-36 shrink-0 rounded-lg border border-cream-dark bg-cream-dark/40 flex items-center justify-center text-charcoal/30 text-xs font-body py-8">
-                  {lastScan.source.toUpperCase()}
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="font-body text-[11px] uppercase tracking-widest text-charcoal/35 mb-2">What Claude pulled from it</p>
-                <div className="space-y-1.5">
-                  {lastScan.stops.slice(0, 5).map((s, i) => (
-                    <div key={i} className="flex items-center gap-2 min-w-0">
-                      <span className="w-5 h-5 shrink-0 rounded-full bg-cream-dark text-charcoal/50 text-[11px] font-body flex items-center justify-center">{i + 1}</span>
-                      <span className="font-body text-sm text-charcoal truncate">{s.customer_name}</span>
-                      <span className="ml-auto flex gap-1 shrink-0">
-                        {s.has_dropoff && <TaskChip drop />}
-                        {s.has_pickup && <TaskChip />}
-                      </span>
-                    </div>
-                  ))}
-                  {lastScan.stops.length > 5 && (
-                    <p className="font-body text-xs text-charcoal/40 pl-7">+ {lastScan.stops.length - 5} more</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {phase === "empty" && <RecentDispatches routes={recentRoutes} />}
 
