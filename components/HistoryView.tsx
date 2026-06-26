@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import DriverPathMap from "@/components/DriverPathMap";
 
 export interface HistoryStop {
   id: string;
   kind: "delivery" | "prospect";
   prospectId?: string | null;
+  customerId?: string | null;
   order: number;
   name: string;
   address: string;
@@ -43,9 +45,13 @@ const dur = (m: number | null) => (m == null ? null : m < 60 ? `${m}m` : `${Math
 
 export default function HistoryView({ routes }: { routes: HistoryRoute[] }) {
   const [open, setOpen] = useState<string | null>(routes[0]?.id ?? null);
+  const router = useRouter();
 
   return (
     <div className="p-5 md:p-8 md:max-w-3xl md:mx-auto">
+      <Link href="/dispatch" className="inline-flex items-center gap-1.5 text-charcoal/50 font-body text-xs uppercase tracking-widest mb-3">
+        ← Dispatch
+      </Link>
       <h2 className="font-serif text-2xl font-light text-charcoal mb-1">History</h2>
       <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-6">
         Completed routes &amp; proof
@@ -96,15 +102,37 @@ export default function HistoryView({ routes }: { routes: HistoryRoute[] }) {
                         : s.status === "completed" ? "bg-green-primary text-cream"
                         : s.status === "skipped" ? "bg-gold-primary/30 text-gold-dark"
                         : "bg-cream-dark text-charcoal/50";
-                      const href = isProspect ? `/sales/prospects?id=${s.prospectId}` : `/dispatch/delivery/${s.id}`;
+                      const cardHref = isProspect ? `/sales/prospects?id=${s.prospectId}` : `/dispatch/delivery/${s.id}`;
                       const prevDone = i > 0 ? r.stops[i - 1].completedAt : null;
+                      // Whole card is clickable → opens the delivery/prospect
+                      // detail (photos, drop/pickup, notes). The customer name
+                      // inside is a separate target that goes to the customer
+                      // profile; stopPropagation keeps the outer card-click
+                      // from also firing.
                       return (
-                      <div key={s.id} className="flex gap-3">
+                      <div
+                        key={s.id}
+                        onClick={() => router.push(cardHref)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); router.push(cardHref); } }}
+                        className="flex gap-3 p-3 -mx-3 rounded-xl cursor-pointer hover:bg-cream-dark/50 transition-colors"
+                      >
                         <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-body font-semibold ${badgeCls}`}>
                           {i + 1}
                         </span>
                         <div className="flex-1 min-w-0">
-                          <Link href={href} className="font-body text-sm font-medium text-charcoal underline-offset-2 hover:underline">{s.name} ›</Link>
+                          {!isProspect && s.customerId ? (
+                            <Link
+                              href={`/dispatch/customers?id=${s.customerId}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="font-body text-sm font-medium text-charcoal underline underline-offset-2 decoration-charcoal/20 hover:decoration-charcoal/60"
+                            >
+                              {s.name} ›
+                            </Link>
+                          ) : (
+                            <span className="font-body text-sm font-medium text-charcoal">{s.name} ›</span>
+                          )}
                           {isProspect && <span className="ml-1.5 text-[10px] font-body uppercase tracking-wider px-1.5 py-0.5 rounded bg-gold-primary/20 text-gold-dark align-middle">🔔 Prospect</span>}
                           <div className="text-xs text-charcoal/40 font-body">{s.address}</div>
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-[11px] font-body text-charcoal/50">
@@ -128,7 +156,13 @@ export default function HistoryView({ routes }: { routes: HistoryRoute[] }) {
                           {s.photos.length > 0 && (
                             <div className="flex gap-1.5 mt-1.5">
                               {s.photos.map((u, i) => (
-                                <a key={i} href={u} target="_blank" rel="noopener noreferrer">
+                                <a
+                                  key={i}
+                                  href={u}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img src={u} alt="proof" className="w-14 h-14 object-cover rounded-md border border-cream-dark" />
                                 </a>

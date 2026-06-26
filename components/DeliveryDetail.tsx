@@ -71,7 +71,13 @@ export default function DeliveryDetail({ stop }: { stop: DeliveryStop }) {
 
   return (
     <div className="p-5 md:p-8 md:max-w-2xl md:mx-auto space-y-5">
-      <Link href="/owner" className="text-xs text-charcoal/50 font-body uppercase tracking-widest">← Back</Link>
+      <button
+        type="button"
+        onClick={() => router.back()}
+        className="text-xs text-charcoal/50 font-body uppercase tracking-widest hover:text-charcoal/80"
+      >
+        ← Back
+      </button>
 
       <div>
         {stop.customerId ? (

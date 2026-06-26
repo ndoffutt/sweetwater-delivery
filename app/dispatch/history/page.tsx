@@ -15,7 +15,7 @@ interface RawStop {
   pickup_confirmed: boolean;
   notes: string | null;
   piece_count: number | null;
-  customers: { name: string; address: string; lat: number | null; lng: number | null } | null;
+  customers: { id: string; name: string; address: string; lat: number | null; lng: number | null } | null;
   stop_photos: { storage_path: string }[] | null;
 }
 interface RawRoute {
@@ -42,7 +42,7 @@ export default async function HistoryPage() {
   const { data } = await supabase
     .from("routes")
     .select(
-      "id,date,completed_at,route_stops(id,stop_order,status,arrived_at,completed_at,dropoff_confirmed,pickup_confirmed,notes,piece_count,customers(name,address,lat,lng),stop_photos(storage_path)),driver_locations(lat,lng,created_at)"
+      "id,date,completed_at,route_stops(id,stop_order,status,arrived_at,completed_at,dropoff_confirmed,pickup_confirmed,notes,piece_count,customers(id,name,address,lat,lng),stop_photos(storage_path)),driver_locations(lat,lng,created_at)"
     )
     .eq("status", "completed")
     .order("date", { ascending: false })
@@ -71,6 +71,7 @@ export default async function HistoryPage() {
     const deliveryStops: HistoryRoute["stops"] = (r.route_stops ?? []).map((s) => ({
       id: s.id,
       kind: "delivery" as const,
+      customerId: s.customers?.id ?? null,
       order: s.stop_order,
       name: s.customers?.name ?? "Unknown",
       address: s.customers?.address ?? "",
