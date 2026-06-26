@@ -77,7 +77,7 @@ export default async function DispatchPage() {
     // Recent dispatches (the actually-sent routes), newest first.
     supabase
       .from("routes")
-      .select("id,date,status,source,completed_at,route_stops(count)")
+      .select("id,date,status,source,completed_at,route_stops(status,deleted_at)")
       .in("status", ["dispatched", "in_progress", "completed"])
       .is("deleted_at", null)
       .order("date", { ascending: false })
@@ -91,7 +91,7 @@ export default async function DispatchPage() {
   if (recentRes.error) {
     const fb = await supabase
       .from("routes")
-      .select("id,date,status,completed_at,route_stops(count)")
+      .select("id,date,status,completed_at,route_stops(status,deleted_at)")
       .in("status", ["dispatched", "in_progress", "completed"])
       .is("deleted_at", null)
       .order("date", { ascending: false })
@@ -101,15 +101,21 @@ export default async function DispatchPage() {
 
   const recentRoutes = ((recentRows ?? []) as unknown as {
     id: string; date: string; status: string; source: string | null; completed_at: string | null;
-    route_stops: { count: number }[] | null;
-  }[]).map((r) => ({
-    id: r.id,
-    date: r.date,
-    status: r.status,
-    source: r.source ?? null,
-    completedAt: r.completed_at,
-    stopCount: r.route_stops?.[0]?.count ?? 0,
-  }));
+    route_stops: { status: string; deleted_at: string | null }[] | null;
+  }[]).map((r) => {
+    // Count live (non-deleted) stops; "done" = completed (skipped stops count
+    // toward the total but not the completed tally, so 4 skipped shows as 12/16).
+    const live = (r.route_stops ?? []).filter((s) => !s.deleted_at);
+    return {
+      id: r.id,
+      date: r.date,
+      status: r.status,
+      source: r.source ?? null,
+      completedAt: r.completed_at,
+      stopCount: live.length,
+      completedCount: live.filter((s) => s.status === "completed").length,
+    };
+  });
 
   // Tolerant of the delivery_days migration not having run yet.
   const route = routeRes.error ? (await routeSelect(false)).data : routeRes.data;
