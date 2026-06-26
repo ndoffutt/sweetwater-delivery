@@ -234,10 +234,18 @@ export async function removeProspectVisit(routeId: string, prospectId: string) {
 
 // Log the visit when the driver arrives: requires notes, marks it visited, and
 // records a 'visit' touchpoint on the prospect (clears its overdue reminder).
-export async function completeProspectVisit(id: string, prospectId: string, notes: string) {
+const TOUCH_TYPES = new Set(["visit", "call", "email", "text"]);
+
+export async function completeProspectVisit(
+  id: string,
+  prospectId: string,
+  notes: string,
+  type: string = "visit",
+) {
   const session = await requireSession();
   const trimmed = notes?.trim();
-  if (!trimmed) return { error: "Please add a quick note about the visit." };
+  if (!trimmed) return { error: "Please add a quick note about the touchpoint." };
+  const touchType = TOUCH_TYPES.has(type) ? type : "visit";
   const supabase = createAdminClient();
   const who = session.role === "admin" ? "Nate" : session.role === "dispatcher" ? "Ahsin" : session.name;
 
@@ -249,11 +257,11 @@ export async function completeProspectVisit(id: string, prospectId: string, note
     .single();
   if (error) return { error: missingTable(error.message) ? NEEDS_MIGRATION : error.message };
 
-  // Visit touchpoint (best-effort) — drives the visit history + overdue logic.
-  // First contact also moves a fresh prospect along the pipeline.
+  // Touchpoint of the chosen kind (visit / call / email / text) — drives the
+  // visit history + overdue clock. First contact moves a fresh prospect along.
   await supabase.from("prospect_touchpoints").insert({
     prospect_id: prospectId,
-    type: "visit",
+    type: touchType,
     note: trimmed,
     created_by: who,
   });
@@ -283,5 +291,36 @@ export async function completeProspectVisit(id: string, prospectId: string, note
   revalidatePath("/driver");
   revalidatePath("/dispatch");
   revalidatePath("/sales/prospects");
+  return { success: true };
+}
+
+// "Caution / couldn't do it": mark the planned visit skipped with a reason.
+// No touchpoint is logged (no contact was made), so it stays overdue.
+export async function skipProspectVisit(id: string, reason: string) {
+  await requireSession();
+  const supabase = createAdminClient();
+  const note = reason?.trim() || "Skipped";
+
+  const { data: pv, error } = await supabase
+    .from("route_prospect_visits")
+    .update({ status: "skipped", visited_at: new Date().toISOString(), notes: note })
+    .eq("id", id)
+    .select("route_id")
+    .single();
+  if (error) return { error: missingTable(error.message) ? NEEDS_MIGRATION : error.message };
+
+  // A skip also clears the route's open-work so a fully resolved route completes.
+  if (pv?.route_id) {
+    const { data: openStops } = await supabase
+      .from("route_stops").select("id").eq("route_id", pv.route_id).in("status", ["pending", "arrived"]);
+    const { data: openVisits } = await supabase
+      .from("route_prospect_visits").select("id").eq("route_id", pv.route_id).eq("status", "planned");
+    if ((openStops?.length ?? 0) === 0 && (openVisits?.length ?? 0) === 0) {
+      await supabase.from("routes").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", pv.route_id);
+    }
+  }
+
+  revalidatePath("/driver");
+  revalidatePath("/dispatch");
   return { success: true };
 }
