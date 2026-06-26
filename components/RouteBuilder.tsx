@@ -7,9 +7,10 @@ import type { RouteStop, Customer, RouteStatus } from "@/lib/types";
 import {
   addStopToRoute,
   removeStop,
-  moveStop,
+  moveRouteItem,
   dispatchRoute,
 } from "@/lib/actions/routes";
+import { removeProspectVisit } from "@/lib/actions/prospectVisits";
 
 interface RouteBuilderProps {
   routeId: string;
@@ -51,6 +52,9 @@ export default function RouteBuilder({
     (c) => !usedCustomerIds.has(c.id)
   );
   const isDraft = routeStatus === "draft";
+  // The route is editable (reorder/remove deliveries AND prospect visits) while
+  // it's a draft or still out for delivery — not once it's completed.
+  const editable = isDraft || routeStatus === "dispatched" || routeStatus === "in_progress";
 
   function handleAddStop(customerId: string) {
     startTransition(async () => {
@@ -60,17 +64,33 @@ export default function RouteBuilder({
     });
   }
 
-  function handleRemove(stopId: string) {
-    setStops((s) => s.filter((st) => st.id !== stopId));
+  function handleRemove(stop: RouteStop) {
+    setStops((s) => s.filter((st) => st.id !== stop.id));
     startTransition(async () => {
-      await removeStop(routeId, stopId);
+      if (stop.kind === "prospect_visit" && stop.prospect_visit) {
+        await removeProspectVisit(routeId, stop.prospect_visit.prospect_id);
+      } else {
+        await removeStop(routeId, stop.id);
+      }
       router.refresh();
     });
   }
 
-  function handleMove(stopId: string, direction: "up" | "down") {
+  function handleMove(stop: RouteStop, direction: "up" | "down") {
+    // Optimistic swap so the list reorders instantly; the server renumbers the
+    // whole woven sequence (deliveries + visits) and the refresh reconciles.
+    setStops((arr) => {
+      const i = arr.findIndex((s) => s.id === stop.id);
+      const j = direction === "up" ? i - 1 : i + 1;
+      if (i < 0 || j < 0 || j >= arr.length) return arr;
+      const next = [...arr];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
     startTransition(async () => {
-      await moveStop(routeId, stopId, direction);
+      const kind = stop.kind === "prospect_visit" ? "visit" : "stop";
+      const realId = stop.kind === "prospect_visit" && stop.prospect_visit ? stop.prospect_visit.id : stop.id;
+      await moveRouteItem(routeId, realId, kind, direction);
       router.refresh();
     });
   }
@@ -115,19 +135,19 @@ export default function RouteBuilder({
                 : "border-cream-dark"
             }`}
           >
-            {/* Order controls — only for delivery stops in draft; prospect
-                visits reorder via the prospect detail action (a follow-up). */}
-            {isDraft && !isProspect && (
+            {/* Order controls — reorder any stop (delivery or prospect visit)
+                while the route is still editable. */}
+            {editable && (
               <div className="flex flex-col gap-1">
                 <button
-                  onClick={() => handleMove(stop.id, "up")}
+                  onClick={() => handleMove(stop, "up")}
                   disabled={i === 0 || isPending}
                   className="w-8 h-8 rounded flex items-center justify-center text-charcoal/30 hover:text-charcoal disabled:opacity-20"
                 >
                   ▲
                 </button>
                 <button
-                  onClick={() => handleMove(stop.id, "down")}
+                  onClick={() => handleMove(stop, "down")}
                   disabled={i === stops.length - 1 || isPending}
                   className="w-8 h-8 rounded flex items-center justify-center text-charcoal/30 hover:text-charcoal disabled:opacity-20"
                 >
@@ -202,9 +222,9 @@ export default function RouteBuilder({
                   {stop.status}
                 </span>
               )}
-              {isDraft && !isProspect && (
+              {editable && (
                 <button
-                  onClick={() => handleRemove(stop.id)}
+                  onClick={() => handleRemove(stop)}
                   disabled={isPending}
                   className="block mt-1 text-xs text-red-400 hover:text-red-600"
                 >

@@ -877,7 +877,9 @@ export default function DispatchConsole({
                   <div className="font-body text-xs text-charcoal/55">Sent to {first(driverName)} · {new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</div>
                 </div>
               </div>
-              <button onClick={() => setPhase("review")} className="w-full mt-4 inline-flex items-center justify-center gap-2 border border-cream-dark text-green-primary rounded-xl py-3 font-body text-xs uppercase tracking-widest">
+              {/* Edit the live route in the route editor, where deliveries AND
+                  woven prospect visits can be reordered/removed. */}
+              <button onClick={() => { if (today?.id) router.push(`/dispatch/route/${today.id}`); else setPhase("review"); }} className="w-full mt-4 inline-flex items-center justify-center gap-2 border border-cream-dark text-green-primary rounded-xl py-3 font-body text-xs uppercase tracking-widest">
                 <Ic d={I.edit} size={15} /> Edit route
               </button>
               <button onClick={clearDispatch} disabled={isPending} className="w-full mt-2 inline-flex items-center justify-center gap-2 text-red-500 rounded-xl py-2.5 font-body text-xs uppercase tracking-widest disabled:opacity-60">
