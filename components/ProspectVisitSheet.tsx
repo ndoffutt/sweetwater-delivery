@@ -45,6 +45,10 @@ export default function ProspectVisitSheet({
 }) {
   const pv = stop.prospect_visit!;
   const done = stop.status === "completed";
+  const lat = stop.customer?.lat, lng = stop.customer?.lng;
+  const mapsHref = `https://www.google.com/maps/dir/?api=1&destination=${
+    lat != null && lng != null ? `${lat},${lng}` : encodeURIComponent(pv.address || pv.name)
+  }`;
   const [armed, setArmed] = useState(false);   // slid → showing the detail form
   const [kind, setKind] = useState<TouchKind>("visit");
   const [note, setNote] = useState("");
@@ -115,14 +119,25 @@ export default function ProspectVisitSheet({
           {error && <div style={{ fontSize: 12.5, color: "#dc2626", marginTop: 6 }}>{error}</div>}
         </div>
       ) : !armed ? (
-        <div style={{ marginTop: 14 }}>
+        // Same layout as a customer/delivery stop: Navigate + caution row, then slide.
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              onClick={() => window.open(mapsHref, "_blank")}
+              style={{ flex: 1, minHeight: 54, borderRadius: 15, background: "#d59a29", color: "#1A1A1A", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+            >
+              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11" /></svg>
+              Navigate
+            </button>
+            <button
+              onClick={() => setSkipOpen(true)}
+              title="Couldn't reach · skip"
+              style={{ width: 54, minHeight: 54, borderRadius: 15, background: "#fff", border: "1px solid #F0EBE1", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+            >
+              <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#b8821f" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+            </button>
+          </div>
           <SlideToConfirm label="Slide to log touchpoint" onConfirm={() => setArmed(true)} />
-          <button
-            onClick={() => setSkipOpen(true)}
-            style={{ width: "100%", marginTop: 10, minHeight: 44, borderRadius: 14, border: "1px solid #E1DBCC", background: "#fff", color: "#b8821f", fontSize: 12.5, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-          >
-            ⚠ Couldn&apos;t reach · skip
-          </button>
         </div>
       ) : (
         <div style={{ marginTop: 14 }}>
