@@ -696,20 +696,13 @@ export default function DispatchConsole({
       )}
 
       {/* summary strip */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
         <Stat icon={I.sparkle} value={dispatched ? dispStops : included.length} label="Stops" />
         <Stat icon={I.check} value={dispatched ? dispDrops : drops} label="Drop-offs" />
         <Stat icon={I.send} value={dispatched ? dispPicks : picks} label="Pick-ups" />
         {dispatched && prospectCount > 0
           ? <Stat icon={I.bell} value={prospectCount} label="Prospect visits" />
           : totalPieces > 0 ? <Stat icon={I.file} value={totalPieces} label="Items" /> : null}
-        <div className="bg-cream rounded-xl border border-cream-dark p-4 flex items-center gap-2.5">
-          <span className="text-green-primary"><Ic d={I.truck} size={20} /></span>
-          <div className="min-w-0">
-            <div className="font-body text-sm font-medium text-charcoal truncate">{driverName} · Van 1</div>
-            <div className="font-body text-[11px] uppercase tracking-widest text-charcoal/40">Driver</div>
-          </div>
-        </div>
       </div>
 
       <div className="grid md:grid-cols-[1fr_360px] gap-4 mt-4 items-start">
