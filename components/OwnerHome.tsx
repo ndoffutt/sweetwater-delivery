@@ -128,7 +128,7 @@ export default function OwnerHome({
                 </span>
                 <span className="block font-serif text-2xl font-light text-charcoal leading-none">{s.label}</span>
                 <span className="block text-xs text-charcoal/40 font-body mt-1">
-                  {showBadge ? `🔔 ${overdueCount} overdue for a visit` : s.sub}
+                  {showBadge ? `🔔 ${overdueCount} need attention` : s.sub}
                 </span>
               </Link>
             );
