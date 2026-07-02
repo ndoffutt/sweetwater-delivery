@@ -333,10 +333,12 @@ export default function DispatchConsole({
           match: m,
           merge: auto ? m?.customerId ?? null : null,
           included: true,
-          // Matched customers carry their designated days; brand-new ones get
-          // them from geography (east of the shop = Thu, west = Wed).
+          // Matched customers carry their designated days; if a matched customer
+          // has none set, infer from geography so the wrong-day check still
+          // covers them. Brand-new ones also get their day from geography
+          // (east of the shop = Thu, west = Wed).
           days: auto
-            ? m?.customerDays ?? []
+            ? (m?.customerDays?.length ? m.customerDays : geoDays(m?.customerLng ?? s.lng))
             : m?.kind === "suggested"
             ? [] // unknown until the dispatcher decides merge vs. new
             : geoDays(s.lng ?? m?.geoLng),
