@@ -44,7 +44,7 @@ export default async function DispatchPage() {
     supabase
       .from("routes")
       .select(
-        `id,status,date,route_stops(stop_order,status,has_dropoff,has_pickup,notes,piece_count,customers(id,name,address,phone,lat,lng,tags${withDay ? ",delivery_days" : ""}))`
+        `id,status,date,started_at,route_stops(stop_order,status,has_dropoff,has_pickup,notes,piece_count,customers(id,name,address,phone,lat,lng,tags${withDay ? ",delivery_days" : ""}))`
       )
       .eq("date", today)
       .is("deleted_at", null)
@@ -210,7 +210,7 @@ export default async function DispatchPage() {
       overdueProspects={overdueProspects}
       plannedVisitIds={plannedVisitIds}
       plannedVisits={plannedVisits}
-      today={route ? { id: route.id, status: route.status, stops } : null}
+      today={route ? { id: route.id, status: route.status, startedAt: route.started_at ?? null, stops } : null}
     />
   );
 }

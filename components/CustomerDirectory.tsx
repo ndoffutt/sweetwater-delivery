@@ -18,7 +18,7 @@ import {
 import RouteMap from "@/components/RouteMap";
 import type { Customer, RouteStop } from "@/lib/types";
 import { RUN_DAYS, DAY_LABEL, DAY_INITIAL, formatDays } from "@/lib/deliveryDay";
-import { googleVoiceCallHref } from "@/lib/phone";
+import { googleVoiceCallHref, formatPhone } from "@/lib/phone";
 
 export interface Activity {
   id: string;
@@ -506,7 +506,7 @@ function Detail({
 
       <div className="space-y-2">
         <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(c.address)}`} target="_blank" rel="noopener noreferrer" className="block text-sm text-green-primary font-body underline underline-offset-2">{c.address}</a>
-        {c.phone && <a href={googleVoiceCallHref(c.phone)} target="_blank" rel="noopener noreferrer" className="block text-sm text-charcoal/70 font-body">📞 {c.phone}</a>}
+        {c.phone && <a href={googleVoiceCallHref(c.phone)} target="_blank" rel="noopener noreferrer" className="block text-sm text-charcoal/70 font-body">📞 {formatPhone(c.phone)}</a>}
       </div>
 
       {/* Route position — every customer should have a spot */}

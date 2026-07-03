@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { compressImage } from "@/lib/compressImage";
 import { resolveManifestStops, dispatchRoute, saveDraftRoute, clearTodaysRoute, type LastScan } from "@/lib/actions/manifest";
 import type { StopResolution } from "@/lib/manifest/match";
-import { routeMiles, routeEtaMinutes, formatMiles, formatDuration, cheapestInsertion, seqBetween } from "@/lib/geo";
+import { routeMiles, routeEtaMinutes, formatMiles, formatDuration, cheapestInsertion, seqBetween, SHOP } from "@/lib/geo";
 import { dayForLocation, dayForDow, DAY_LABEL, RUN_DAYS, type DeliveryDay } from "@/lib/deliveryDay";
 import RouteMap from "@/components/RouteMap";
 import NearbyVisits, { type NearbyItem } from "@/components/NearbyVisits";
@@ -215,7 +215,7 @@ export default function DispatchConsole({
   overdueProspects?: NearbyProspect[];
   plannedVisitIds?: string[];
   plannedVisits?: PlannedVisit[];
-  today: { id: string; status: string; stops: InitialStop[] } | null;
+  today: { id: string; status: string; startedAt?: string | null; stops: InitialStop[] } | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -420,9 +420,12 @@ export default function DispatchConsole({
   const wrongDay = (r: Row) => Boolean(runDay && r.days?.length && !r.days.includes(runDay));
   const wrongDayCount = included.filter(wrongDay).length;
 
-  const coords = included.map((r) => (r.lat != null && r.lng != null ? { lat: r.lat, lng: r.lng } : null));
+  // Miles/ETA for the real drive: shop → stops → back to the shop. Dwell time
+  // only applies to actual stops, not the shop anchors.
+  const stopCoords = included.map((r) => (r.lat != null && r.lng != null ? { lat: r.lat, lng: r.lng } : null));
+  const coords = [SHOP, ...stopCoords, SHOP];
   const miles = routeMiles(coords);
-  const eta = routeEtaMinutes(coords);
+  const eta = routeEtaMinutes(coords, stopCoords.filter(Boolean).length);
 
   const mapStops = included.map((r, i) => ({
     id: r.key,
@@ -633,17 +636,17 @@ export default function DispatchConsole({
   // off server data (today.stops + plannedVisits) so it stays correct after the
   // post-send refresh, when the client rows no longer carry stop_order.
   type WovenStop =
-    | { kind: "delivery"; order: number; name: string; address: string; town: string; vip: boolean; pieces: number; has_dropoff: boolean; has_pickup: boolean }
-    | { kind: "prospect"; order: number; name: string; visited: boolean };
+    | { kind: "delivery"; order: number; customerId: string; name: string; address: string; town: string; vip: boolean; pieces: number; has_dropoff: boolean; has_pickup: boolean }
+    | { kind: "prospect"; order: number; prospectId: string; name: string; visited: boolean };
   const deliveryStops = today?.stops ?? [];
   const wovenStops: WovenStop[] = dispatched
     ? [
         ...deliveryStops.map((s, i) => ({
-          kind: "delivery" as const, order: s.stopOrder ?? i, name: s.name, address: s.address,
+          kind: "delivery" as const, order: s.stopOrder ?? i, customerId: s.customerId, name: s.name, address: s.address,
           town: s.town, vip: s.vip, pieces: s.pieces, has_dropoff: s.has_dropoff, has_pickup: s.has_pickup,
         })),
         ...plannedVisits.map((v, i) => ({
-          kind: "prospect" as const, order: v.stopOrder ?? 9000 + i, name: v.name, visited: v.status === "visited",
+          kind: "prospect" as const, order: v.stopOrder ?? 9000 + i, prospectId: v.prospectId, name: v.name, visited: v.status === "visited",
         })),
       ].sort((a, b) => a.order - b.order)
     : [];
@@ -682,8 +685,8 @@ export default function DispatchConsole({
     : [];
 
   return (
-    <div className="p-4 md:p-8 md:max-w-5xl md:mx-auto pb-24 md:pb-8">
-      <Header dateLabel={dateLabel} dispatched={dispatched} />
+    <div className="p-4 md:p-8 md:max-w-5xl xl:max-w-[1400px] md:mx-auto pb-24 md:pb-8">
+      <Header dateLabel={dateLabel} dispatched={dispatched} outSince={dispatched ? today?.startedAt : null} />
       <SignupBanner count={pendingSignups} />
 
       {!dispatched && wrongDayCount > 0 && runDay && (
@@ -707,7 +710,7 @@ export default function DispatchConsole({
           : totalPieces > 0 ? <Stat icon={I.file} value={totalPieces} label="Items" /> : null}
       </div>
 
-      <div className="grid md:grid-cols-[1fr_360px] gap-4 mt-4 items-start">
+      <div className="grid md:grid-cols-[1fr_360px] xl:grid-cols-[1fr_440px] gap-4 xl:gap-6 mt-4 items-start">
         {/* list */}
         <div className="bg-cream rounded-2xl border border-cream-dark overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3.5 border-b border-cream-dark">
@@ -731,7 +734,11 @@ export default function DispatchConsole({
             {/* Dispatched: read-only woven route — deliveries + prospect visits
                 in route order, renumbered 1..N. */}
             {dispatched && wovenStops.map((w, i) => (
-              <div key={i} className={`flex items-start gap-2.5 p-2.5 rounded-xl ${w.kind === "prospect" ? "bg-gold-primary/[0.06]" : ""}`}>
+              <Link
+                key={i}
+                href={w.kind === "delivery" ? `/dispatch/customers?id=${w.customerId}` : `/sales/prospects?id=${w.prospectId}`}
+                className={`flex items-start gap-2.5 p-2.5 rounded-xl transition-colors hover:bg-cream-dark/30 ${w.kind === "prospect" ? "bg-gold-primary/[0.06]" : ""}`}
+              >
                 <span className={`w-7 h-7 shrink-0 rounded-full text-sm font-body flex items-center justify-center mt-0.5 ${w.kind === "prospect" ? "bg-gold-primary/20 text-gold-dark ring-1 ring-gold-primary/40" : "bg-green-primary text-cream"}`}>{i + 1}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
@@ -753,8 +760,9 @@ export default function DispatchConsole({
                   ) : (
                     <span className="text-[10px] font-body uppercase tracking-wide px-2 py-1 rounded-md bg-gold-primary/15 text-gold-dark">🔔 Prospect</span>
                   )}
+                  <span className="text-charcoal/30 ml-1">›</span>
                 </div>
-              </div>
+              </Link>
             ))}
             {!dispatched && included.map((r, i) => (
               <div
@@ -852,7 +860,7 @@ export default function DispatchConsole({
           <div className="bg-cream rounded-2xl border border-cream-dark overflow-hidden">
             {/* Map hidden on mobile — it hijacked touch-scroll and made the page
                 hard to scroll past. Still shown on desktop where that's a non-issue. */}
-            <div className="relative h-52 hidden md:block">
+            <div className="relative h-52 xl:h-80 hidden md:block">
               <RouteMap stops={mapStops} targetId={sel} onSelect={setSel} suggestedIds={suggestedIds} />
             </div>
             <div className="flex items-center justify-between px-4 py-3">
@@ -1196,7 +1204,23 @@ function SignupBanner({ count }: { count: number }) {
   );
 }
 
-function Header({ dateLabel, dispatched }: { dateLabel: string; dispatched?: boolean }) {
+// Live "driver out for Xh Ym" — ticks every 30s while the route is running.
+function OutTimer({ since, done }: { since: string; done?: boolean }) {
+  const [, force] = useState(0);
+  useEffect(() => {
+    if (done) return;
+    const t = setInterval(() => force((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, [done]);
+  const mins = Math.max(0, Math.round((Date.now() - new Date(since).getTime()) / 60000));
+  return (
+    <span className="inline-flex items-center gap-1.5 bg-gold-primary/15 text-gold-dark rounded-full px-3 py-1 font-body text-xs font-semibold">
+      🚐 {done ? "Was out" : "Out"} {formatDuration(mins)}
+    </span>
+  );
+}
+
+function Header({ dateLabel, dispatched, outSince }: { dateLabel: string; dispatched?: boolean; outSince?: string | null }) {
   return (
     <div className="flex items-end justify-between gap-3 flex-wrap">
       <div className="flex items-center gap-3 flex-wrap">
@@ -1206,6 +1230,7 @@ function Header({ dateLabel, dispatched }: { dateLabel: string; dispatched?: boo
             <span className="w-1.5 h-1.5 rounded-full bg-green-primary" /> Dispatched
           </span>
         )}
+        {dispatched && outSince && <OutTimer since={outSince} />}
       </div>
       <p className="font-body text-sm text-charcoal/45 w-full">{dateLabel}</p>
     </div>

@@ -3,11 +3,12 @@
 import { useRef } from "react";
 import Map, { Source, Layer, Marker, type MapRef } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
+import { SHOP, SHOP_NAME } from "@/lib/geo";
 
 interface Pt { lng: number; lat: number }
 
 // Shows the driver's actual GPS breadcrumb for a route (green line) with the
-// route's stops as dots, and start/end markers.
+// route's stops as dots, anchored at the shop (every run starts/ends there).
 export default function DriverPathMap({
   path,
   stops = [],
@@ -16,7 +17,7 @@ export default function DriverPathMap({
   stops?: { lng: number; lat: number; name: string }[];
 }) {
   const mapRef = useRef<MapRef>(null);
-  const all = [...path, ...stops];
+  const all = [...path, ...stops, SHOP];
 
   function fit() {
     const m = mapRef.current;
@@ -57,14 +58,19 @@ export default function DriverPathMap({
         </Marker>
       ))}
 
+      {/* Home base — the run starts and ends at the Wainscott shop. */}
+      <Marker longitude={SHOP.lng} latitude={SHOP.lat} anchor="center">
+        <div title={SHOP_NAME} style={{ width: 22, height: 22, borderRadius: 6, background: "#1a1a1a", border: "2px solid #fff", boxShadow: "0 1px 4px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11 }}>🏠</div>
+      </Marker>
+
       {start && (
         <Marker longitude={start.lng} latitude={start.lat} anchor="center">
-          <div title="Start" style={{ width: 14, height: 14, borderRadius: "50%", background: "#02733e", border: "2.5px solid #fff", boxShadow: "0 1px 4px rgba(0,0,0,0.4)" }} />
+          <div title="First GPS ping" style={{ width: 14, height: 14, borderRadius: "50%", background: "#02733e", border: "2.5px solid #fff", boxShadow: "0 1px 4px rgba(0,0,0,0.4)" }} />
         </Marker>
       )}
       {end && (
         <Marker longitude={end.lng} latitude={end.lat} anchor="center">
-          <div title="End" style={{ width: 14, height: 14, borderRadius: "50%", background: "#1a1a1a", border: "2.5px solid #fff", boxShadow: "0 1px 4px rgba(0,0,0,0.4)" }} />
+          <div title="Last GPS ping" style={{ width: 14, height: 14, borderRadius: "50%", background: "#1a1a1a", border: "2.5px solid #fff", boxShadow: "0 1px 4px rgba(0,0,0,0.4)" }} />
         </Marker>
       )}
     </Map>

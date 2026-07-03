@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { completeProspectVisit, removeProspectVisit } from "@/lib/actions/prospectVisits";
 
 export interface PlannedVisit {
@@ -62,7 +63,7 @@ export default function PlannedVisits({
               <div className="flex items-center gap-3">
                 <span className="shrink-0">{done ? "✅" : "📍"}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="font-body text-sm text-charcoal truncate">{v.name}</p>
+                  <Link href={`/sales/prospects?id=${v.prospectId}`} className="font-body text-sm text-charcoal truncate block hover:underline underline-offset-2">{v.name} ›</Link>
                   {done && v.notes && <p className="text-xs text-charcoal/45 font-body truncate">Visited — {v.notes}</p>}
                 </div>
                 {done ? (

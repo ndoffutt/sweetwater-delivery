@@ -21,6 +21,7 @@ interface RawStop {
 interface RawRoute {
   id: string;
   date: string;
+  started_at: string | null;
   completed_at: string | null;
   route_stops: RawStop[] | null;
   driver_locations: { lat: number; lng: number }[] | null;
@@ -42,7 +43,7 @@ export default async function HistoryPage() {
   const { data } = await supabase
     .from("routes")
     .select(
-      "id,date,completed_at,route_stops(id,stop_order,status,arrived_at,completed_at,dropoff_confirmed,pickup_confirmed,notes,piece_count,customers(id,name,address,lat,lng),stop_photos(storage_path)),driver_locations(lat,lng,created_at)"
+      "id,date,started_at,completed_at,route_stops(id,stop_order,status,arrived_at,completed_at,dropoff_confirmed,pickup_confirmed,notes,piece_count,customers(id,name,address,lat,lng),stop_photos(storage_path)),driver_locations(lat,lng,created_at)"
     )
     .eq("status", "completed")
     .order("date", { ascending: false })
@@ -119,6 +120,7 @@ export default async function HistoryPage() {
     return {
     id: r.id,
     date: r.date,
+    startedAt: r.started_at,
     completedAt: r.completed_at,
     stops: merged,
     // Keep GPS pings within the East End service area so a stray reading can't
