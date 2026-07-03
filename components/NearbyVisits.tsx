@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { addProspectVisit, removeProspectVisit } from "@/lib/actions/prospectVisits";
 
 export interface NearbyItem { id: string; name: string; town: string | null; miles: number }
@@ -52,7 +53,7 @@ export default function NearbyVisits({
             <div key={p.id} className="flex items-center gap-3 py-2.5">
               <span className="shrink-0">🔔</span>
               <div className="flex-1 min-w-0">
-                <p className="font-body text-sm text-charcoal truncate">{p.name}</p>
+                <Link href={`/sales/prospects?id=${p.id}`} className="font-body text-sm text-charcoal truncate block hover:underline underline-offset-2">{p.name} ›</Link>
                 <p className="text-xs text-charcoal/45 font-body truncate">
                   {p.town ? `${p.town} · ` : ""}{p.miles.toFixed(1)} mi from route
                 </p>

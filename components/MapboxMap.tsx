@@ -4,10 +4,25 @@ import { useRef, useEffect, useState } from "react";
 import Map, { Marker, Source, Layer, type MapRef } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { RouteStop } from "@/lib/types";
+import { SHOP, SHOP_NAME } from "@/lib/geo";
 
 const GREEN = "#02733e";
 const GOLD = "#d59a29";
 const CHARCOAL = "#1A1A1A";
+
+/** Home-base pin: every route starts and ends at the Wainscott shop. */
+function ShopPin() {
+  return (
+    <div title={SHOP_NAME} style={{ display: "flex", flexDirection: "column", alignItems: "center", filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.3))" }}>
+      <div style={{ width: 26, height: 26, borderRadius: 8, background: CHARCOAL, border: "2px solid #fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>
+        🏠
+      </div>
+      <span style={{ marginTop: 2, fontFamily: '"Jost", system-ui, sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: CHARCOAL, background: "rgba(255,255,255,0.85)", borderRadius: 4, padding: "1px 4px" }}>
+        Shop
+      </span>
+    </div>
+  );
+}
 
 function Pin({ n, done, active, suggested }: { n: number; done?: boolean; active?: boolean; suggested?: boolean }) {
   const bg = done ? "rgba(2,115,62,0.55)" : active || suggested ? GOLD : GREEN;
@@ -41,16 +56,20 @@ export default function MapboxMap({
       : []
   );
 
+  // Route line runs shop → stops → shop, matching how the van actually drives.
   const line = {
     type: "Feature" as const,
     properties: {},
-    geometry: { type: "LineString" as const, coordinates: pts.map((p) => [p.lng, p.lat]) },
+    geometry: {
+      type: "LineString" as const,
+      coordinates: [[SHOP.lng, SHOP.lat], ...pts.map((p) => [p.lng, p.lat]), [SHOP.lng, SHOP.lat]],
+    },
   };
 
   function fitAll() {
     const m = mapRef.current;
     if (!m || pts.length === 0) return;
-    let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+    let minLng = SHOP.lng, minLat = SHOP.lat, maxLng = SHOP.lng, maxLat = SHOP.lat;
     for (const p of pts) {
       minLng = Math.min(minLng, p.lng); maxLng = Math.max(maxLng, p.lng);
       minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat);
@@ -97,6 +116,10 @@ export default function MapboxMap({
           layout={{ "line-cap": "round", "line-join": "round" }}
           paint={{ "line-color": GREEN, "line-width": 3, "line-opacity": 0.55, "line-dasharray": [2, 1.5] }} />
       </Source>
+
+      <Marker longitude={SHOP.lng} latitude={SHOP.lat} anchor="center">
+        <ShopPin />
+      </Marker>
 
       {pts.map((p) => (
         <Marker key={p.id} longitude={p.lng} latitude={p.lat} anchor="bottom"

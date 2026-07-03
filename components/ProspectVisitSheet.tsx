@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { runStopAction } from "@/lib/offline";
-import { googleVoiceCallHref } from "@/lib/phone";
+import { googleVoiceCallHref, formatPhone } from "@/lib/phone";
 import SlideToConfirm from "@/components/SlideToConfirm";
 import type { RouteStop } from "@/lib/types";
 
@@ -208,7 +208,7 @@ export default function ProspectVisitSheet({
           {pv.phone && (
             <a href={googleVoiceCallHref(pv.phone)} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 11, background: "#fff", border: "1px solid #E1DBCC", borderRadius: 13, padding: "12px 14px", textDecoration: "none", marginBottom: 12 }}>
               <span style={{ fontSize: 18 }}>📞</span>
-              <span style={{ fontSize: 14.5, color: "#1a1a1a" }}>{pv.phone}</span>
+              <span style={{ fontSize: 14.5, color: "#1a1a1a" }}>{formatPhone(pv.phone)}</span>
               <span style={{ marginLeft: "auto", fontSize: 11.5, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(26,26,26,0.35)" }}>Call</span>
             </a>
           )}

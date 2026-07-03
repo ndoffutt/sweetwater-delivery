@@ -7,6 +7,12 @@ export interface LatLng {
   lng: number;
 }
 
+// Sweetwater's Cleaners, 350 Montauk Highway, Wainscott NY 11975.
+// Every route starts and ends here — anchor for route maps, mileage/ETA
+// estimates, and prospect-visit interleaving.
+export const SHOP: LatLng = { lat: 40.9457, lng: -72.2326 };
+export const SHOP_NAME = "Sweetwater's — Wainscott";
+
 const ROAD_FACTOR = 1.3; // crow-flies -> road distance fudge
 const AVG_MPH = 22; // Hamptons back-roads average
 const STOP_MINUTES = 8; // dwell time per delivery stop
@@ -32,11 +38,15 @@ export function routeMiles(points: (LatLng | null | undefined)[]): number {
   return miles * ROAD_FACTOR;
 }
 
-/** Rough end-to-end time (driving + per-stop dwell) for a route. */
-export function routeEtaMinutes(points: (LatLng | null | undefined)[]): number {
+/**
+ * Rough end-to-end time (driving + per-stop dwell) for a route.
+ * `dwellStops` overrides how many stops incur dwell time — pass it when the
+ * points include non-stop anchors like the shop at each end.
+ */
+export function routeEtaMinutes(points: (LatLng | null | undefined)[], dwellStops?: number): number {
   const valid = points.filter((p) => !!p && p.lat != null && p.lng != null).length;
   const miles = routeMiles(points);
-  return (miles / AVG_MPH) * 60 + valid * STOP_MINUTES;
+  return (miles / AVG_MPH) * 60 + (dwellStops ?? valid) * STOP_MINUTES;
 }
 
 export function formatMiles(miles: number): string {

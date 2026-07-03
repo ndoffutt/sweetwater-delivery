@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { updateDelivery } from "@/lib/actions/stops";
-import { googleVoiceCallHref } from "@/lib/phone";
+import { googleVoiceCallHref, formatPhone } from "@/lib/phone";
 import type { StopStatus } from "@/lib/types";
 
 interface DeliveryStop {
@@ -97,7 +97,7 @@ export default function DeliveryDetail({ stop }: { stop: DeliveryStop }) {
           <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(stop.address)}`} target="_blank" rel="noopener noreferrer" className="block text-sm text-green-primary font-body underline underline-offset-2">{stop.address}</a>
         )}
         {stop.phone && (
-          <a href={googleVoiceCallHref(stop.phone)} target="_blank" rel="noopener noreferrer" className="block text-sm text-charcoal/70 font-body">📞 {stop.phone}</a>
+          <a href={googleVoiceCallHref(stop.phone)} target="_blank" rel="noopener noreferrer" className="block text-sm text-charcoal/70 font-body">📞 {formatPhone(stop.phone)}</a>
         )}
       </div>
 

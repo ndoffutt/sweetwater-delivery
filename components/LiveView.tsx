@@ -22,6 +22,12 @@ interface DriverLoc {
 const time = (iso: string | null) =>
   iso ? new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "·";
 
+const elapsed = (iso: string | null) => {
+  if (!iso) return null;
+  const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
+};
+
 export default function LiveView() {
   const [route, setRoute] = useState<LiveRoute | null>(null);
   const [driver, setDriver] = useState<DriverLoc | null>(null);
@@ -86,6 +92,9 @@ export default function LiveView() {
         <div className="bg-cream rounded-xl border border-cream-dark p-10 text-center">
           <div className="text-3xl mb-3">📍</div>
           <p className="font-body text-charcoal/60">No route is out for delivery today.</p>
+          <a href="/dispatch" className="inline-block mt-4 min-h-tap px-5 py-2.5 bg-green-primary text-cream text-xs font-body uppercase tracking-widest rounded-lg">
+            Go to Dispatch
+          </a>
         </div>
       </div>
     );
@@ -124,6 +133,7 @@ export default function LiveView() {
             </h2>
             <p className="text-xs text-charcoal/40 font-body mt-0.5">
               {done}/{stops.length} stops · started {time(route.started_at)}
+              {route.status === "in_progress" && route.started_at && ` · out ${elapsed(route.started_at)}`}
               {pingAgeMin != null && ` · ping ${pingAgeMin <= 0 ? "just now" : `${pingAgeMin}m ago`}`}
             </p>
           </div>
@@ -162,13 +172,16 @@ export default function LiveView() {
           {stops.map((s) => {
             const isCurrent = s.id === current?.id;
             return (
-              <button
+              <div
                 key={s.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => {
                   touched.current = true;
                   setTarget(s.id);
                 }}
-                className={`w-full flex items-center gap-3 py-1.5 px-2 rounded-lg text-left ${
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); touched.current = true; setTarget(s.id); } }}
+                className={`w-full flex items-center gap-3 py-1.5 px-2 rounded-lg text-left cursor-pointer ${
                   s.id === focusId ? "bg-cream-dark/60" : ""
                 }`}
               >
@@ -194,7 +207,15 @@ export default function LiveView() {
                 <span className="text-[11px] text-charcoal/30 font-body shrink-0">
                   {s.status === "completed" ? time(s.completed_at) : s.status === "arrived" ? `arr ${time(s.arrived_at)}` : ""}
                 </span>
-              </button>
+                <a
+                  href={`/dispatch/delivery/${s.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="shrink-0 min-w-tap min-h-tap flex items-center justify-center text-charcoal/30 hover:text-charcoal/60"
+                  title="Open delivery detail"
+                >
+                  ›
+                </a>
+              </div>
             );
           })}
         </div>

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/session";
 import { easternToday } from "@/lib/date";
-import { cheapestInsertion } from "@/lib/geo";
+import { cheapestInsertion, SHOP } from "@/lib/geo";
 
 const missingTable = (msg: string | undefined) =>
   !!msg && /route_prospect_visits/i.test(msg) && /(does not exist|schema cache|could not find)/i.test(msg);
@@ -73,10 +73,13 @@ async function pickStopOrderAndBump(
   const positioned = stops.filter((s) => s.lat != null && s.lng != null);
   if (positioned.length === 0) return maxOrder + 1;
 
-  const idxInPositioned = cheapestInsertion(
-    positioned.map((s) => ({ lat: s.lat as number, lng: s.lng as number })),
-    { lat: point.lat, lng: point.lng }
-  );
+  // Anchor the insertion with the shop at both ends — the van starts and ends
+  // at 350 Montauk Hwy, so "cheapest detour" must include the legs to/from the
+  // shop (a prospect near the shop belongs at the start or end of the run, not
+  // wherever the bare stop chain says).
+  const pts = [SHOP, ...positioned.map((s) => ({ lat: s.lat as number, lng: s.lng as number })), SHOP];
+  const rawIdx = cheapestInsertion(pts, { lat: point.lat, lng: point.lng });
+  const idxInPositioned = Math.max(1, Math.min(pts.length - 1, rawIdx)) - 1;
   // Translate the positioned-only index back to a stop_order value. Going to
   // the very end means "after the last positioned stop", i.e. before any
   // unpositioned tail.

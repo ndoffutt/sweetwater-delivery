@@ -193,13 +193,22 @@ export default function RouteBuilder({
                 {stop.has_dropoff && <span className="text-xs text-charcoal/40">↓ Drop-off</span>}
                 {stop.has_pickup && <span className="text-xs text-charcoal/40">↑ Pick-up</span>}
               </span>
-              {(stop.completed_at || stop.arrived_at) && (
-                <span className="block text-xs text-green-primary font-body mt-1">
-                  {stop.completed_at
-                    ? `Delivered ${fmtTime(stop.completed_at)}`
-                    : `Arrived ${fmtTime(stop.arrived_at!)}`}
+              {/* Time line follows status — a skipped stop also carries
+                  completed_at (when it was flagged), so don't call it
+                  "Delivered". */}
+              {stop.status === "skipped" ? (
+                <span className="block text-xs text-gold-dark font-body mt-1">
+                  ⚠ Skipped{stop.completed_at ? ` ${fmtTime(stop.completed_at)}` : ""}{stop.notes ? ` — ${stop.notes}` : ""}
                 </span>
-              )}
+              ) : (stop.completed_at || stop.arrived_at) ? (
+                <span className="block text-xs text-green-primary font-body mt-1">
+                  {stop.status === "completed" && stop.completed_at
+                    ? `Delivered ${fmtTime(stop.completed_at)}`
+                    : stop.arrived_at
+                    ? `Arrived ${fmtTime(stop.arrived_at)}`
+                    : null}
+                </span>
+              ) : null}
             </button>
 
             {/* Status */}
@@ -216,7 +225,7 @@ export default function RouteBuilder({
                       ? "bg-green-primary/10 text-green-primary"
                       : stop.status === "arrived"
                       ? "bg-gold-primary/20 text-gold-dark"
-                      : "bg-charcoal/5 text-charcoal/30"
+                      : "bg-gold-primary/15 text-gold-dark"
                   }`}
                 >
                   {stop.status}

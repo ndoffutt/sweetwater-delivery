@@ -27,6 +27,7 @@ export interface HistoryStop {
 export interface HistoryRoute {
   id: string;
   date: string;
+  startedAt: string | null;
   completedAt: string | null;
   stops: HistoryStop[];
   path: { lng: number; lat: number }[];
@@ -70,7 +71,9 @@ export default function HistoryView({ routes }: { routes: HistoryRoute[] }) {
             const items = r.stops.reduce((n, s) => n + (s.pieces || 0), 0);
             const firstArrived = r.stops.map((s) => s.arrivedAt).filter(Boolean)[0] ?? null;
             const lastDone = [...r.stops].reverse().map((s) => s.completedAt).filter(Boolean)[0] ?? r.completedAt;
-            const routeTotal = dur(mins(firstArrived, lastDone));
+            // Driver-out time: route start (left the shop / first arrive) to route
+            // completion — falls back to first-arrival→last-stop when either is missing.
+            const outTotal = dur(mins(r.startedAt ?? firstArrived, r.completedAt ?? lastDone)) ?? dur(mins(firstArrived, lastDone));
             return (
               <div key={r.id} className="bg-cream rounded-xl border border-cream-dark overflow-hidden">
                 <button onClick={() => setOpen(expanded ? null : r.id)} className="w-full flex items-center justify-between p-4 text-left">
@@ -79,7 +82,7 @@ export default function HistoryView({ routes }: { routes: HistoryRoute[] }) {
                       {new Date(r.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
                     </div>
                     <div className="text-xs text-charcoal/40 font-body mt-0.5">
-                      {done} delivered{items ? ` · ${items} items` : ""}{flagged ? ` · ${flagged} flagged` : ""}{routeTotal ? ` · ${routeTotal} on route` : ""}{r.completedAt ? ` · done ${time(r.completedAt)}` : ""}
+                      {done} delivered{items ? ` · ${items} items` : ""}{flagged ? ` · ${flagged} flagged` : ""}{outTotal ? ` · driver out ${outTotal}` : ""}{r.completedAt ? ` · done ${time(r.completedAt)}` : ""}
                     </div>
                   </div>
                   <span className="text-charcoal/30 text-sm">{expanded ? "▲" : "▼"}</span>

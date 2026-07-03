@@ -29,22 +29,15 @@ export default function WelcomeBack({ name }: { name: string }) {
   if (!text) return null;
 
   return (
+    // Top-center on mobile (over the map, covers nothing); bottom-center on
+    // desktop so it never sits on top of the page title.
     <div
       aria-live="polite"
-      style={{
-        position: "fixed",
-        top: "env(safe-area-inset-top, 0px)",
-        left: 0,
-        right: 0,
-        zIndex: 200,
-        display: "flex",
-        justifyContent: "center",
-        pointerEvents: "none",
-      }}
+      className="fixed inset-x-0 top-[env(safe-area-inset-top,0px)] md:top-auto md:bottom-6 z-[200] flex justify-center pointer-events-none"
     >
       <div
+        className="mt-3.5 md:mt-0"
         style={{
-          marginTop: 14,
           transform: show ? "translateY(0)" : "translateY(-160%)",
           opacity: show ? 1 : 0,
           transition:
