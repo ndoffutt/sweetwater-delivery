@@ -135,6 +135,26 @@ export default function OwnerHome({
           })}
         </div>
 
+        {/* Secondary tools — moved off the console tabs so the console stays
+            Today / Customers / Prospects / Record. */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {[
+            { href: "/dispatch/messages", label: "💬 Messages", adminOnly: true },
+            { href: "/dispatch/reports", label: "📊 Reports", adminOnly: true },
+            { href: "/dispatch/signups", label: "📥 Signups", adminOnly: false },
+          ]
+            .filter((l) => !l.adminOnly || role === "admin")
+            .map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                className="min-h-tap inline-flex items-center px-4 py-2 rounded-full bg-cream/15 text-cream font-body text-xs uppercase tracking-widest hover:bg-cream/25 transition-colors"
+              >
+                {l.label}
+              </Link>
+            ))}
+        </div>
+
         {/* Recent activity */}
         <div className="mt-8">
           <p className="text-[11px] uppercase tracking-widest text-cream/60 font-body mb-3">Recent activity</p>

@@ -9,21 +9,19 @@ import WelcomeBack from "./WelcomeBack";
 type NavId = "dispatch" | "customers" | "sales" | "messages" | "history" | "live" | "reports";
 type NavItem = { id: NavId; label: string; href: string };
 const ITEMS: Record<NavId, NavItem> = {
-  dispatch: { id: "dispatch", label: "Dispatch", href: "/dispatch" },
+  dispatch: { id: "dispatch", label: "Today", href: "/dispatch" },
   customers: { id: "customers", label: "Customers", href: "/dispatch/customers" },
-  sales: { id: "sales", label: "Sales", href: "/sales/prospects" },
+  sales: { id: "sales", label: "Prospects", href: "/sales/prospects" },
   messages: { id: "messages", label: "Messages", href: "/dispatch/messages" },
-  history: { id: "history", label: "History", href: "/dispatch/history" },
+  history: { id: "history", label: "Record", href: "/dispatch/history" },
   live: { id: "live", label: "Live", href: "/dispatch/live" },
   reports: { id: "reports", label: "Reports", href: "/dispatch/reports" },
 };
-// Owner (admin) gets the slimmed-down console (Sales lives on the /owner home);
-// Manager keeps the ops tabs + Sales so Ahsin can work prospects. Messages is
-// owner-only for now while it's being tested.
+// Redesigned console nav (both roles): Today / Customers / Prospects / Record.
+// Messages, Reports, Signups and Settings live on the /owner home instead of
+// eating console tabs. Live is merged into Today's dispatched state.
 const NAV_BY_ROLE: Record<"dispatcher" | "admin", NavItem[]> = {
-  admin: [ITEMS.dispatch, ITEMS.customers, ITEMS.messages, ITEMS.history, ITEMS.reports],
-  // Reports is owner-only for now; ITEMS.live also hidden from the manager —
-  // re-add them here to restore those tabs.
+  admin: [ITEMS.dispatch, ITEMS.customers, ITEMS.sales, ITEMS.history],
   dispatcher: [ITEMS.dispatch, ITEMS.customers, ITEMS.sales, ITEMS.history],
 };
 

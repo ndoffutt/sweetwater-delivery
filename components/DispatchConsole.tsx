@@ -11,6 +11,8 @@ import { dayForLocation, dayForDow, DAY_LABEL, RUN_DAYS, type DeliveryDay } from
 import RouteMap from "@/components/RouteMap";
 import NearbyVisits, { type NearbyItem } from "@/components/NearbyVisits";
 import PlannedVisits, { type PlannedVisit } from "@/components/PlannedVisits";
+import { NeedsAttention, CheckinsDue, type CheckinDue } from "@/components/TodayRail";
+import type { DeliveryException } from "@/lib/actions/exceptions";
 import { addProspectVisit } from "@/lib/actions/prospectVisits";
 import type { RouteStop } from "@/lib/types";
 
@@ -200,6 +202,8 @@ export default function DispatchConsole({
   dispatchDow,
   recentRoutes = [],
   overdueProspects = [],
+  checkinsDue = [],
+  exceptions = [],
   plannedVisitIds = [],
   plannedVisits = [],
   today,
@@ -213,6 +217,8 @@ export default function DispatchConsole({
   dispatchDow?: number; // 0-6 weekday (Eastern) of today's route date
   recentRoutes?: { id: string; date: string; status: string; completedAt: string | null; stopCount: number; completedCount: number; source: string | null }[];
   overdueProspects?: NearbyProspect[];
+  checkinsDue?: CheckinDue[];
+  exceptions?: DeliveryException[];
   plannedVisitIds?: string[];
   plannedVisits?: PlannedVisit[];
   today: { id: string; status: string; startedAt?: string | null; stops: InitialStop[] } | null;
@@ -250,6 +256,36 @@ export default function DispatchConsole({
       : "empty";
 
   const [phase, setPhase] = useState<Phase>(initialPhase);
+
+  // ── Live overlay (Today = dispatch + tracking in one place) ──
+  // While the route is out, poll /api/live so stop rows tick green, the
+  // "currently at" card updates, and the driver dot moves on the map.
+  interface LiveStop { customer_id: string | null; status: string; arrived_at: string | null; completed_at: string | null }
+  const [liveStops, setLiveStops] = useState<LiveStop[]>([]);
+  const [liveDriver, setLiveDriver] = useState<{ lat: number; lng: number } | null>(null);
+  const [liveRouteStatus, setLiveRouteStatus] = useState<string | null>(today?.status ?? null);
+  useEffect(() => {
+    if (phase !== "dispatched") return;
+    let stop = false;
+    async function poll() {
+      try {
+        const res = await fetch("/api/live", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (stop || !data.route) return;
+        setLiveRouteStatus(data.route.status ?? null);
+        setLiveStops(
+          ((data.route.route_stops ?? []) as { customer_id: string | null; status: string; arrived_at: string | null; completed_at: string | null }[])
+            .map((s) => ({ customer_id: s.customer_id, status: s.status, arrived_at: s.arrived_at, completed_at: s.completed_at }))
+        );
+        setLiveDriver(data.driver ? { lat: data.driver.lat, lng: data.driver.lng } : null);
+      } catch { /* offline blip — keep last known state */ }
+    }
+    void poll();
+    const t = setInterval(() => void poll(), 30_000);
+    return () => { stop = true; clearInterval(t); };
+  }, [phase]);
+  const liveByCustomer = new Map(liveStops.filter((s) => s.customer_id).map((s) => [s.customer_id as string, s]));
   const [rows, setRows] = useState<Row[]>(initialPhase === "empty" ? [] : rowsFromInitial());
   const [original, setOriginal] = useState<Row[]>([]);
   const [sel, setSel] = useState<string>("");
@@ -560,11 +596,13 @@ export default function DispatchConsole({
       "Ordering the run",
     ];
     return (
-      <div className="p-4 md:p-8 md:max-w-3xl md:mx-auto pb-24 md:pb-8">
+      <div className="p-4 md:p-8 md:max-w-3xl xl:max-w-[1180px] md:mx-auto pb-24 md:pb-8">
         <input ref={fileRef} type="file" accept=".csv,.pdf,.jpg,.jpeg,.png,.webp,.heic,text/csv,application/csv,application/vnd.ms-excel,application/pdf,image/*" onChange={onPick} className="hidden" />
 
         <Header dateLabel={dateLabel} />
         <SignupBanner count={pendingSignups} />
+        <div className="xl:grid xl:grid-cols-[1fr_340px] xl:gap-6 xl:items-start">
+        <div className="min-w-0">
 
         <div
           className={`mt-5 rounded-2xl border p-6 md:p-10 text-center ${
@@ -613,6 +651,14 @@ export default function DispatchConsole({
         {error && <p className="text-center text-sm text-red-600 font-body mt-4">{error}</p>}
 
         {phase === "empty" && <RecentDispatches routes={recentRoutes} />}
+        </div>
+
+        {/* Right rail — the rest of the day at a glance */}
+        <div className="mt-4 xl:mt-5 flex flex-col gap-4 min-w-0">
+          <NeedsAttention exceptions={exceptions} />
+          <CheckinsDue items={checkinsDue} />
+        </div>
+        </div>
 
         {picking && (
           <ManualPicker
@@ -733,17 +779,22 @@ export default function DispatchConsole({
           <div className="p-2">
             {/* Dispatched: read-only woven route — deliveries + prospect visits
                 in route order, renumbered 1..N. */}
-            {dispatched && wovenStops.map((w, i) => (
+            {dispatched && wovenStops.map((w, i) => {
+              const lv = w.kind === "delivery" ? liveByCustomer.get(w.customerId) : undefined;
+              const liveDone = w.kind === "prospect" ? w.visited : lv ? lv.status === "completed" || lv.status === "skipped" : false;
+              const liveNow = w.kind === "delivery" && lv?.status === "arrived";
+              return (
               <Link
                 key={i}
                 href={w.kind === "delivery" ? `/dispatch/customers?id=${w.customerId}` : `/sales/prospects?id=${w.prospectId}`}
-                className={`flex items-start gap-2.5 p-2.5 rounded-xl transition-colors hover:bg-cream-dark/30 ${w.kind === "prospect" ? "bg-gold-primary/[0.06]" : ""}`}
+                className={`flex items-start gap-2.5 p-2.5 rounded-xl transition-colors hover:bg-cream-dark/30 ${liveNow ? "bg-gold-primary/[0.09]" : w.kind === "prospect" ? "bg-gold-primary/[0.06]" : ""} ${liveDone ? "opacity-60" : ""}`}
               >
-                <span className={`w-7 h-7 shrink-0 rounded-full text-sm font-body flex items-center justify-center mt-0.5 ${w.kind === "prospect" ? "bg-gold-primary/20 text-gold-dark ring-1 ring-gold-primary/40" : "bg-green-primary text-cream"}`}>{i + 1}</span>
+                <span className={`w-7 h-7 shrink-0 rounded-full text-sm font-body flex items-center justify-center mt-0.5 ${liveDone ? "bg-green-primary/20 text-green-primary" : liveNow ? "bg-gold-primary text-charcoal" : w.kind === "prospect" ? "bg-gold-primary/20 text-gold-dark ring-1 ring-gold-primary/40" : "bg-green-primary text-cream"}`}>{liveDone ? "✓" : i + 1}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-body text-[15px] font-medium text-charcoal truncate">{w.name}</span>
+                    <span className={`font-body text-[15px] font-medium text-charcoal truncate ${liveDone ? "line-through" : ""}`}>{w.name}</span>
                     {w.kind === "delivery" && w.vip && <span className="text-gold-dark shrink-0"><Ic d={I.star} size={13} fill /></span>}
+                    {liveNow && <span className="shrink-0 text-[10px] font-body font-bold text-gold-dark tracking-wider">NOW</span>}
                   </div>
                   {w.kind === "delivery" ? (
                     <div className="font-body text-xs text-charcoal/45 truncate">{w.address}{w.town ? ` · ${w.town}` : ""}{w.pieces > 0 ? ` · ${w.pieces} pc${w.pieces === 1 ? "" : "s"}` : ""}</div>
@@ -763,7 +814,8 @@ export default function DispatchConsole({
                   <span className="text-charcoal/30 ml-1">›</span>
                 </div>
               </Link>
-            ))}
+              );
+            })}
             {!dispatched && included.map((r, i) => (
               <div
                 key={r.key}
@@ -861,7 +913,7 @@ export default function DispatchConsole({
             {/* Map hidden on mobile — it hijacked touch-scroll and made the page
                 hard to scroll past. Still shown on desktop where that's a non-issue. */}
             <div className="relative h-52 xl:h-80 hidden md:block">
-              <RouteMap stops={mapStops} targetId={sel} onSelect={setSel} suggestedIds={suggestedIds} />
+              <RouteMap stops={mapStops} targetId={sel} onSelect={setSel} suggestedIds={suggestedIds} driverPos={dispatched ? liveDriver : null} />
             </div>
             <div className="flex items-center justify-between px-4 py-3">
               <span className="font-body text-[13px] text-charcoal/55">
@@ -870,6 +922,23 @@ export default function DispatchConsole({
               <span className="font-body text-xs text-green-primary font-medium">Optimized</span>
             </div>
           </div>
+
+          {/* Live "currently at" — appears once the driver is actually moving */}
+          {dispatched && liveRouteStatus === "in_progress" && (() => {
+            const nowStop = liveStops.find((s) => s.status === "arrived") ?? liveStops.find((s) => s.status === "pending");
+            const info = nowStop?.customer_id ? deliveryStops.find((d) => d.customerId === nowStop.customer_id) : null;
+            if (!info) return null;
+            const doneCount = liveStops.filter((s) => s.status === "completed" || s.status === "skipped").length;
+            return (
+              <div className="bg-gold-primary/10 rounded-2xl border border-gold-primary/40 p-5">
+                <p className="font-body text-[11px] uppercase tracking-widest text-gold-dark mb-1.5">
+                  {nowStop?.status === "arrived" ? "Currently at" : "Heading to"} · {doneCount}/{liveStops.length} done
+                </p>
+                <p className="font-serif text-xl font-light text-charcoal">{info.name}</p>
+                <p className="font-body text-xs text-charcoal/50 mt-0.5">{info.address}</p>
+              </div>
+            );
+          })()}
 
           {dispatched ? (
             <div className="bg-green-primary/[0.04] rounded-2xl border border-green-primary/40 p-5">
@@ -922,6 +991,9 @@ export default function DispatchConsole({
               {error && <p className="text-center text-xs text-red-600 font-body mt-2">{error}</p>}
             </div>
           )}
+
+          <NeedsAttention exceptions={exceptions} />
+          <CheckinsDue items={checkinsDue} />
         </div>
       </div>
 
@@ -1224,7 +1296,7 @@ function Header({ dateLabel, dispatched, outSince }: { dateLabel: string; dispat
   return (
     <div className="flex items-end justify-between gap-3 flex-wrap">
       <div className="flex items-center gap-3 flex-wrap">
-        <h2 className="font-serif text-3xl md:text-[34px] font-light text-charcoal leading-none">Today&apos;s Dispatch</h2>
+        <h2 className="font-serif text-3xl md:text-[34px] font-light text-charcoal leading-none">Today</h2>
         {dispatched && (
           <span className="inline-flex items-center gap-1.5 bg-green-primary/10 text-green-primary rounded-full px-3 py-1 font-body text-xs font-semibold">
             <span className="w-1.5 h-1.5 rounded-full bg-green-primary" /> Dispatched
