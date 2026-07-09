@@ -31,7 +31,7 @@ export async function getOpenExceptions(days = 14): Promise<DeliveryException[]>
   const { data: rows } = await supabase
     .from("route_stops")
     .select(
-      "id, status, notes, completed_at, customer_id, customers(id, name), routes!inner(date, status), stop_photos(id)"
+      "id, status, notes, completed_at, customer_id, dropoff_confirmed, pickup_confirmed, customers(id, name), routes!inner(date, status), stop_photos(id)"
     )
     .in("status", ["skipped", "completed"])
     .gte("routes.date", since);
@@ -39,6 +39,7 @@ export async function getOpenExceptions(days = 14): Promise<DeliveryException[]>
   type Row = {
     id: string; status: string; notes: string | null; completed_at: string | null;
     customer_id: string | null;
+    dropoff_confirmed: boolean | null; pickup_confirmed: boolean | null;
     customers: { id: string; name: string } | null;
     routes: { date: string; status: string } | null;
     stop_photos: { id: string }[] | null;
@@ -49,9 +50,17 @@ export async function getOpenExceptions(days = 14): Promise<DeliveryException[]>
     const name = r.customers?.name ?? "Customer";
     const date = r.routes?.date ?? "";
     if (r.status === "skipped") {
+      // Surface partial progress: a "skipped" stop with a confirmed pick-up
+      // means the driver DID collect items — the office needs to know that.
+      const partial: string[] = [];
+      if (r.dropoff_confirmed) partial.push("drop-off was confirmed");
+      if (r.pickup_confirmed) partial.push("pick-up was confirmed");
+      const nPhotos = r.stop_photos?.length ?? 0;
+      if (nPhotos > 0) partial.push(`${nPhotos} photo${nPhotos > 1 ? "s" : ""} attached`);
+      const partialNote = partial.length ? ` But the ${partial.join(", ")} — the work may be done.` : "";
       candidates.push({
         stopId: r.id, kind: "skipped", customerId: r.customer_id, customerName: name, date,
-        detail: r.notes ? `Skipped — ${r.notes}` : "Stop was skipped.",
+        detail: (r.notes ? `Skipped — ${r.notes}.` : "Stop was skipped.") + partialNote,
       });
     } else if (r.status === "completed" && (r.stop_photos?.length ?? 0) === 0 && r.routes?.status === "completed") {
       // Only flag missing photos once the route is done — mid-route the photo

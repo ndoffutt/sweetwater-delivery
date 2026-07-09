@@ -12,6 +12,8 @@ export async function POST(request: NextRequest) {
   const formData = await request.formData();
   const file = formData.get("photo") as File | null;
   const stopId = formData.get("stopId") as string | null;
+  const rawKind = formData.get("kind");
+  const kind = rawKind === "dropoff" || rawKind === "pickup" ? rawKind : null;
 
   if (!file || !stopId) {
     return NextResponse.json({ error: "Missing photo or stopId" }, { status: 400 });
@@ -41,10 +43,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: uploadError.message }, { status: 500 });
   }
 
-  const { error: dbError } = await supabase.from("stop_photos").insert({
+  let { error: dbError } = await supabase.from("stop_photos").insert({
     stop_id: stopId,
     storage_path: path,
+    ...(kind ? { kind } : {}),
   });
+
+  // Tolerant of the photo_kinds migration not having run yet: retry unlabeled.
+  if (dbError && kind && /kind|column|schema cache/i.test(dbError.message)) {
+    ({ error: dbError } = await supabase.from("stop_photos").insert({
+      stop_id: stopId,
+      storage_path: path,
+    }));
+  }
 
   if (dbError) {
     return NextResponse.json({ error: dbError.message }, { status: 500 });

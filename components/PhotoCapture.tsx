@@ -8,6 +8,9 @@ interface PhotoCaptureProps {
   stopId: string;
   existingPhotos: { id: string; url: string }[];
   onPhotoAdded: (url: string) => void;
+  // Which service this capture proves. Omitted = legacy single-pile behavior.
+  kind?: "dropoff" | "pickup";
+  title?: string;
 }
 
 interface Shot {
@@ -24,6 +27,8 @@ export default function PhotoCapture({
   stopId,
   existingPhotos,
   onPhotoAdded,
+  kind,
+  title,
 }: PhotoCaptureProps) {
   const [photos, setPhotos] = useState<Shot[]>(
     existingPhotos.map((p) => ({ ...p, synced: true }))
@@ -36,6 +41,9 @@ export default function PhotoCapture({
   useEffect(() => {
     return subscribeSync((_state, event) => {
       if (event?.uploadedStopId !== stopId) return;
+      // Two captures (drop-off + pick-up) can watch the same stop — only the
+      // one whose kind matches the uploaded photo should mark a shot synced.
+      if (kind && event.photoKind !== kind) return;
       setPhotos((cur) => {
         const idx = cur.findIndex((p) => !p.synced);
         if (idx === -1) return cur;
@@ -44,7 +52,7 @@ export default function PhotoCapture({
         return next;
       });
     });
-  }, [stopId]);
+  }, [stopId, kind]);
 
   async function handleCapture(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -52,12 +60,12 @@ export default function PhotoCapture({
     setBusy(true);
     try {
       const compressed = await compressImage(file);
-      const localUrl = await enqueuePhoto(stopId, compressed);
+      const localUrl = await enqueuePhoto(stopId, compressed, kind);
       setPhotos((p) => [...p, { id: `local-${Date.now()}`, url: localUrl, synced: false }]);
       onPhotoAdded(localUrl);
     } catch {
       // Compression failed (rare): queue the original file as-is.
-      const localUrl = await enqueuePhoto(stopId, file);
+      const localUrl = await enqueuePhoto(stopId, file, kind);
       setPhotos((p) => [...p, { id: `local-${Date.now()}`, url: localUrl, synced: false }]);
       onPhotoAdded(localUrl);
     } finally {
@@ -72,7 +80,7 @@ export default function PhotoCapture({
     <div>
       <div className="flex items-center gap-3 mb-3">
         <h3 className="font-body text-sm font-medium text-charcoal">
-          Photos ({photos.length})
+          {title ?? "Photos"} ({photos.length})
         </h3>
         <button
           onClick={() => inputRef.current?.click()}
