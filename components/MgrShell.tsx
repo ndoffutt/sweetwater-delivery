@@ -140,7 +140,7 @@ export default function MgrShell({
       <aside className="hidden md:flex md:flex-col w-60 shrink-0 bg-green-primary text-cream">
         <div className="px-5 pt-6 pb-5">
           <div className="font-serif text-2xl font-light leading-none">Sweetwater&apos;s</div>
-          <div className="text-[11px] uppercase tracking-[0.2em] text-gold-light mt-1">Dispatch</div>
+          <div className="text-[11px] uppercase tracking-[0.2em] text-gold-light mt-1">Manager Console</div>
         </div>
         <nav className="flex-1 px-3 space-y-1">
           {NAV.map((n) => {
@@ -175,7 +175,7 @@ export default function MgrShell({
       <header className="md:hidden sticky top-0 z-30 bg-green-primary text-cream px-4 py-3 flex items-center justify-between">
         <div>
           <div className="font-serif text-lg font-light leading-none">{current.label}</div>
-          <div className="text-[10px] uppercase tracking-[0.18em] text-gold-light">Sweetwater&apos;s Dispatch</div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-gold-light">Sweetwater&apos;s Manager Console</div>
         </div>
         <div className="flex items-center gap-3">
           <Link href="/driver" className="flex items-center gap-1.5 bg-gold-primary text-charcoal rounded-full pl-2.5 pr-3 py-1.5 text-[11px] uppercase tracking-[0.12em] font-body">
