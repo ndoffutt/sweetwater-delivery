@@ -98,3 +98,47 @@ export async function resolveException(stopId: string, kind: ExceptionKind) {
   revalidatePath("/dispatch");
   return { success: true };
 }
+
+export interface ResolvedException extends DeliveryException {
+  resolvedBy: string | null;
+  resolvedAt: string;
+}
+
+/** Recently-resolved exceptions for the Record page's log (best-effort). */
+export async function getResolvedExceptions(days = 14): Promise<ResolvedException[]> {
+  const supabase = createAdminClient();
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  try {
+    const { data, error } = await supabase
+      .from("exception_resolutions")
+      .select("stop_id, kind, resolved_by, resolved_at, route_stops(id, notes, customer_id, customers(name), routes(date))")
+      .gte("resolved_at", since)
+      .order("resolved_at", { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    type Row = {
+      stop_id: string; kind: ExceptionKind; resolved_by: string | null; resolved_at: string;
+      route_stops: {
+        id: string; notes: string | null; customer_id: string | null;
+        customers: { name: string } | null; routes: { date: string } | null;
+      } | null;
+    };
+    return ((data ?? []) as unknown as Row[]).map((r) => ({
+      stopId: r.stop_id,
+      kind: r.kind,
+      customerId: r.route_stops?.customer_id ?? null,
+      customerName: r.route_stops?.customers?.name ?? "Customer",
+      date: r.route_stops?.routes?.date ?? "",
+      detail:
+        r.kind === "nophoto"
+          ? "Marked delivered, but no photo proof was attached."
+          : r.route_stops?.notes
+          ? `Skipped — ${r.route_stops.notes}`
+          : "Stop was skipped.",
+      resolvedBy: r.resolved_by,
+      resolvedAt: r.resolved_at,
+    }));
+  } catch {
+    return [];
+  }
+}

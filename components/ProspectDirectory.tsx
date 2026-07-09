@@ -21,6 +21,7 @@ import { getRoutePositioning, saveRoutePosition } from "@/lib/actions/customers"
 // import when you wire it. Removed for now so the build server (which only
 // sees committed code) doesn't fail on the missing export.
 import RouteMap from "@/components/RouteMap";
+import { AccountAvatar, KindPill, DuePill, InfoTile } from "@/components/AccountBits";
 import ProspectMap, { pinColor } from "@/components/ProspectMap";
 import type { RouteStop } from "@/lib/types";
 import type { RoutePositioning } from "@/lib/actions/customers";
@@ -466,6 +467,7 @@ function Detail({
   const [notes, setNotes] = useState(p.notes ?? "");
   const [saved, setSaved] = useState(false);
   const [touchType, setTouchType] = useState<TouchpointType | null>(null);
+  const [touchSpoke, setTouchSpoke] = useState("");
   const [touchNote, setTouchNote] = useState("");
   const [touchDate, setTouchDate] = useState(todayStr);
   // Editing a past touch (null = none open).
@@ -536,7 +538,12 @@ function Detail({
   async function saveTouch() {
     if (!touchType) return;
     setBusy(true);
-    const res = await logTouchpoint(p.id, touchType, touchNote, touchDate);
+    // "Who did you speak to" travels inside the note so no schema change is
+    // needed and history/activity views show it naturally.
+    const note = touchSpoke.trim()
+      ? `Spoke with ${touchSpoke.trim()}${touchNote.trim() ? ` — ${touchNote.trim()}` : ""}`
+      : touchNote;
+    const res = await logTouchpoint(p.id, touchType, note, touchDate);
     setBusy(false);
     if (res.error) { setError(res.error); return; }
     const tp = res.touchpoint as ProspectTouchpoint;
@@ -549,6 +556,7 @@ function Detail({
       ...(p.status === "new" ? { status: "working" as ProspectStatus } : {}),
     });
     setTouchType(null);
+    setTouchSpoke("");
     setTouchNote("");
     setTouchDate(todayStr());
   }
@@ -628,10 +636,13 @@ function Detail({
     <div className="p-5 md:p-8 md:max-w-2xl space-y-5">
       <button onClick={onBack} className="md:hidden text-sm text-charcoal/50 font-body">← Back</button>
 
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="font-serif text-3xl font-light text-charcoal">{p.name}</h2>
-          <div className="flex items-center gap-2 mt-1">
+      <div className="flex items-start gap-4">
+        <AccountAvatar name={p.name} square size={56} />
+        <div className="flex-1 min-w-0">
+          <h2 className="font-serif text-3xl font-light text-charcoal leading-tight">{p.name}</h2>
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            <KindPill kind="prospect" />
+            {!closed(p.status) && <DuePill daysOverdue={daysSince(lastTouch(p)) == null ? overdueDaysFor(p.priority) : (daysSince(lastTouch(p)) as number) - overdueDaysFor(p.priority)} />}
             <span className="text-xs text-charcoal/40 font-body">{typeLabel(p.business_type)}</span>
             {(p.town ?? townFromAddress(p.address)) && (
               <span className="text-[11px] font-body bg-gold-primary/20 text-gold-dark rounded-full px-2 py-0.5">
@@ -858,40 +869,30 @@ function Detail({
         </div>
       )}
 
-      {/* Contact info */}
-      <div className="space-y-1.5">
-        {p.contact_name && (
-          <p className="text-sm font-body text-charcoal">
-            {p.contact_name}
-            {p.contact_title && <span className="text-charcoal/40"> — {p.contact_title}</span>}
-          </p>
-        )}
-        {p.phone && <a href={googleVoiceCallHref(p.phone)} target="_blank" rel="noopener noreferrer" className="block text-sm text-green-primary font-body">📞 {formatPhone(p.phone)}</a>}
-        {p.email && <a href={`mailto:${p.email}`} className="block text-sm text-green-primary font-body break-all">✉️ {p.email}</a>}
+      {/* Contact info — tile grid (redesign) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
         {p.address && (
-          <a
-            href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address)}`}
-            target="_blank" rel="noopener noreferrer"
-            className="block text-sm text-charcoal/70 font-body underline underline-offset-2"
-          >
-            {p.address}
-          </a>
+          <InfoTile icon="📍" label="Address" value={p.address}
+            href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address)}`} />
         )}
+        {p.phone && (
+          <InfoTile icon="📞" label="Phone" value={formatPhone(p.phone)} href={googleVoiceCallHref(p.phone)} action="Call" />
+        )}
+        {p.contact_name && (
+          <InfoTile icon="👤" label="Contact" value={p.contact_title ? `${p.contact_name} — ${p.contact_title}` : p.contact_name} />
+        )}
+        {p.email && <InfoTile icon="✉️" label="Email" value={p.email} href={`mailto:${p.email}`} />}
         {p.website && (
-          <a
-            href={p.website.startsWith("http") ? p.website : `https://${p.website}`}
-            target="_blank" rel="noopener noreferrer"
-            className="block text-sm text-charcoal/50 font-body"
-          >
-            🌐 {p.website.replace(/^https?:\/\//, "")}
-          </a>
+          <InfoTile icon="🌐" label="Website" value={p.website.replace(/^https?:\/\//, "")}
+            href={p.website.startsWith("http") ? p.website : `https://${p.website}`} />
         )}
-        {(p.lat == null || p.lng == null) && (
-          <p className="text-xs text-green-primary font-body bg-green-primary/5 border border-green-primary/20 rounded-lg px-2.5 py-1.5">
-            📞 Call-only — no map location, so this prospect won&apos;t appear on the map or a route. Reach out by phone/email.
-          </p>
-        )}
+        <InfoTile icon="🔔" label="Visit window" value={`${(p.priority ?? "medium")[0].toUpperCase()}${(p.priority ?? "medium").slice(1)} · every ${overdueDaysFor(p.priority)}d`} />
       </div>
+      {(p.lat == null || p.lng == null) && (
+        <p className="text-xs text-green-primary font-body bg-green-primary/5 border border-green-primary/20 rounded-lg px-2.5 py-1.5">
+          📞 Call-only — no map location, so this prospect won&apos;t appear on the map or a route. Reach out by phone/email.
+        </p>
+      )}
 
       {/* Log a touchpoint */}
       <div className="bg-green-primary/5 border border-green-primary/20 rounded-xl p-3">
@@ -909,11 +910,17 @@ function Detail({
         </div>
         {touchType && (
           <div className="mt-2.5 space-y-2">
+            <input
+              value={touchSpoke}
+              onChange={(e) => setTouchSpoke(e.target.value)}
+              placeholder="Who did you speak to? (optional)"
+              className="w-full p-2.5 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary"
+            />
             <textarea
               value={touchNote}
               onChange={(e) => setTouchNote(e.target.value)}
               rows={2}
-              placeholder="What happened? (optional)"
+              placeholder="What happened, and what's the next step? (optional)"
               className="w-full p-2.5 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm resize-none focus:outline-none focus:border-green-primary"
             />
             <label className="flex items-center gap-2 text-xs text-charcoal/50 font-body">

@@ -16,6 +16,7 @@ import {
   type RoutePositioning,
 } from "@/lib/actions/customers";
 import RouteMap from "@/components/RouteMap";
+import { AccountAvatar, KindPill, InfoTile } from "@/components/AccountBits";
 import type { Customer, RouteStop } from "@/lib/types";
 import { RUN_DAYS, DAY_LABEL, DAY_INITIAL, formatDays } from "@/lib/deliveryDay";
 import { googleVoiceCallHref, formatPhone } from "@/lib/phone";
@@ -484,29 +485,35 @@ function Detail({
     <div className="p-5 md:p-8 md:max-w-2xl space-y-5">
       <button onClick={onBack} className="md:hidden text-sm text-charcoal/50 font-body">← Back</button>
 
-      <div>
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="font-serif text-3xl font-light text-charcoal">{c.name}</h2>
-          <div className="shrink-0 flex items-center gap-2">
+      <div className="flex items-start gap-4">
+        <AccountAvatar name={c.name} size={56} />
+        <div className="flex-1 min-w-0">
+          <h2 className="font-serif text-3xl font-light text-charcoal leading-tight">{c.name}</h2>
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            <KindPill kind="customer" />
             {c.account_type && (
-              <span className={`text-[11px] font-body uppercase tracking-wider px-2.5 py-1 rounded-full ${c.account_type === "Delivery" ? "bg-green-primary/10 text-green-primary" : "bg-gold-primary/20 text-gold-dark"}`}>
+              <span className={`text-[11px] font-body uppercase tracking-wider px-2.5 py-0.5 rounded-full ${c.account_type === "Delivery" ? "bg-green-primary/10 text-green-primary" : "bg-gold-primary/20 text-gold-dark"}`}>
                 {c.account_type}
               </span>
             )}
-            <button
-              onClick={() => setEditing(true)}
-              className="min-h-tap px-3 py-1.5 rounded-lg border border-cream-dark bg-cream text-charcoal/60 text-xs font-body uppercase tracking-widest"
-            >
-              ✎ Edit
-            </button>
+            {c.spot_account && <span className="text-xs text-charcoal/40 font-body">SPOT {c.spot_account}</span>}
           </div>
         </div>
-        {c.spot_account && <p className="text-xs text-charcoal/40 font-body mt-0.5">SPOT {c.spot_account}</p>}
+        <button
+          onClick={() => setEditing(true)}
+          className="shrink-0 min-h-tap px-3 py-1.5 rounded-lg border border-cream-dark bg-cream text-charcoal/60 text-xs font-body uppercase tracking-widest"
+        >
+          ✎ Edit
+        </button>
       </div>
 
-      <div className="space-y-2">
-        <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(c.address)}`} target="_blank" rel="noopener noreferrer" className="block text-sm text-green-primary font-body underline underline-offset-2">{c.address}</a>
-        {c.phone && <a href={googleVoiceCallHref(c.phone)} target="_blank" rel="noopener noreferrer" className="block text-sm text-charcoal/70 font-body">📞 {formatPhone(c.phone)}</a>}
+      {/* Info tiles (redesign): the four facts a dispatcher reaches for */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        <InfoTile icon="📍" label="Address" value={c.address}
+          href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(c.address)}`} />
+        {c.phone && <InfoTile icon="📞" label="Phone" value={formatPhone(c.phone)} href={googleVoiceCallHref(c.phone)} action="Call" />}
+        <InfoTile icon="🔑" label="Gate / entry code" value={c.gate_code || "—"} mono={!!c.gate_code} />
+        <InfoTile icon="🕐" label="Last delivered" value={activity[0]?.date ? new Date(activity[0].date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"} />
       </div>
 
       {/* Route position — every customer should have a spot */}

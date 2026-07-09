@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import HistoryView, { type HistoryRoute } from "@/components/HistoryView";
+import { getOpenExceptions, getResolvedExceptions } from "@/lib/actions/exceptions";
 
 export const dynamic = "force-dynamic";
 
@@ -131,5 +132,10 @@ export default async function HistoryPage() {
     };
   });
 
-  return <HistoryView routes={routes} />;
+  const [openExceptions, resolvedExceptions] = await Promise.all([
+    getOpenExceptions(14).catch(() => []),
+    getResolvedExceptions(14).catch(() => []),
+  ]);
+
+  return <HistoryView routes={routes} openExceptions={openExceptions} resolvedExceptions={resolvedExceptions} />;
 }

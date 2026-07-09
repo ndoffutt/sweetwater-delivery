@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import DriverPathMap from "@/components/DriverPathMap";
+import { NeedsAttention } from "@/components/TodayRail";
+import type { DeliveryException, ResolvedException } from "@/lib/actions/exceptions";
 
 export interface HistoryStop {
   id: string;
@@ -44,19 +46,74 @@ function mins(aIso: string | null, bIso: string | null): number | null {
 }
 const dur = (m: number | null) => (m == null ? null : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`);
 
-export default function HistoryView({ routes }: { routes: HistoryRoute[] }) {
+export default function HistoryView({
+  routes,
+  openExceptions = [],
+  resolvedExceptions = [],
+}: {
+  routes: HistoryRoute[];
+  openExceptions?: DeliveryException[];
+  resolvedExceptions?: ResolvedException[];
+}) {
   const [open, setOpen] = useState<string | null>(routes[0]?.id ?? null);
   const router = useRouter();
 
   return (
     <div className="p-5 md:p-8 md:max-w-3xl md:mx-auto">
       <Link href="/dispatch" className="inline-flex items-center gap-1.5 text-charcoal/50 font-body text-xs uppercase tracking-widest mb-3">
-        ← Dispatch
+        ← Today
       </Link>
-      <h2 className="font-serif text-2xl font-light text-charcoal mb-1">History</h2>
-      <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-6">
-        Completed routes &amp; proof
+      <h2 className="font-serif text-2xl font-light text-charcoal mb-1">Record</h2>
+      <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-5">
+        Was every delivery done properly?
       </p>
+
+      {/* Compliance strip — the three numbers that answer the question */}
+      {(() => {
+        const all = routes.flatMap((r) => r.stops.filter((s) => s.kind === "delivery"));
+        const done = all.filter((s) => s.status === "completed").length;
+        const withPhoto = all.filter((s) => s.status === "completed" && s.photos.length > 0).length;
+        const photoPct = done ? Math.round((withPhoto / done) * 100) : 100;
+        return (
+          <div className="grid grid-cols-3 gap-2.5 mb-5">
+            <div className="bg-cream rounded-xl border border-cream-dark p-3.5">
+              <div className={`font-serif text-2xl font-light leading-none ${done === all.length ? "text-green-primary" : "text-charcoal"}`}>{done}/{all.length}</div>
+              <div className="font-body text-[10px] uppercase tracking-widest text-charcoal/40 mt-1.5">Stops completed</div>
+            </div>
+            <div className="bg-cream rounded-xl border border-cream-dark p-3.5">
+              <div className={`font-serif text-2xl font-light leading-none ${photoPct === 100 ? "text-green-primary" : "text-gold-dark"}`}>{photoPct}%</div>
+              <div className="font-body text-[10px] uppercase tracking-widest text-charcoal/40 mt-1.5">Photo proof</div>
+            </div>
+            <div className="bg-cream rounded-xl border border-cream-dark p-3.5">
+              <div className={`font-serif text-2xl font-light leading-none ${openExceptions.length ? "text-red-600" : "text-green-primary"}`}>{openExceptions.length}</div>
+              <div className="font-body text-[10px] uppercase tracking-widest text-charcoal/40 mt-1.5">Open exceptions</div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Exception log — open ones resolvable here, recent resolutions below */}
+      <div className="mb-6 space-y-2.5">
+        <NeedsAttention exceptions={openExceptions} />
+        {resolvedExceptions.length > 0 && (
+          <div className="bg-cream rounded-2xl border border-cream-dark overflow-hidden opacity-70">
+            <p className="px-4 pt-3.5 pb-2 font-body text-[11px] uppercase tracking-widest text-charcoal/45 border-b border-cream-dark">
+              Resolved · {resolvedExceptions.length}
+            </p>
+            {resolvedExceptions.map((ex, i) => (
+              <div key={`${ex.stopId}-${ex.kind}`} className={`px-4 py-2.5 ${i ? "border-t border-cream-dark" : ""}`}>
+                <p className="font-body text-[13px] text-charcoal/60">
+                  <span className="text-green-primary">✓</span>{" "}
+                  <b className="text-charcoal/80">{ex.customerName}</b> — {ex.detail}
+                  {ex.resolvedBy ? <span className="text-charcoal/40"> · resolved by {ex.resolvedBy}</span> : null}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-3">Day by day</p>
 
       {routes.length === 0 ? (
         <div className="bg-cream rounded-xl border border-cream-dark p-10 text-center text-charcoal/50 font-body">
