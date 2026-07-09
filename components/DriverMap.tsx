@@ -468,21 +468,34 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
 
   const cust = target?.customer;
   // Each service the stop calls for (or the driver started) must be finished
-  // AND proven with its own photo before the stop can complete. A pick-up can
-  // instead be excused with "nothing was out". This is what stops a drop+pick
-  // stop from closing with the pick-up silently missed.
+  // AND proven with its own photo before the stop can complete.
+  //
+  // The pick-up question must be answered at EVERY stop: planned pick-ups are
+  // confirmed + photographed (or excused with "nothing was out"), and drop-off
+  // stops without a planned pick-up ask "Is there a pickup?" — Yes means
+  // confirm + photo, No records that the driver checked. Unplanned pick-ups
+  // (a bag left out) were getting missed because nobody asked.
   const dropNeeded = !!target && (target.has_dropoff || target.dropoff_confirmed);
-  const pickNeeded = !!target && (target.has_pickup || target.pickup_confirmed) && !target.pickup_none;
   const dropOK = !dropNeeded || (!!target?.dropoff_confirmed && kindPhotos(target!, "dropoff") > 0);
-  const pickOK = !pickNeeded || (!!target?.pickup_confirmed && kindPhotos(target!, "pickup") > 0);
+  const pickResolved =
+    !!target &&
+    (target.pickup_none
+      ? true
+      : target.pickup_confirmed
+      ? kindPhotos(target, "pickup") > 0
+      : false);
   const didSomething = !!target && (target.dropoff_confirmed || target.pickup_confirmed || !!target.pickup_none);
-  const canComplete = !!target && dropOK && pickOK && didSomething;
+  const canComplete = !!target && dropOK && pickResolved && didSomething;
   const completeHint = !target
     ? ""
     : !dropOK
     ? target.dropoff_confirmed ? "Add a drop-off photo to finish" : "Confirm the drop-off"
-    : !pickOK
-    ? target.pickup_confirmed ? "Add a pick-up photo to finish" : "Confirm the pick-up — or mark “nothing was out”"
+    : !pickResolved
+    ? target.pickup_confirmed
+      ? "Add a pick-up photo to finish"
+      : target.has_pickup
+      ? "Confirm the pick-up — or mark “nothing was out”"
+      : "Is there a pickup? Answer Yes or No"
     : !didSomething
     ? "Confirm what you did at this stop"
     : "";
@@ -659,11 +672,26 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
                     </button>
                   )}
 
-                  {/* ── Pick-up: confirm + photo, or "nothing was out" ── */}
-                  {(target.has_pickup || target.pickup_confirmed || target.pickup_none) ? (
+                  {/* ── Pick-up. Planned: confirm + photo (or "nothing was out").
+                      Not planned: mandatory "Is there a pickup?" — unplanned
+                      pick-ups get missed unless the driver is asked outright. ── */}
+                  {!target.has_pickup && !target.pickup_confirmed && !target.pickup_none ? (
+                    <div style={{ background: "rgba(213,154,41,0.1)", border: `1.5px solid ${C.goldDark}`, borderRadius: 14, padding: "14px 16px" }}>
+                      <div style={{ fontFamily: C.body, fontSize: 15.5, fontWeight: 600, color: C.charcoal }}>Is there a pickup?</div>
+                      <div style={{ fontFamily: C.body, fontSize: 12.5, color: "rgba(26,26,26,0.5)", marginTop: 2 }}>Check for a bag before you leave — even if none was scheduled.</div>
+                      <div style={{ display: "flex", gap: 9, marginTop: 11 }}>
+                        <button onClick={() => togglePick(target)} style={{ flex: 1, minHeight: 50, borderRadius: 13, border: `1.5px solid ${C.green}`, background: "#fff", color: C.green, cursor: "pointer", fontFamily: C.body, fontSize: 14, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                          Yes — picked up
+                        </button>
+                        <button onClick={() => toggleNothingOut(target)} style={{ flex: 1, minHeight: 50, borderRadius: 13, border: `1px solid ${C.creamDark}`, background: "#fff", color: "rgba(26,26,26,0.6)", cursor: "pointer", fontFamily: C.body, fontSize: 14, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                          No pickup
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
                     <div style={{ marginBottom: 4 }}>
                       <div style={{ marginBottom: 9, marginLeft: 2 }}>
-                        <Label>Pick-up <span style={{ color: pickOK || target.pickup_none ? C.green : C.goldDark }}>{target.pickup_none ? "· nothing was out" : "· photo required"}</span></Label>
+                        <Label>Pick-up <span style={{ color: pickResolved ? C.green : C.goldDark }}>{target.pickup_none ? "· nothing was out" : "· photo required"}</span></Label>
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
                         <CheckRow label="Picked up" icon="arrowUp" checked={target.pickup_confirmed} onClick={() => togglePick(target)} />
@@ -686,10 +714,6 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
                         )}
                       </div>
                     </div>
-                  ) : (
-                    <button onClick={() => togglePick(target)} style={{ width: "100%", background: "none", border: `1px dashed ${C.creamDark}`, borderRadius: 12, cursor: "pointer", padding: "10px", fontFamily: C.body, fontSize: 13, color: "rgba(26,26,26,0.45)" }}>
-                      + Also picked something up?
-                    </button>
                   )}
                 </>
               )}
