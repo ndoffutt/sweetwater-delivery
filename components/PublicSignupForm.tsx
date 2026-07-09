@@ -36,8 +36,13 @@ export default function PublicSignupForm() {
       <div className="bg-cream rounded-2xl border border-cream-dark p-6 text-center">
         <p className="font-serif text-2xl font-light text-charcoal">Thanks — you&apos;re on the list!</p>
         <p className="font-body text-sm text-charcoal/60 mt-2">
-          We&apos;ll reach out to set up your delivery service. If you opted in to texts,
-          you&apos;ll get delivery updates from our business number.
+          One step left: delivery service requires a credit card on file. Call us at{" "}
+          <a href="tel:+16315375120" className="text-green-primary font-semibold whitespace-nowrap">(631) 537-5120</a>{" "}
+          and we&apos;ll set it up in under two minutes — you&apos;re only ever charged for
+          cleaning performed; pickup &amp; delivery are complimentary.
+        </p>
+        <p className="font-body text-xs text-charcoal/45 mt-3">
+          If you opted in to texts, you&apos;ll get delivery updates from our business number.
         </p>
       </div>
     );
@@ -84,6 +89,11 @@ export default function PublicSignupForm() {
       </button>
       <p className="font-body text-[11px] text-charcoal/40 text-center">
         Leave the SMS box unchecked and we&apos;ll still set up delivery — texts are optional.
+      </p>
+      <p className="font-body text-[11px] text-charcoal/50 text-center leading-relaxed">
+        To activate service we keep a credit card on file — after signing up, call{" "}
+        <a href="tel:+16315375120" className="text-green-primary whitespace-nowrap">(631) 537-5120</a>{" "}
+        to add yours. You&apos;re only charged for cleaning performed.
       </p>
     </form>
   );
