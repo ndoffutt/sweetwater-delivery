@@ -334,6 +334,7 @@ export default function CustomerDirectory({
                   aria-label="Drag to reorder"
                 >⋮⋮</span>
               )}
+              {sort !== "route" && <AccountAvatar name={c.name} size={38} />}
               {sort === "route" && (
                 <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-body ${c.route_seq != null ? "bg-green-primary text-cream" : "bg-cream-dark text-charcoal/40"}`}>
                   {c.route_seq != null ? Math.round(c.route_seq) : "·"}

@@ -18,7 +18,14 @@ const fmtDate = (ymd: string) =>
   ymd ? new Date(ymd + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : "";
 
 /** "Needs attention" — deliveries that weren't done properly (skipped / no photo). */
-export function NeedsAttention({ exceptions: initial }: { exceptions: DeliveryException[] }) {
+export function NeedsAttention({
+  exceptions: initial,
+  onReroute,
+}: {
+  exceptions: DeliveryException[];
+  /** When set (route still editable), skipped stops offer "Add to today's route". */
+  onReroute?: (customerId: string) => void;
+}) {
   const [items, setItems] = useState(initial);
   const [error, setError] = useState("");
   const [, start] = useTransition();
@@ -31,6 +38,13 @@ export function NeedsAttention({ exceptions: initial }: { exceptions: DeliveryEx
       const res = await resolveException(stopId, kind);
       if (res.error) { setError(res.error); setItems(prev); }
     });
+  }
+
+  function reroute(ex: DeliveryException) {
+    if (!ex.customerId || !onReroute) return;
+    onReroute(ex.customerId);
+    // Rerouting handles the miss — mark the exception resolved too.
+    resolve(ex.stopId, ex.kind);
   }
 
   return (
@@ -61,7 +75,15 @@ export function NeedsAttention({ exceptions: initial }: { exceptions: DeliveryEx
               </Link>{" "}
               — {ex.detail}
             </p>
-            <div className="flex gap-2 mt-2">
+            <div className="flex gap-2 mt-2 flex-wrap">
+              {ex.kind === "skipped" && ex.customerId && onReroute && (
+                <button
+                  onClick={() => reroute(ex)}
+                  className="min-h-tap inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-primary text-green-primary font-body text-xs font-semibold"
+                >
+                  ➕ Add to today&apos;s route
+                </button>
+              )}
               <button
                 onClick={() => resolve(ex.stopId, ex.kind)}
                 className="min-h-tap inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-cream-dark text-green-primary font-body text-xs font-semibold"

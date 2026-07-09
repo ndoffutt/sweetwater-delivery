@@ -22,7 +22,7 @@ import { getRoutePositioning, saveRoutePosition } from "@/lib/actions/customers"
 // sees committed code) doesn't fail on the missing export.
 import RouteMap from "@/components/RouteMap";
 import { AccountAvatar, KindPill, DuePill, InfoTile } from "@/components/AccountBits";
-import ProspectMap, { pinColor } from "@/components/ProspectMap";
+import ProspectMap from "@/components/ProspectMap";
 import type { RouteStop } from "@/lib/types";
 import type { RoutePositioning } from "@/lib/actions/customers";
 import type {
@@ -374,7 +374,7 @@ export default function ProspectDirectory({
                 onClick={() => { setSelectedId(p.id); setAdding(false); }}
                 className={`w-full text-left flex items-center gap-3 p-3 rounded-xl border transition-colors ${selectedId === p.id ? "bg-green-primary/5 border-green-primary/30" : flagged ? "bg-gold-primary/5 border-gold-primary/40" : "bg-cream border-cream-dark"}`}
               >
-                <span className="shrink-0 w-2.5 h-2.5 rounded-full" style={{ background: pinColor(p.status) }} />
+                <AccountAvatar name={p.name} square size={38} />
                 <div className="flex-1 min-w-0">
                   <span className="font-body font-medium text-charcoal truncate block">
                     {manualReq && <span className="text-red-600" title="Manual request — dispatcher flagged for outreach">🚩 </span>}
@@ -947,12 +947,12 @@ function Detail({
 
       {/* Notes */}
       <div className="bg-gold-primary/10 border border-gold-primary/30 rounded-xl p-3">
-        <label className="text-xs text-gold-dark font-body uppercase tracking-widest block mb-1">Notes</label>
+        <label className="text-xs text-gold-dark font-body uppercase tracking-widest block mb-1">Why we&apos;re courting them</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
-          placeholder="Angle, pricing discussed, who to ask for…"
+          placeholder="The angle: volume, current vendor pain, who to ask for…"
           className="w-full bg-transparent text-sm font-body text-charcoal resize-none focus:outline-none placeholder:text-charcoal/30"
         />
       </div>

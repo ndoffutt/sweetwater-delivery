@@ -655,7 +655,7 @@ export default function DispatchConsole({
 
         {/* Right rail — the rest of the day at a glance */}
         <div className="mt-4 xl:mt-5 flex flex-col gap-4 min-w-0">
-          <NeedsAttention exceptions={exceptions} />
+          <NeedsAttention exceptions={exceptions} onReroute={(cid) => applyPicked([cid])} />
           <CheckinsDue items={checkinsDue} />
         </div>
         </div>
@@ -936,6 +936,14 @@ export default function DispatchConsole({
                 </p>
                 <p className="font-serif text-xl font-light text-charcoal">{info.name}</p>
                 <p className="font-body text-xs text-charcoal/50 mt-0.5">{info.address}</p>
+                {nowStop?.status === "arrived" && nowStop.arrived_at && (() => {
+                  const onSite = Math.max(0, Math.round((Date.now() - new Date(nowStop.arrived_at).getTime()) / 60000));
+                  return (
+                    <p className="font-body text-xs text-green-primary mt-1.5">
+                      🕐 Arrived {new Date(nowStop.arrived_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · on site {onSite}m
+                    </p>
+                  );
+                })()}
               </div>
             );
           })()}
@@ -992,7 +1000,7 @@ export default function DispatchConsole({
             </div>
           )}
 
-          <NeedsAttention exceptions={exceptions} />
+          <NeedsAttention exceptions={exceptions} onReroute={dispatched ? undefined : (cid) => applyPicked([cid])} />
           <CheckinsDue items={checkinsDue} />
         </div>
       </div>

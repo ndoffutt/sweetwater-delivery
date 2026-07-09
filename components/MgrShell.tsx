@@ -79,7 +79,7 @@ export default function MgrShell({
     return () => { live = false; clearInterval(t); };
   }, [pathname, hasMessages]);
 
-  // Overdue-visit badge on the Sales tab.
+  // Overdue-visit badge on the Prospects tab.
   const [overdue, setOverdue] = useState(0);
   useEffect(() => {
     if (!hasSales) return;
@@ -94,8 +94,23 @@ export default function MgrShell({
     return () => { live = false; clearInterval(t); };
   }, [pathname, hasSales]);
 
+  // Attention badge on the Today tab (open exceptions + check-ins due) —
+  // mirrors the Today page's right rail, per the console redesign.
+  const [attention, setAttention] = useState(0);
+  useEffect(() => {
+    let live = true;
+    const poll = () =>
+      fetch("/api/attention", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => { if (live) setAttention(d.count ?? 0); })
+        .catch(() => {});
+    poll();
+    const t = setInterval(poll, 120000);
+    return () => { live = false; clearInterval(t); };
+  }, [pathname]);
+
   const badgeCount = (id: NavId) =>
-    id === "messages" ? unread : id === "sales" ? overdue : 0;
+    id === "messages" ? unread : id === "sales" ? overdue : id === "dispatch" ? attention : 0;
 
   const Badge = ({ id }: { id: NavId }) =>
     badgeCount(id) > 0 ? (
