@@ -167,7 +167,7 @@ export default async function DispatchPage() {
   // the Today "Check-ins due" rail.
   const { data: prospectRows } = await supabase
     .from("prospects")
-    .select("id,name,lat,lng,status,priority,town,created_at,call_only,touchpoints:prospect_touchpoints(type,created_at)")
+    .select("id,name,lat,lng,status,priority,town,created_at,call_only,manual_request_at,touchpoints:prospect_touchpoints(type,created_at)")
     .is("deleted_at", null)
     .in("status", ["new", "working", "active"]);
   const pipeline = (prospectRows ?? []) as unknown as Prospect[];

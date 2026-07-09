@@ -147,7 +147,7 @@ export default function MgrShell({
             const on = n.id === active;
             return (
               <Link key={n.id} href={n.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-body transition-colors ${on ? "bg-white/12 text-cream" : "text-cream/65 hover:text-cream hover:bg-white/5"}`}>
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-body transition-colors ${on ? "bg-white/15 text-cream" : "text-cream/65 hover:text-cream hover:bg-white/5"}`}>
                 <span className={on ? "text-gold-light" : ""}><NavIcon id={n.id} /></span>
                 {n.label}
                 <Badge id={n.id} />
