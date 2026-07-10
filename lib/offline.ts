@@ -18,6 +18,7 @@ import {
   updateStopStatus,
   confirmDropoff,
   confirmPickup,
+  setPickupNone,
   flagStop,
 } from "@/lib/actions/stops";
 import { completeProspectVisit, skipProspectVisit } from "@/lib/actions/prospectVisits";
@@ -31,11 +32,14 @@ export interface QueuedPhoto {
   blob: Blob;
   type: string;
   createdAt: number;
+  // Which service the photo proves ('dropoff' | 'pickup'); undefined = legacy.
+  photoKind?: string;
 }
 
 export type StopActionInput =
   | { kind: "status"; stopId: string; status: StopStatus }
   | { kind: "dropoff" | "pickup"; stopId: string; confirmed: boolean }
+  | { kind: "pickupNone"; stopId: string; none: boolean }
   | { kind: "flag"; stopId: string; reason: string }
   // Prospect-visit stops carry the route_prospect_visits id + prospect id so the
   // server action can run on replay. stopId is the synthetic `pv-…` id, used only
@@ -121,13 +125,13 @@ function writeActions(list: QueuedAction[]) {
 
 // ── Listeners / state ──────────────────────────────────────────
 
-type Listener = (state: SyncState, event?: { uploadedStopId?: string; url?: string }) => void;
+type Listener = (state: SyncState, event?: { uploadedStopId?: string; url?: string; photoKind?: string }) => void;
 const listeners = new Set<Listener>();
 let syncing = false;
 let flushTimer: ReturnType<typeof setInterval> | null = null;
 let wired = false;
 
-async function emit(event?: { uploadedStopId?: string; url?: string }) {
+async function emit(event?: { uploadedStopId?: string; url?: string; photoKind?: string }) {
   const photos = await idbAll().catch(() => []);
   const actions = readActions();
   const state: SyncState = {
@@ -168,9 +172,9 @@ export function subscribeSync(l: Listener): () => void {
 const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 /** Queue a compressed photo for background upload. Returns a local preview URL. */
-export async function enqueuePhoto(stopId: string, blob: Blob): Promise<string> {
+export async function enqueuePhoto(stopId: string, blob: Blob, photoKind?: "dropoff" | "pickup"): Promise<string> {
   const id = newId();
-  await idbPut({ id, stopId, blob, type: blob.type || "image/jpeg", createdAt: Date.now() });
+  await idbPut({ id, stopId, blob, type: blob.type || "image/jpeg", createdAt: Date.now(), photoKind });
   void emit();
   void flush();
   return URL.createObjectURL(blob);
@@ -200,13 +204,15 @@ async function dispatchAction(a: QueuedAction): Promise<void> {
   if (a.kind === "status") result = await updateStopStatus(a.stopId, a.status);
   else if (a.kind === "dropoff") result = await confirmDropoff(a.stopId, a.confirmed);
   else if (a.kind === "pickup") result = await confirmPickup(a.stopId, a.confirmed);
+  else if (a.kind === "pickupNone") result = await setPickupNone(a.stopId, a.none);
   else if (a.kind === "flag") result = await flagStop(a.stopId, a.reason);
   else if (a.kind === "prospectVisit") result = await completeProspectVisit(a.visitId, a.prospectId, a.notes, a.touchType);
   else if (a.kind === "prospectSkip") result = await skipProspectVisit(a.visitId, a.reason);
   // A server-side rejection (e.g. stop deleted because the route was cleared,
   // which surfaces as Supabase's "no rows returned") is permanent: don't keep
   // retrying it forever.
-  if (result?.error && /not found|deleted|invalid|no rows|0 rows|multiple \(or no\)/i.test(result.error)) return;
+  // "column … does not exist" = the migration hasn't run; retrying won't help.
+  if (result?.error && /not found|deleted|invalid|no rows|0 rows|multiple \(or no\)|column|schema cache/i.test(result.error)) return;
   if (result?.error) throw new Error(result.error);
 }
 
@@ -238,6 +244,7 @@ export async function flush(): Promise<void> {
         const fd = new FormData();
         fd.append("photo", p.blob, "photo.jpg");
         fd.append("stopId", p.stopId);
+        if (p.photoKind) fd.append("kind", p.photoKind);
         const res = await fetch("/api/photo", { method: "POST", body: fd });
         if (res.status === 400) {
           // Permanently invalid (e.g. stop no longer exists): drop it.
@@ -247,7 +254,7 @@ export async function flush(): Promise<void> {
         if (!res.ok) throw new Error(`upload ${res.status}`);
         const data = (await res.json().catch(() => ({}))) as { url?: string };
         await idbDelete(p.id);
-        void emit({ uploadedStopId: p.stopId, url: data.url });
+        void emit({ uploadedStopId: p.stopId, url: data.url, photoKind: p.photoKind });
       } catch {
         break; // network gone again; remaining photos wait for the next flush
       }

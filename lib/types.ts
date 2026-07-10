@@ -15,7 +15,14 @@ export interface SessionUser {
 export interface Customer {
   id: string;
   name: string;
+  // Canonical one-line address (geocoding/maps/display). street/town/zip are
+  // the editable parts, composed back into `address` on save; email is captured
+  // for delivery customers. All optional until the address-split migration runs.
   address: string;
+  street?: string | null;
+  town?: string | null;
+  zip?: string | null;
+  email?: string | null;
   phone: string | null;
   lat: number | null;
   lng: number | null;
@@ -30,6 +37,10 @@ export interface Customer {
   // be on more than one (e.g. a twice-weekly commercial account).
   delivery_days?: DeliveryDay[] | null;
   active: boolean;
+  // Too far to service right now: shelved from route building + the master
+  // route, but kept in the directory so it can be brought back. Optional until
+  // the out_of_range migration runs.
+  out_of_range?: boolean | null;
   created_at: string;
 }
 
@@ -54,6 +65,9 @@ export interface RouteStop {
   has_pickup: boolean;
   dropoff_confirmed: boolean;
   pickup_confirmed: boolean;
+  // Driver went, but the customer had nothing out — satisfies the pickup
+  // obligation without a photo or a skip. Optional until the migration runs.
+  pickup_none?: boolean;
   notes: string | null;
   arrived_at: string | null;
   completed_at: string | null;
@@ -79,6 +93,9 @@ export interface StopPhoto {
   id: string;
   stop_id: string;
   storage_path: string;
+  // Which service the photo proves. Null/undefined = legacy photo taken before
+  // the photo_kinds migration; treated as wildcard proof.
+  kind?: "dropoff" | "pickup" | null;
   url?: string;
   created_at: string;
 }

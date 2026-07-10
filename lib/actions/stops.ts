@@ -257,6 +257,22 @@ export async function confirmPickup(stopId: string, confirmed: boolean) {
   return { success: true };
 }
 
+// Driver went, but the customer had nothing out to collect. Clears any
+// accidental pickup confirmation so the record can't contradict itself.
+export async function setPickupNone(stopId: string, none: boolean) {
+  await requireSession();
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("route_stops")
+    .update(none ? { pickup_none: true, pickup_confirmed: false } : { pickup_none: false })
+    .eq("id", stopId);
+
+  if (error) return { error: error.message };
+  revalidatePath(`/driver/stop/${stopId}`);
+  return { success: true };
+}
+
 export async function sendSms(stopId: string, message: string) {
   const session = await requireSession();
   const supabase = createAdminClient();

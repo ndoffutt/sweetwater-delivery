@@ -9,21 +9,19 @@ import WelcomeBack from "./WelcomeBack";
 type NavId = "dispatch" | "customers" | "sales" | "messages" | "history" | "live" | "reports";
 type NavItem = { id: NavId; label: string; href: string };
 const ITEMS: Record<NavId, NavItem> = {
-  dispatch: { id: "dispatch", label: "Dispatch", href: "/dispatch" },
+  dispatch: { id: "dispatch", label: "Today", href: "/dispatch" },
   customers: { id: "customers", label: "Customers", href: "/dispatch/customers" },
-  sales: { id: "sales", label: "Sales", href: "/sales/prospects" },
+  sales: { id: "sales", label: "Prospects", href: "/sales/prospects" },
   messages: { id: "messages", label: "Messages", href: "/dispatch/messages" },
-  history: { id: "history", label: "History", href: "/dispatch/history" },
+  history: { id: "history", label: "Record", href: "/dispatch/history" },
   live: { id: "live", label: "Live", href: "/dispatch/live" },
   reports: { id: "reports", label: "Reports", href: "/dispatch/reports" },
 };
-// Owner (admin) gets the slimmed-down console (Sales lives on the /owner home);
-// Manager keeps the ops tabs + Sales so Ahsin can work prospects. Messages is
-// owner-only for now while it's being tested.
+// Redesigned console nav (both roles): Today / Customers / Prospects / Record.
+// Messages, Reports, Signups and Settings live on the /owner home instead of
+// eating console tabs. Live is merged into Today's dispatched state.
 const NAV_BY_ROLE: Record<"dispatcher" | "admin", NavItem[]> = {
-  admin: [ITEMS.dispatch, ITEMS.customers, ITEMS.messages, ITEMS.history, ITEMS.reports],
-  // Reports is owner-only for now; ITEMS.live also hidden from the manager —
-  // re-add them here to restore those tabs.
+  admin: [ITEMS.dispatch, ITEMS.customers, ITEMS.sales, ITEMS.history],
   dispatcher: [ITEMS.dispatch, ITEMS.customers, ITEMS.sales, ITEMS.history],
 };
 
@@ -81,7 +79,7 @@ export default function MgrShell({
     return () => { live = false; clearInterval(t); };
   }, [pathname, hasMessages]);
 
-  // Overdue-visit badge on the Sales tab.
+  // Overdue-visit badge on the Prospects tab.
   const [overdue, setOverdue] = useState(0);
   useEffect(() => {
     if (!hasSales) return;
@@ -96,8 +94,23 @@ export default function MgrShell({
     return () => { live = false; clearInterval(t); };
   }, [pathname, hasSales]);
 
+  // Attention badge on the Today tab (open exceptions + check-ins due) —
+  // mirrors the Today page's right rail, per the console redesign.
+  const [attention, setAttention] = useState(0);
+  useEffect(() => {
+    let live = true;
+    const poll = () =>
+      fetch("/api/attention", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => { if (live) setAttention(d.count ?? 0); })
+        .catch(() => {});
+    poll();
+    const t = setInterval(poll, 120000);
+    return () => { live = false; clearInterval(t); };
+  }, [pathname]);
+
   const badgeCount = (id: NavId) =>
-    id === "messages" ? unread : id === "sales" ? overdue : 0;
+    id === "messages" ? unread : id === "sales" ? overdue : id === "dispatch" ? attention : 0;
 
   const Badge = ({ id }: { id: NavId }) =>
     badgeCount(id) > 0 ? (
@@ -127,14 +140,14 @@ export default function MgrShell({
       <aside className="hidden md:flex md:flex-col w-60 shrink-0 bg-green-primary text-cream">
         <div className="px-5 pt-6 pb-5">
           <div className="font-serif text-2xl font-light leading-none">Sweetwater&apos;s</div>
-          <div className="text-[11px] uppercase tracking-[0.2em] text-gold-light mt-1">Dispatch</div>
+          <div className="text-[11px] uppercase tracking-[0.2em] text-gold-light mt-1">Manager Console</div>
         </div>
         <nav className="flex-1 px-3 space-y-1">
           {NAV.map((n) => {
             const on = n.id === active;
             return (
               <Link key={n.id} href={n.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-body transition-colors ${on ? "bg-white/12 text-cream" : "text-cream/65 hover:text-cream hover:bg-white/5"}`}>
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-body transition-colors ${on ? "bg-white/15 text-cream" : "text-cream/65 hover:text-cream hover:bg-white/5"}`}>
                 <span className={on ? "text-gold-light" : ""}><NavIcon id={n.id} /></span>
                 {n.label}
                 <Badge id={n.id} />
@@ -162,7 +175,7 @@ export default function MgrShell({
       <header className="md:hidden sticky top-0 z-30 bg-green-primary text-cream px-4 py-3 flex items-center justify-between">
         <div>
           <div className="font-serif text-lg font-light leading-none">{current.label}</div>
-          <div className="text-[10px] uppercase tracking-[0.18em] text-gold-light">Sweetwater&apos;s Dispatch</div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-gold-light">Sweetwater&apos;s Manager Console</div>
         </div>
         <div className="flex items-center gap-3">
           <Link href="/driver" className="flex items-center gap-1.5 bg-gold-primary text-charcoal rounded-full pl-2.5 pr-3 py-1.5 text-[11px] uppercase tracking-[0.12em] font-body">

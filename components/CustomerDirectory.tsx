@@ -13,9 +13,12 @@ import {
   placeAtEndOfRoute,
   reorderRoute,
   setDeliveryDays,
+  setCustomerRange,
   type RoutePositioning,
 } from "@/lib/actions/customers";
 import RouteMap from "@/components/RouteMap";
+import { AccountAvatar, KindPill, InfoTile } from "@/components/AccountBits";
+import { parseAddress, composeAddress } from "@/lib/address";
 import type { Customer, RouteStop } from "@/lib/types";
 import { RUN_DAYS, DAY_LABEL, DAY_INITIAL, formatDays } from "@/lib/deliveryDay";
 import { googleVoiceCallHref, formatPhone } from "@/lib/phone";
@@ -30,7 +33,7 @@ export interface Activity {
 }
 
 const TAGS = ["VIP", "Year-round", "Seasonal", "Commercial"];
-const FILTERS = ["All", "VIP", "Year-round", "Seasonal", "Commercial"] as const;
+const FILTERS = ["All", "VIP", "Year-round", "Seasonal", "Commercial", "Out of range"] as const;
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -170,13 +173,23 @@ export default function CustomerDirectory({
 
   const lastDelivered = (id: string) => activity[id]?.[0]?.date;
 
-  // Every customer should have a route spot; surface the ones that don't.
-  const unpositioned = customers.filter((c) => c.route_seq == null);
+  const outOfRangeCount = customers.filter((c) => c.out_of_range).length;
+
+  // Every IN-RANGE customer should have a route spot; surface the ones that
+  // don't. Shelved (out-of-range) customers intentionally have no spot, so they
+  // must not count toward this nag.
+  const unpositioned = customers.filter((c) => c.route_seq == null && !c.out_of_range);
 
   const filtered = customers
     .filter((c) => {
-      if (onlyUnpositioned && c.route_seq != null) return false;
-      if (filter !== "All" && !(c.tags ?? []).includes(filter)) return false;
+      // Out-of-range customers live only under the "Out of range" filter — they
+      // stay out of every other view (and route building) until brought back.
+      if (filter === "Out of range") { if (!c.out_of_range) return false; }
+      else {
+        if (c.out_of_range) return false;
+        if (onlyUnpositioned && c.route_seq != null) return false;
+        if (filter !== "All" && !(c.tags ?? []).includes(filter)) return false;
+      }
       if (query) {
         const q = query.toLowerCase();
         return c.name.toLowerCase().includes(q) || c.address.toLowerCase().includes(q);
@@ -263,13 +276,16 @@ export default function CustomerDirectory({
           />
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex gap-1.5 flex-wrap">
-              {FILTERS.map((f) => (
+              {FILTERS
+                // Only surface the "Out of range" chip once something is shelved.
+                .filter((f) => f !== "Out of range" || outOfRangeCount > 0)
+                .map((f) => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
                   className={`px-3 py-1 rounded-full text-xs font-body ${filter === f ? "bg-green-primary text-cream" : "bg-cream-dark text-charcoal/60"}`}
                 >
-                  {f}
+                  {f === "Out of range" ? `Out of range ${outOfRangeCount}` : f}
                 </button>
               ))}
             </div>
@@ -333,6 +349,7 @@ export default function CustomerDirectory({
                   aria-label="Drag to reorder"
                 >⋮⋮</span>
               )}
+              {sort !== "route" && <AccountAvatar name={c.name} size={38} />}
               {sort === "route" && (
                 <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-body ${c.route_seq != null ? "bg-green-primary text-cream" : "bg-cream-dark text-charcoal/40"}`}>
                   {c.route_seq != null ? Math.round(c.route_seq) : "·"}
@@ -347,9 +364,11 @@ export default function CustomerDirectory({
                 <div className="flex items-center gap-1.5">
                   {(c.tags ?? []).includes("VIP") && <span className="text-gold-primary text-sm">★</span>}
                   <span className="font-body font-medium text-charcoal truncate">{c.name}</span>
-                  {c.route_seq == null && (
+                  {c.out_of_range ? (
+                    <span className="shrink-0 text-[10px] font-body uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-charcoal/10 text-charcoal/50" title="Shelved — too far to service now">Out of range</span>
+                  ) : c.route_seq == null ? (
                     <span className="shrink-0 text-[10px] font-body uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-gold-primary/20 text-gold-dark" title="No route spot yet">⚠ No spot</span>
-                  )}
+                  ) : null}
                 </div>
                 <p className="text-xs text-charcoal/40 font-body truncate">{c.address}</p>
               </div>
@@ -463,6 +482,11 @@ function Detail({
     onPatch({ tags: next });
     pending(() => saveCustomerTags(c.id, next));
   }
+  function setRange(outOfRange: boolean) {
+    // Shelving also drops the route spot (server clears it too).
+    onPatch({ out_of_range: outOfRange, ...(outOfRange ? { route_seq: null } : {}) });
+    pending(() => { setCustomerRange(c.id, outOfRange); });
+  }
   async function saveNotes() {
     onPatch({ gate_code: gate.trim() || null, delivery_notes: notes.trim() || null });
     await saveCustomerNotes(c.id, { gate_code: gate.trim() || null, delivery_notes: notes.trim() || null });
@@ -484,33 +508,57 @@ function Detail({
     <div className="p-5 md:p-8 md:max-w-2xl space-y-5">
       <button onClick={onBack} className="md:hidden text-sm text-charcoal/50 font-body">← Back</button>
 
-      <div>
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="font-serif text-3xl font-light text-charcoal">{c.name}</h2>
-          <div className="shrink-0 flex items-center gap-2">
+      <div className="flex items-start gap-4">
+        <AccountAvatar name={c.name} size={56} />
+        <div className="flex-1 min-w-0">
+          <h2 className="font-serif text-3xl font-light text-charcoal leading-tight">{c.name}</h2>
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            <KindPill kind="customer" />
             {c.account_type && (
-              <span className={`text-[11px] font-body uppercase tracking-wider px-2.5 py-1 rounded-full ${c.account_type === "Delivery" ? "bg-green-primary/10 text-green-primary" : "bg-gold-primary/20 text-gold-dark"}`}>
+              <span className={`text-[11px] font-body uppercase tracking-wider px-2.5 py-0.5 rounded-full ${c.account_type === "Delivery" ? "bg-green-primary/10 text-green-primary" : "bg-gold-primary/20 text-gold-dark"}`}>
                 {c.account_type}
               </span>
             )}
-            <button
-              onClick={() => setEditing(true)}
-              className="min-h-tap px-3 py-1.5 rounded-lg border border-cream-dark bg-cream text-charcoal/60 text-xs font-body uppercase tracking-widest"
-            >
-              ✎ Edit
-            </button>
+            {c.spot_account && <span className="text-xs text-charcoal/40 font-body">SPOT {c.spot_account}</span>}
           </div>
         </div>
-        {c.spot_account && <p className="text-xs text-charcoal/40 font-body mt-0.5">SPOT {c.spot_account}</p>}
+        <button
+          onClick={() => setEditing(true)}
+          className="shrink-0 min-h-tap px-3 py-1.5 rounded-lg border border-cream-dark bg-cream text-charcoal/60 text-xs font-body uppercase tracking-widest"
+        >
+          ✎ Edit
+        </button>
       </div>
 
-      <div className="space-y-2">
-        <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(c.address)}`} target="_blank" rel="noopener noreferrer" className="block text-sm text-green-primary font-body underline underline-offset-2">{c.address}</a>
-        {c.phone && <a href={googleVoiceCallHref(c.phone)} target="_blank" rel="noopener noreferrer" className="block text-sm text-charcoal/70 font-body">📞 {formatPhone(c.phone)}</a>}
+      {/* Out-of-range banner: shelved from route building until brought back. */}
+      {c.out_of_range && (
+        <div className="flex items-center gap-3 bg-charcoal/5 border border-charcoal/15 rounded-xl px-3 py-2.5">
+          <span>🚫</span>
+          <p className="text-xs font-body text-charcoal flex-1">
+            <b>Out of range.</b> Hidden from route building and the master route.
+          </p>
+          <button
+            onClick={() => setRange(false)}
+            className="shrink-0 min-h-tap px-3 py-1.5 rounded-lg bg-green-primary text-cream text-xs font-body uppercase tracking-widest"
+          >
+            Bring back
+          </button>
+        </div>
+      )}
+
+      {/* Info tiles (redesign): the four facts a dispatcher reaches for */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        <InfoTile icon="📍" label="Address" value={c.address}
+          href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(c.address)}`} />
+        {c.phone && <InfoTile icon="📞" label="Phone" value={formatPhone(c.phone)} href={googleVoiceCallHref(c.phone)} action="Call" />}
+        {c.email && <InfoTile icon="✉️" label="Email" value={c.email} href={`mailto:${c.email}`} action="Email" />}
+        <InfoTile icon="🔑" label="Gate / entry code" value={c.gate_code || "—"} mono={!!c.gate_code} />
+        <InfoTile icon="🕐" label="Last delivered" value={activity[0]?.date ? new Date(activity[0].date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"} />
       </div>
 
-      {/* Route position — every customer should have a spot */}
-      {pos?.ok && (
+      {/* Route position — every in-range customer should have a spot. Shelved
+          customers have no spot by design, so this section is hidden for them. */}
+      {pos?.ok && !c.out_of_range && (
         <div>
           <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-2">Route Position</p>
           {pos.current != null ? (
@@ -641,7 +689,25 @@ function Detail({
         )}
       </div>
 
-      <button onClick={() => { if (confirm(`Remove ${c.name}?`)) onDelete(); }} className="text-xs text-red-400 font-body uppercase tracking-widest">Remove customer</button>
+      {/* Range + remove: shelving keeps the customer, removing soft-deletes. */}
+      <div className="flex items-center justify-between gap-3 pt-1">
+        {!c.out_of_range ? (
+          <button
+            onClick={() => setRange(true)}
+            className="min-h-tap px-3 py-2 rounded-lg border border-cream-dark text-charcoal/60 text-xs font-body uppercase tracking-widest"
+          >
+            🚫 Mark out of range
+          </button>
+        ) : (
+          <button
+            onClick={() => setRange(false)}
+            className="min-h-tap px-3 py-2 rounded-lg border border-green-primary text-green-primary text-xs font-body uppercase tracking-widest"
+          >
+            Bring back into range
+          </button>
+        )}
+        <button onClick={() => { if (confirm(`Remove ${c.name}?`)) onDelete(); }} className="text-xs text-red-400 font-body uppercase tracking-widest">Remove customer</button>
+      </div>
     </div>
   );
 }
@@ -655,17 +721,34 @@ function EditCustomer({
 }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
+  // Prefer the stored parts; fall back to parsing the one-line address so the
+  // split fields are pre-filled even before the migration backfills them.
+  const parsed = parseAddress(c.address);
+  const street0 = (c.street ?? parsed.street) || "";
+  const town0 = (c.town ?? parsed.town) || "";
+  const zip0 = (c.zip ?? parsed.zip) || "";
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const name = (fd.get("name") as string).trim();
-    const address = (fd.get("address") as string).trim();
+    const street = (fd.get("street") as string).trim();
+    const town = (fd.get("town") as string).trim();
+    const zip = (fd.get("zip") as string).trim();
+    const email = (fd.get("email") as string).trim();
     const phone = (fd.get("phone") as string).trim();
+    const delivery_notes = (fd.get("delivery_notes") as string).trim();
+    const address = composeAddress({ street, town, zip });
     start(async () => {
-      const res = await updateCustomer(c.id, { name, address, phone: phone || undefined });
+      const res = await updateCustomer(c.id, {
+        name, street, town, zip, address,
+        email, phone: phone || undefined, delivery_notes,
+      });
       if (res.error) { setError(res.error); return; }
-      onSaved({ name, address, phone: phone || null });
+      onSaved({
+        name, street, town, zip, address,
+        email: email || null, phone: phone || null, delivery_notes: delivery_notes || null,
+      });
     });
   }
 
@@ -681,13 +764,31 @@ function EditCustomer({
         <input name="name" defaultValue={c.name} required className={field} />
       </div>
       <div>
-        <span className={label}>Address</span>
-        <input name="address" defaultValue={c.address} required className={field} />
-        <p className="text-[11px] text-charcoal/40 font-body mt-1">Changing the address re-pins them on the map.</p>
+        <span className={label}>Street</span>
+        <input name="street" defaultValue={street0} required className={field} placeholder="1 Bay St" />
+      </div>
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <span className={label}>Town</span>
+          <input name="town" defaultValue={town0} className={field} placeholder="Sag Harbor" />
+        </div>
+        <div className="w-32">
+          <span className={label}>Zip</span>
+          <input name="zip" defaultValue={zip0} inputMode="numeric" className={field} placeholder="11963" />
+        </div>
+      </div>
+      <p className="text-[11px] text-charcoal/40 font-body -mt-1">Changing the address re-pins them on the map.</p>
+      <div>
+        <span className={label}>Email</span>
+        <input name="email" type="email" defaultValue={c.email ?? ""} className={field} placeholder="name@email.com" />
       </div>
       <div>
         <span className={label}>Phone</span>
         <input name="phone" defaultValue={c.phone ?? ""} className={field} />
+      </div>
+      <div>
+        <span className={label}>Notes</span>
+        <textarea name="delivery_notes" defaultValue={c.delivery_notes ?? ""} rows={3} className={`${field} resize-none`} placeholder="Delivery preferences, access, etc." />
       </div>
       {error && <p className="text-sm text-red-600 font-body">{error}</p>}
       <div className="flex gap-2">
@@ -712,9 +813,14 @@ function AddForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (c:
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     start(async () => {
+      const street = (fd.get("street") as string) || "";
+      const town = (fd.get("town") as string) || "";
+      const zip = (fd.get("zip") as string) || "";
       const res = await createCustomer({
         name: fd.get("name") as string,
-        address: fd.get("address") as string,
+        street, town, zip,
+        address: composeAddress({ street, town, zip }),
+        email: (fd.get("email") as string) || undefined,
         phone: (fd.get("phone") as string) || undefined,
         gate_code: (fd.get("gate_code") as string) || undefined,
         delivery_notes: (fd.get("delivery_notes") as string) || undefined,
@@ -811,9 +917,13 @@ function AddForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (c:
     <form onSubmit={submit} className="p-5 md:p-8 md:max-w-2xl space-y-3">
       <button type="button" onClick={onCancel} className="md:hidden text-sm text-charcoal/50 font-body">← Back</button>
       <h2 className="font-serif text-2xl font-light text-charcoal">New Customer</h2>
-      {["name", "address"].map((n) => (
-        <input key={n} name={n} placeholder={n[0].toUpperCase() + n.slice(1)} required className="w-full p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary" />
-      ))}
+      <input name="name" placeholder="Name" required className="w-full p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary" />
+      <input name="street" placeholder="Street (e.g. 1 Bay St)" required className="w-full p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary" />
+      <div className="flex gap-3">
+        <input name="town" placeholder="Town" className="flex-1 p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary" />
+        <input name="zip" placeholder="Zip" inputMode="numeric" className="w-32 p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary" />
+      </div>
+      <input name="email" type="email" placeholder="Email" className="w-full p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary" />
       <input name="phone" placeholder="Phone (optional)" className="w-full p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary" />
       <input name="gate_code" placeholder="Gate code (optional)" className="w-full p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary" />
       <textarea name="delivery_notes" placeholder="Notes (optional)" rows={2} className="w-full p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm resize-none focus:outline-none focus:border-green-primary" />

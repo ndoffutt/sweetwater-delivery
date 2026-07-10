@@ -188,3 +188,48 @@ insert into customers (name, address, phone, gate_code, delivery_notes) values
   ('Chen Family', '310 Montauk Hwy, Hampton Bays, NY 11946', '631-555-0104', null, null),
   ('Davis Cottage', '7 Sagg Main St, Sagaponack, NY 11962', '631-555-0105', '8833', 'Fragile items — place in mudroom, never on steps'),
   ('Peterson Home', '92 Flying Point Rd, Water Mill, NY 11976', '631-555-0106', null, 'Use service entrance around back');
+-- Separate drop-off vs pick-up photo proof + first-class "nothing to pick up".
+--
+-- Why: on 2026-07-09 two stops were completed with the pickup silently missed
+-- (one photo satisfied the whole stop), two stops were skipped AFTER a pickup
+-- was confirmed, and one stop was skipped as "Other: No pick up" because the
+-- driver had no way to say "nothing was out".
+--
+-- stop_photos.kind — which service the photo proves. Null = legacy photo
+-- (taken before this migration); the app treats those as wildcard proof.
+alter table stop_photos
+  add column if not exists kind text check (kind in ('dropoff', 'pickup'));
+
+-- route_stops.pickup_none — the driver went, but the customer had nothing out.
+-- Completes the pickup obligation without a photo and without a skip.
+alter table route_stops
+  add column if not exists pickup_none boolean not null default false;
+-- Out-of-range customers: too far to service right now, shelved from the
+-- delivery list without deleting them. They stay in the directory (findable
+-- under the "Out of range" filter) and can be brought back any time.
+--
+-- Distinct from `active`/`deleted_at` (soft-delete). Out-of-range keeps the
+-- customer active; it only hides them from route building + the master route.
+alter table customers
+  add column if not exists out_of_range boolean not null default false;
+-- Structured address (street / town / zip) + email on customers.
+--
+-- The single `address` column stays canonical — geocoding, maps, and every
+-- existing read still use it. These new columns are the editable *parts*, and
+-- the app composes them back into `address` on save. Email is captured for
+-- every customer going forward.
+alter table customers add column if not exists street text;
+alter table customers add column if not exists town   text;
+alter table customers add column if not exists zip    text;
+alter table customers add column if not exists email  text;
+
+-- Backfill the parts from existing one-line addresses, best-effort. Handles the
+-- common "…street…, Town, NY 11963" shape (with or without a place-name prefix).
+update customers set
+  zip = coalesce(zip, (regexp_match(address, '(\d{5})(?:-\d{4})?\s*$'))[1]),
+  town = coalesce(town, trim(both from (regexp_match(address, ',\s*([^,]+?)\s*,\s*[A-Z]{2}\s*\d{5}'))[1])),
+  street = coalesce(
+    street,
+    nullif(trim(both from regexp_replace(address, '\s*,\s*[^,]+,\s*[A-Z]{2}\s*\d{5}(?:-\d{4})?\s*$', '')), '')
+  )
+where address is not null and (street is null or town is null or zip is null);

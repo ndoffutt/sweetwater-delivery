@@ -21,7 +21,10 @@ interface DeliveryStop {
   address: string;
   phone?: string | null;
   date: string | null;
-  photos: string[];
+  dropoffConfirmed?: boolean;
+  pickupConfirmed?: boolean;
+  pickupNone?: boolean;
+  photos: { url: string; kind: "dropoff" | "pickup" | null }[];
 }
 
 const STATUSES: { id: StopStatus; label: string }[] = [
@@ -112,6 +115,21 @@ export default function DeliveryDetail({ stop }: { stop: DeliveryStop }) {
             {pickup ? "★ " : ""}Pickup
           </button>
         </div>
+        {/* What the driver actually confirmed in the field */}
+        {(stop.status === "completed" || stop.status === "skipped") && (
+          <p className="text-xs font-body text-charcoal/60 mt-2">
+            {[
+              stop.hasDropoff || stop.dropoffConfirmed
+                ? stop.dropoffConfirmed ? "↓ Drop-off confirmed" : "↓ Drop-off NOT confirmed"
+                : null,
+              stop.pickupNone
+                ? "↑ Nothing was out to pick up"
+                : stop.hasPickup || stop.pickupConfirmed
+                ? stop.pickupConfirmed ? "↑ Pick-up confirmed" : "↑ Pick-up NOT confirmed"
+                : null,
+            ].filter(Boolean).join(" · ")}
+          </p>
+        )}
       </div>
 
       {/* Pieces */}
@@ -147,10 +165,15 @@ export default function DeliveryDetail({ stop }: { stop: DeliveryStop }) {
         <div>
           <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-2">Proof of delivery</p>
           <div className="grid grid-cols-3 gap-2">
-            {stop.photos.map((src, i) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <a key={i} href={src} target="_blank" rel="noopener noreferrer" className="block">
-                <img src={src} alt="proof of delivery" className="w-full h-24 object-cover rounded-lg border border-cream-dark" />
+            {stop.photos.map((p, i) => (
+              <a key={i} href={p.url} target="_blank" rel="noopener noreferrer" className="block relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.url} alt="proof of delivery" className="w-full h-24 object-cover rounded-lg border border-cream-dark" />
+                {p.kind && (
+                  <span className={`absolute bottom-1 left-1 text-[9px] font-body uppercase tracking-wide rounded px-1.5 py-0.5 text-cream ${p.kind === "dropoff" ? "bg-green-primary/90" : "bg-gold-dark/90"}`}>
+                    {p.kind === "dropoff" ? "↓ Drop-off" : "↑ Pick-up"}
+                  </span>
+                )}
               </a>
             ))}
           </div>

@@ -4,8 +4,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getLastManifestScan } from "@/lib/actions/manifest";
 import { easternToday } from "@/lib/date";
 import DispatchConsole, { type InitialStop } from "@/components/DispatchConsole";
+import { getOpenExceptions } from "@/lib/actions/exceptions";
 import type { DeliveryDay } from "@/lib/deliveryDay";
-import { isOverdueForVisit } from "@/lib/prospectVisit";
+import { isOverdueForVisit, needsAttention, daysSinceVisit, overdueDaysFor, hasManualRequest } from "@/lib/prospectVisit";
+import { outOfRangeIdSet } from "@/lib/customerRange";
 import type { Prospect } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -146,11 +148,17 @@ export default async function DispatchPage() {
     .filter((c) => c.lat != null && c.lng != null)
     .map((c) => ({ name: c.name, lat: c.lat as number, lng: c.lng as number, seq: c.route_seq }));
 
+  // Out-of-range customers are shelved: kept in the directory but excluded from
+  // the manual route-builder picker. (They're already gone from the master
+  // route below since shelving clears route_seq.) Tolerant of the column not
+  // existing yet — then the set is empty and everyone stays selectable.
+  const oorSet = await outOfRangeIdSet(supabase);
+
   const allCustomers = (((allCustomerRows ?? []) as unknown) as {
     id: string; name: string; address: string; phone: string | null;
     lat: number | null; lng: number | null; route_seq: number | null; tags: string[] | null;
     delivery_days?: DeliveryDay[] | null;
-  }[]).map((c) => ({
+  }[]).filter((c) => !oorSet.has(c.id)).map((c) => ({
     id: c.id,
     name: c.name,
     address: c.address,
@@ -162,19 +170,35 @@ export default async function DispatchPage() {
     delivery_days: c.delivery_days ?? [],
   }));
 
-  // Overdue prospects (with coordinates) — candidates to surface near the route.
+  // All pipeline prospects — one fetch drives both the nearby-route panel and
+  // the Today "Check-ins due" rail.
   const { data: prospectRows } = await supabase
     .from("prospects")
-    .select("id,name,lat,lng,status,priority,town,created_at,call_only,touchpoints:prospect_touchpoints(type,created_at)")
+    .select("id,name,lat,lng,status,priority,town,created_at,call_only,manual_request_at,touchpoints:prospect_touchpoints(type,created_at)")
     .is("deleted_at", null)
-    .in("status", ["new", "working", "active"])
-    .not("lat", "is", null)
-    // Call-only prospects are phone/email outreach only — never route or visit
-    // them, even if they happen to have an address on file.
-    .eq("call_only", false);
-  const overdueProspects = ((prospectRows ?? []) as unknown as Prospect[])
-    .filter((p) => !p.call_only && isOverdueForVisit(p))
+    .in("status", ["new", "working", "active"]);
+  const pipeline = (prospectRows ?? []) as unknown as Prospect[];
+
+  // Nearby-route candidates: must be visitable (coords, not call-only) + overdue.
+  const overdueProspects = pipeline
+    .filter((p) => !p.call_only && p.lat != null && p.lng != null && isOverdueForVisit(p))
     .map((p) => ({ id: p.id, name: p.name, lat: p.lat as number, lng: p.lng as number, town: p.town ?? null }));
+
+  // Check-ins due: everything needing outreach (overdue for its priority window
+  // or manually flagged), including call-only prospects. Most overdue first.
+  const checkinsDue = pipeline
+    .filter((p) => needsAttention(p))
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      town: p.town ?? null,
+      priority: (p.priority ?? "medium") as string,
+      daysOverdue: daysSinceVisit(p) - overdueDaysFor(p.priority),
+      callOnly: !!p.call_only || p.lat == null || p.lng == null,
+      manual: hasManualRequest(p),
+    }))
+    .sort((a, b) => b.daysOverdue - a.daysOverdue)
+    .slice(0, 8);
 
   // Prospect visits attached to today's route (tolerant of the
   // route_prospect_visits migration not having run yet).
@@ -189,6 +213,10 @@ export default async function DispatchPage() {
     }[]).map((r) => ({ id: r.id, prospectId: r.prospect_id, name: r.prospects?.name ?? "Prospect", status: r.status, notes: r.notes, stopOrder: r.stop_order }));
   }
   const plannedVisitIds = plannedVisits.map((v) => v.prospectId);
+
+  // "Needs attention" — skipped stops + missing photo proof from the last two
+  // weeks, minus anything the manager already resolved.
+  const exceptions = await getOpenExceptions(14).catch(() => []);
 
   const dateLabel = new Date(today + "T12:00:00").toLocaleDateString("en-US", {
     weekday: "long",
@@ -208,6 +236,8 @@ export default async function DispatchPage() {
       dispatchDow={dispatchDow}
       recentRoutes={recentRoutes}
       overdueProspects={overdueProspects}
+      checkinsDue={checkinsDue}
+      exceptions={exceptions}
       plannedVisitIds={plannedVisitIds}
       plannedVisits={plannedVisits}
       today={route ? { id: route.id, status: route.status, startedAt: route.started_at ?? null, stops } : null}

@@ -163,12 +163,12 @@ function TaskChip({ type }: { type: "drop" | "pick" }) {
 
 function CheckRow({ label, icon, checked, onClick }: { label: string; icon: IconName; checked: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} style={{ width: "100%", display: "flex", alignItems: "center", gap: 13, cursor: "pointer", background: checked ? "rgba(2,115,62,0.06)" : "#fff", border: `1.5px solid ${checked ? C.green : C.creamDark}`, borderRadius: 14, padding: "14px 16px", transition: "all .15s" }}>
-      <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: checked ? C.green : "transparent", border: checked ? "none" : "2px solid rgba(26,26,26,0.2)" }}>
-        {checked && <Icon name="check" size={16} color={C.cream} strokeWidth={2.8} />}
+    <button onClick={onClick} style={{ width: "100%", display: "flex", alignItems: "center", gap: 14, cursor: "pointer", background: checked ? C.green : "#fff", border: `2px solid ${checked ? C.green : C.creamDark}`, borderRadius: 16, padding: "18px 18px", minHeight: 64, transition: "all .15s", boxShadow: checked ? "0 3px 10px rgba(2,115,62,0.25)" : "0 1px 3px rgba(0,0,0,0.05)" }}>
+      <div style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: checked ? "rgba(255,255,255,0.22)" : "transparent", border: checked ? "none" : "2.5px solid rgba(26,26,26,0.22)" }}>
+        {checked && <Icon name="check" size={20} color={C.cream} strokeWidth={3} />}
       </div>
-      <Icon name={icon} size={18} color={checked ? C.green : "rgba(26,26,26,0.4)"} />
-      <div style={{ fontFamily: C.body, fontSize: 15.5, color: C.charcoal }}>{label}</div>
+      <Icon name={icon} size={21} color={checked ? C.cream : "rgba(26,26,26,0.4)"} />
+      <div style={{ fontFamily: C.body, fontSize: 16.5, fontWeight: checked ? 600 : 500, color: checked ? C.cream : C.charcoal }}>{label}</div>
     </button>
   );
 }
@@ -230,7 +230,7 @@ function OverviewSheet({ stops, targetId, isManager, onPick, onClose, onBack, on
   );
 }
 
-function ProblemSheet({ name, onClose, onResolve }: { name: string; onClose: () => void; onResolve: (reason: string) => void }) {
+function ProblemSheet({ name, progress, onClose, onResolve }: { name: string; progress?: string | null; onClose: () => void; onResolve: (reason: string) => void }) {
   const reasons = ["Gate code didn't work", "Nobody home", "Couldn't access property", "Wrong address", "Other issue"];
   // "Other issue" requires the driver to say WHAT happened - a bare "Other"
   // tells dispatch nothing when they follow up with the customer.
@@ -245,6 +245,16 @@ function ProblemSheet({ name, onClose, onResolve }: { name: string; onClose: () 
         <div style={{ fontFamily: C.body, fontSize: 13.5, color: "rgba(26,26,26,0.5)", marginTop: 3, marginBottom: 16 }}>
           {other ? `Tell dispatch what's going on at ${name}'s stop.` : `Dispatch will be notified and ${name}'s stop flagged.`}
         </div>
+        {/* The driver already did work here — a skip would contradict it (this
+            exact mixup produced "skipped" stops with confirmed pickups). */}
+        {progress && !other && (
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "rgba(213,154,41,0.12)", border: `1px solid rgba(213,154,41,0.45)`, borderRadius: 13, padding: "12px 14px", marginBottom: 14 }}>
+            <Icon name="alert" size={19} color={C.goldDark} />
+            <div style={{ fontFamily: C.body, fontSize: 13.5, color: C.charcoal, lineHeight: 1.45 }}>
+              You&apos;ve already logged work here: <b>{progress}</b>. If the stop is done, go back and tap <b>Complete Stop</b> — only flag it if something actually went wrong.
+            </div>
+          </div>
+        )}
         {other ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <textarea
@@ -311,7 +321,8 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
   const [problemFor, setProblemFor] = useState<RouteStop | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [online, setOnline] = useState(true);
-  const [photoBump, setPhotoBump] = useState<Record<string, number>>({});
+  // Optimistic per-kind photo counts (a shot counts the moment it's taken).
+  const [photoBump, setPhotoBump] = useState<Record<string, { dropoff: number; pickup: number }>>({});
   const [sync, setSync] = useState<SyncState>({ pendingPhotos: 0, pendingActions: 0, syncing: false });
   const [, startTransition] = useTransition();
   const tt = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -378,7 +389,17 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
     // today" card and taps its own "Back to Dispatch" when ready. Bouncing them
     // out immediately felt too abrupt.
   }
-  const photoCount = (s: RouteStop) => (s.photos?.length ?? 0) + (photoBump[s.id] ?? 0);
+  const photoCount = (s: RouteStop) =>
+    (s.photos?.length ?? 0) + (photoBump[s.id]?.dropoff ?? 0) + (photoBump[s.id]?.pickup ?? 0);
+  // Per-service proof. Legacy photos (kind null, taken before the photo_kinds
+  // migration) count as wildcard so a mid-transition stop can still complete.
+  const kindPhotos = (s: RouteStop, k: "dropoff" | "pickup") =>
+    (s.photos ?? []).filter((p) => p.kind === k || p.kind == null).length + (photoBump[s.id]?.[k] ?? 0);
+  const bumpPhoto = (stopId: string, k: "dropoff" | "pickup") =>
+    setPhotoBump((b) => {
+      const cur = b[stopId] ?? { dropoff: 0, pickup: 0 };
+      return { ...b, [stopId]: { ...cur, [k]: cur[k] + 1 } };
+    });
 
   function selectPin(id: string) {
     setTargetId(id);
@@ -417,8 +438,17 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
   }
   function togglePick(s: RouteStop) {
     const v = !s.pickup_confirmed;
-    patch(s.id, { pickup_confirmed: v });
-    startTransition(async () => { await runStopAction({ kind: "pickup", stopId: s.id, confirmed: v }); });
+    // Confirming a pick-up cancels "nothing was out" — they can't both be true.
+    patch(s.id, { pickup_confirmed: v, ...(v ? { pickup_none: false } : {}) });
+    startTransition(async () => {
+      if (v && s.pickup_none) await runStopAction({ kind: "pickupNone", stopId: s.id, none: false });
+      await runStopAction({ kind: "pickup", stopId: s.id, confirmed: v });
+    });
+  }
+  function toggleNothingOut(s: RouteStop) {
+    const v = !s.pickup_none;
+    patch(s.id, { pickup_none: v, ...(v ? { pickup_confirmed: false } : {}) });
+    startTransition(async () => { await runStopAction({ kind: "pickupNone", stopId: s.id, none: v }); });
   }
 
   function resolveProblem(reason: string) {
@@ -437,9 +467,40 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
   }
 
   const cust = target?.customer;
-  const didSomething = !!target && (target.dropoff_confirmed || target.pickup_confirmed);
-  const canComplete = !!target && photoCount(target) > 0 && didSomething;
-  const existingPhotos = target ? (target.photos ?? []).map((p) => ({ id: p.id, url: STORAGE_BASE + p.storage_path })) : [];
+  // Each service the stop calls for (or the driver started) must be finished
+  // AND proven with its own photo before the stop can complete.
+  //
+  // The pick-up question must be answered at EVERY stop: planned pick-ups are
+  // confirmed + photographed (or excused with "nothing was out"), and drop-off
+  // stops without a planned pick-up ask "Is there a pickup?" — Yes means
+  // confirm + photo, No records that the driver checked. Unplanned pick-ups
+  // (a bag left out) were getting missed because nobody asked.
+  const dropNeeded = !!target && (target.has_dropoff || target.dropoff_confirmed);
+  const dropOK = !dropNeeded || (!!target?.dropoff_confirmed && kindPhotos(target!, "dropoff") > 0);
+  const pickResolved =
+    !!target &&
+    (target.pickup_none
+      ? true
+      : target.pickup_confirmed
+      ? kindPhotos(target, "pickup") > 0
+      : false);
+  const didSomething = !!target && (target.dropoff_confirmed || target.pickup_confirmed || !!target.pickup_none);
+  const canComplete = !!target && dropOK && pickResolved && didSomething;
+  const completeHint = !target
+    ? ""
+    : !dropOK
+    ? target.dropoff_confirmed ? "Add a drop-off photo to finish" : "Confirm the drop-off"
+    : !pickResolved
+    ? target.pickup_confirmed
+      ? "Add a pick-up photo to finish"
+      : target.has_pickup
+      ? "Confirm the pick-up — or mark “nothing was out”"
+      : "Is there a pickup? Answer Yes or No"
+    : !didSomething
+    ? "Confirm what you did at this stop"
+    : "";
+  const dropPhotos = target ? (target.photos ?? []).filter((p) => p.kind === "dropoff" || p.kind == null).map((p) => ({ id: p.id, url: STORAGE_BASE + p.storage_path })) : [];
+  const pickPhotos = target ? (target.photos ?? []).filter((p) => p.kind === "pickup").map((p) => ({ id: p.id, url: STORAGE_BASE + p.storage_path })) : [];
 
   // After the driver taps Done on a finished route, show a calm end-of-day card
   // instead of the map for the rest of the day.
@@ -588,19 +649,72 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
 
               {target.status === "arrived" && (
                 <>
-                  <div style={{ marginBottom: 9, marginLeft: 2 }}><Label>Confirm what you did</Label></div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 12 }}>
-                    <CheckRow label="Dropped off" icon="arrowDown" checked={target.dropoff_confirmed} onClick={() => toggleDrop(target)} />
-                    <CheckRow label="Picked up" icon="arrowUp" checked={target.pickup_confirmed} onClick={() => togglePick(target)} />
-                  </div>
-                  <div style={{ marginBottom: 9, marginLeft: 2 }}>
-                    <Label>Photo proof <span style={{ color: photoCount(target) > 0 ? C.green : C.goldDark }}>· required</span></Label>
-                  </div>
-                  <PhotoCapture
-                    stopId={target.id}
-                    existingPhotos={existingPhotos}
-                    onPhotoAdded={() => setPhotoBump((b) => ({ ...b, [target.id]: (b[target.id] ?? 0) + 1 }))}
-                  />
+                  {/* ── Drop-off: confirm + its own photo ── */}
+                  {(target.has_dropoff || target.dropoff_confirmed) ? (
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ marginBottom: 9, marginLeft: 2 }}>
+                        <Label>Drop-off <span style={{ color: dropOK ? C.green : C.goldDark }}>· photo required</span></Label>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                        <CheckRow label="Dropped off" icon="arrowDown" checked={target.dropoff_confirmed} onClick={() => toggleDrop(target)} />
+                        <PhotoCapture
+                          stopId={target.id}
+                          kind="dropoff"
+                          title="Drop-off photo"
+                          existingPhotos={dropPhotos}
+                          onPhotoAdded={() => bumpPhoto(target.id, "dropoff")}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => toggleDrop(target)} style={{ width: "100%", marginBottom: 14, background: "none", border: `1px dashed ${C.creamDark}`, borderRadius: 12, cursor: "pointer", padding: "10px", fontFamily: C.body, fontSize: 13, color: "rgba(26,26,26,0.45)" }}>
+                      + Also dropped something off?
+                    </button>
+                  )}
+
+                  {/* ── Pick-up. Planned: confirm + photo (or "nothing was out").
+                      Not planned: mandatory "Is there a pickup?" — unplanned
+                      pick-ups get missed unless the driver is asked outright. ── */}
+                  {!target.has_pickup && !target.pickup_confirmed && !target.pickup_none ? (
+                    <div style={{ background: "rgba(213,154,41,0.1)", border: `1.5px solid ${C.goldDark}`, borderRadius: 14, padding: "14px 16px" }}>
+                      <div style={{ fontFamily: C.body, fontSize: 15.5, fontWeight: 600, color: C.charcoal }}>Is there a pickup?</div>
+                      <div style={{ fontFamily: C.body, fontSize: 12.5, color: "rgba(26,26,26,0.5)", marginTop: 2 }}>Check for a bag before you leave — even if none was scheduled.</div>
+                      <div style={{ display: "flex", gap: 9, marginTop: 11 }}>
+                        <button onClick={() => togglePick(target)} style={{ flex: 1, minHeight: 50, borderRadius: 13, border: `1.5px solid ${C.green}`, background: "#fff", color: C.green, cursor: "pointer", fontFamily: C.body, fontSize: 14, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                          Yes — picked up
+                        </button>
+                        <button onClick={() => toggleNothingOut(target)} style={{ flex: 1, minHeight: 50, borderRadius: 13, border: `1px solid ${C.creamDark}`, background: "#fff", color: "rgba(26,26,26,0.6)", cursor: "pointer", fontFamily: C.body, fontSize: 14, fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                          No pickup
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ marginBottom: 4 }}>
+                      <div style={{ marginBottom: 9, marginLeft: 2 }}>
+                        <Label>Pick-up <span style={{ color: pickResolved ? C.green : C.goldDark }}>{target.pickup_none ? "· nothing was out" : "· photo required"}</span></Label>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                        <CheckRow label="Picked up" icon="arrowUp" checked={target.pickup_confirmed} onClick={() => togglePick(target)} />
+                        {!target.pickup_confirmed && (
+                          <button onClick={() => toggleNothingOut(target)} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 14, cursor: "pointer", background: target.pickup_none ? C.goldDark : "#fff", border: `2px solid ${target.pickup_none ? C.goldDark : C.creamDark}`, borderRadius: 16, padding: "18px 18px", minHeight: 64, boxShadow: target.pickup_none ? "0 3px 10px rgba(184,130,31,0.25)" : "0 1px 3px rgba(0,0,0,0.05)" }}>
+                            <div style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: target.pickup_none ? "rgba(255,255,255,0.25)" : "transparent", border: target.pickup_none ? "none" : "2.5px solid rgba(26,26,26,0.22)" }}>
+                              {target.pickup_none && <Icon name="check" size={20} color="#fff" strokeWidth={3} />}
+                            </div>
+                            <div style={{ fontFamily: C.body, fontSize: 16.5, fontWeight: target.pickup_none ? 600 : 500, color: target.pickup_none ? "#fff" : C.charcoal }}>Nothing was out to pick up</div>
+                          </button>
+                        )}
+                        {!target.pickup_none && (
+                          <PhotoCapture
+                            stopId={target.id}
+                            kind="pickup"
+                            title="Pick-up photo"
+                            existingPhotos={pickPhotos}
+                            onPhotoAdded={() => bumpPhoto(target.id, "pickup")}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -631,9 +745,9 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
                     <Icon name="alert" size={22} color={C.goldDark} />
                   </button>
                 </div>
-                {!canComplete && (
+                {!canComplete && completeHint && (
                   <div style={{ textAlign: "center", fontSize: 12.5, color: "rgba(26,26,26,0.45)" }}>
-                    {photoCount(target) === 0 ? "Snap a photo to finish" : "Check drop-off or pick-up"}
+                    {completeHint}
                   </div>
                 )}
               </div>
@@ -643,7 +757,21 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
       )}
 
       {overview && <OverviewSheet stops={stops} targetId={targetId} isManager={isManager} onPick={(id) => { selectPin(id); setOverview(false); }} onClose={() => setOverview(false)} onBack={() => router.push("/dispatch")} onSignOut={async () => { await logout(); router.push("/"); }} />}
-      {problemFor && <ProblemSheet name={firstName(problemFor.customer!.name)} onClose={() => setProblemFor(null)} onResolve={resolveProblem} />}
+      {problemFor && (
+        <ProblemSheet
+          name={firstName(problemFor.customer!.name)}
+          progress={(() => {
+            const bits: string[] = [];
+            if (problemFor.dropoff_confirmed) bits.push("drop-off confirmed");
+            if (problemFor.pickup_confirmed) bits.push("pick-up confirmed");
+            const n = photoCount(problemFor);
+            if (n > 0) bits.push(`${n} photo${n > 1 ? "s" : ""}`);
+            return bits.length ? bits.join(" · ") : null;
+          })()}
+          onClose={() => setProblemFor(null)}
+          onResolve={resolveProblem}
+        />
+      )}
       <Toast toast={toast} />
     </div>
   );

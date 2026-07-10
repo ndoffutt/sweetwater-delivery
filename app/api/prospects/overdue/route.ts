@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifySessionToken, COOKIE_NAME } from "@/lib/auth";
-import { isOverdueForVisit } from "@/lib/prospectVisit";
+import { needsAttention } from "@/lib/prospectVisit";
 import type { Prospect } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -16,12 +16,12 @@ export async function GET(request: NextRequest) {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("prospects")
-    .select("status, priority, created_at, touchpoints:prospect_touchpoints(type, created_at)")
+    .select("status, priority, created_at, manual_request_at, touchpoints:prospect_touchpoints(type, created_at)")
     .is("deleted_at", null)
     .in("status", ["new", "working", "active"]);
 
   if (error) return NextResponse.json({ count: 0 });
 
-  const count = ((data ?? []) as unknown as Prospect[]).filter(isOverdueForVisit).length;
+  const count = ((data ?? []) as unknown as Prospect[]).filter(needsAttention).length;
   return NextResponse.json({ count });
 }

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { geocodeMissingCustomers } from "@/lib/customerGeo";
+import { outOfRangeIdSet } from "@/lib/customerRange";
 import CustomerDirectory, { type Activity } from "@/components/CustomerDirectory";
 import type { Customer } from "@/lib/types";
 
@@ -51,6 +52,11 @@ export default async function CustomersPage({
     customers = retry.data as typeof customers;
   }
 
+  // Which of these customers are shelved as out of range (tolerant of the
+  // column not existing yet). Merged onto each row below so the directory can
+  // mark, filter, and restore them without a schema-dependent select.
+  const oorSet = await outOfRangeIdSet(supabase);
+
   const { data: stops } = await supabase
     .from("route_stops")
     .select("id,customer_id,completed_at,has_dropoff,has_pickup,piece_count,stop_photos(storage_path),routes(date)")
@@ -76,7 +82,7 @@ export default async function CustomersPage({
 
   return (
     <CustomerDirectory
-      customers={(customers ?? []) as Customer[]}
+      customers={((customers ?? []) as Customer[]).map((c) => ({ ...c, out_of_range: oorSet.has(c.id) }))}
       activity={activity}
       initialSelectedId={searchParams?.id ?? null}
     />
