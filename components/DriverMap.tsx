@@ -163,12 +163,12 @@ function TaskChip({ type }: { type: "drop" | "pick" }) {
 
 function CheckRow({ label, icon, checked, onClick }: { label: string; icon: IconName; checked: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} style={{ width: "100%", display: "flex", alignItems: "center", gap: 13, cursor: "pointer", background: checked ? "rgba(2,115,62,0.06)" : "#fff", border: `1.5px solid ${checked ? C.green : C.creamDark}`, borderRadius: 14, padding: "14px 16px", transition: "all .15s" }}>
-      <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: checked ? C.green : "transparent", border: checked ? "none" : "2px solid rgba(26,26,26,0.2)" }}>
-        {checked && <Icon name="check" size={16} color={C.cream} strokeWidth={2.8} />}
+    <button onClick={onClick} style={{ width: "100%", display: "flex", alignItems: "center", gap: 14, cursor: "pointer", background: checked ? C.green : "#fff", border: `2px solid ${checked ? C.green : C.creamDark}`, borderRadius: 16, padding: "18px 18px", minHeight: 64, transition: "all .15s", boxShadow: checked ? "0 3px 10px rgba(2,115,62,0.25)" : "0 1px 3px rgba(0,0,0,0.05)" }}>
+      <div style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: checked ? "rgba(255,255,255,0.22)" : "transparent", border: checked ? "none" : "2.5px solid rgba(26,26,26,0.22)" }}>
+        {checked && <Icon name="check" size={20} color={C.cream} strokeWidth={3} />}
       </div>
-      <Icon name={icon} size={18} color={checked ? C.green : "rgba(26,26,26,0.4)"} />
-      <div style={{ fontFamily: C.body, fontSize: 15.5, color: C.charcoal }}>{label}</div>
+      <Icon name={icon} size={21} color={checked ? C.cream : "rgba(26,26,26,0.4)"} />
+      <div style={{ fontFamily: C.body, fontSize: 16.5, fontWeight: checked ? 600 : 500, color: checked ? C.cream : C.charcoal }}>{label}</div>
     </button>
   );
 }
@@ -696,11 +696,11 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
                       <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
                         <CheckRow label="Picked up" icon="arrowUp" checked={target.pickup_confirmed} onClick={() => togglePick(target)} />
                         {!target.pickup_confirmed && (
-                          <button onClick={() => toggleNothingOut(target)} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 13, cursor: "pointer", background: target.pickup_none ? "rgba(213,154,41,0.1)" : "#fff", border: `1.5px solid ${target.pickup_none ? C.goldDark : C.creamDark}`, borderRadius: 14, padding: "14px 16px" }}>
-                            <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: target.pickup_none ? C.goldDark : "transparent", border: target.pickup_none ? "none" : "2px solid rgba(26,26,26,0.2)" }}>
-                              {target.pickup_none && <Icon name="check" size={16} color="#fff" strokeWidth={2.8} />}
+                          <button onClick={() => toggleNothingOut(target)} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 14, cursor: "pointer", background: target.pickup_none ? C.goldDark : "#fff", border: `2px solid ${target.pickup_none ? C.goldDark : C.creamDark}`, borderRadius: 16, padding: "18px 18px", minHeight: 64, boxShadow: target.pickup_none ? "0 3px 10px rgba(184,130,31,0.25)" : "0 1px 3px rgba(0,0,0,0.05)" }}>
+                            <div style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: target.pickup_none ? "rgba(255,255,255,0.25)" : "transparent", border: target.pickup_none ? "none" : "2.5px solid rgba(26,26,26,0.22)" }}>
+                              {target.pickup_none && <Icon name="check" size={20} color="#fff" strokeWidth={3} />}
                             </div>
-                            <div style={{ fontFamily: C.body, fontSize: 15.5, color: C.charcoal }}>Nothing was out to pick up</div>
+                            <div style={{ fontFamily: C.body, fontSize: 16.5, fontWeight: target.pickup_none ? 600 : 500, color: target.pickup_none ? "#fff" : C.charcoal }}>Nothing was out to pick up</div>
                           </button>
                         )}
                         {!target.pickup_none && (
