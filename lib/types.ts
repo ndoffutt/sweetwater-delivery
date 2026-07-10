@@ -15,7 +15,14 @@ export interface SessionUser {
 export interface Customer {
   id: string;
   name: string;
+  // Canonical one-line address (geocoding/maps/display). street/town/zip are
+  // the editable parts, composed back into `address` on save; email is captured
+  // for delivery customers. All optional until the address-split migration runs.
   address: string;
+  street?: string | null;
+  town?: string | null;
+  zip?: string | null;
+  email?: string | null;
   phone: string | null;
   lat: number | null;
   lng: number | null;

@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/session";
 import { cheapestInsertion, seqBetween } from "@/lib/geo";
 import { normalizeRouteSeqs } from "@/lib/route";
 import { geocodeAddress } from "@/lib/geocode";
+import { composeAddress } from "@/lib/address";
 import type { DeliveryDay } from "@/lib/deliveryDay";
 
 export interface MasterStop {
@@ -122,32 +123,62 @@ export async function reorderRoute(orderedIds: string[]) {
 
 interface CustomerInput {
   name: string;
-  address: string;
+  // Either a full one-line address or the parts (street/town/zip); the action
+  // composes the canonical `address` from the parts when they're supplied.
+  address?: string;
+  street?: string;
+  town?: string;
+  zip?: string;
+  email?: string;
   phone?: string;
   gate_code?: string;
   delivery_notes?: string;
+}
+
+// Columns added by supabase/customer_address_split.sql. Stripped on retry when
+// the migration hasn't run yet, so saving still works (address stays canonical).
+const SPLIT_COLS = ["street", "town", "zip", "email"] as const;
+const isMissingColumn = (msg?: string) =>
+  !!msg && /column|does not exist|schema cache/i.test(msg);
+
+// Build the DB row from the input: fills the parts, composes the canonical
+// address, and returns both the full row and a legacy row (no split columns).
+function customerRow(input: Partial<CustomerInput>) {
+  const hasParts = input.street != null || input.town != null || input.zip != null;
+  const address = hasParts
+    ? composeAddress({ street: input.street, town: input.town, zip: input.zip })
+    : input.address;
+
+  const full: Record<string, unknown> = {};
+  if (input.name != null) full.name = input.name;
+  if (input.phone !== undefined) full.phone = input.phone || null;
+  if (input.gate_code !== undefined) full.gate_code = input.gate_code || null;
+  if (input.delivery_notes !== undefined) full.delivery_notes = input.delivery_notes || null;
+  if (input.street !== undefined) full.street = input.street || null;
+  if (input.town !== undefined) full.town = input.town || null;
+  if (input.zip !== undefined) full.zip = input.zip || null;
+  if (input.email !== undefined) full.email = input.email || null;
+  if (address != null) full.address = address;
+
+  const legacy = { ...full };
+  for (const c of SPLIT_COLS) delete legacy[c];
+  return { full, legacy, address };
 }
 
 export async function createCustomer(input: CustomerInput) {
   await requireSession("dispatcher");
   const supabase = createAdminClient();
 
+  const { full, legacy, address } = customerRow(input);
   // Geocode up front so the route-position suggestion pops right after adding.
-  const coords = await geocodeAddress(input.address);
+  const coords = address ? await geocodeAddress(address) : null;
+  full.lat = legacy.lat = coords?.lat ?? null;
+  full.lng = legacy.lng = coords?.lng ?? null;
 
-  const { data, error } = await supabase
-    .from("customers")
-    .insert({
-      name: input.name,
-      address: input.address,
-      phone: input.phone || null,
-      gate_code: input.gate_code || null,
-      delivery_notes: input.delivery_notes || null,
-      lat: coords?.lat ?? null,
-      lng: coords?.lng ?? null,
-    })
-    .select()
-    .single();
+  let { data, error } = await supabase.from("customers").insert(full).select().single();
+  if (error && isMissingColumn(error.message)) {
+    ({ data, error } = await supabase.from("customers").insert(legacy).select().single());
+  }
 
   if (error) return { error: error.message };
   revalidatePath("/dispatch/customers");
@@ -158,18 +189,18 @@ export async function updateCustomer(id: string, input: Partial<CustomerInput>) 
   await requireSession("dispatcher");
   const supabase = createAdminClient();
 
-  const patch: Record<string, unknown> = { ...input };
+  const { full, legacy, address } = customerRow(input);
   // Address changed → keep the map pin in sync.
-  if (input.address) {
-    const coords = await geocodeAddress(input.address);
-    patch.lat = coords?.lat ?? null;
-    patch.lng = coords?.lng ?? null;
+  if (address) {
+    const coords = await geocodeAddress(address);
+    full.lat = legacy.lat = coords?.lat ?? null;
+    full.lng = legacy.lng = coords?.lng ?? null;
   }
 
-  const { error } = await supabase
-    .from("customers")
-    .update(patch)
-    .eq("id", id);
+  let { error } = await supabase.from("customers").update(full).eq("id", id);
+  if (error && isMissingColumn(error.message)) {
+    ({ error } = await supabase.from("customers").update(legacy).eq("id", id));
+  }
 
   if (error) return { error: error.message };
   revalidatePath("/dispatch/customers");

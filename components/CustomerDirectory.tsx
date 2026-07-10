@@ -18,6 +18,7 @@ import {
 } from "@/lib/actions/customers";
 import RouteMap from "@/components/RouteMap";
 import { AccountAvatar, KindPill, InfoTile } from "@/components/AccountBits";
+import { parseAddress, composeAddress } from "@/lib/address";
 import type { Customer, RouteStop } from "@/lib/types";
 import { RUN_DAYS, DAY_LABEL, DAY_INITIAL, formatDays } from "@/lib/deliveryDay";
 import { googleVoiceCallHref, formatPhone } from "@/lib/phone";
@@ -550,6 +551,7 @@ function Detail({
         <InfoTile icon="📍" label="Address" value={c.address}
           href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(c.address)}`} />
         {c.phone && <InfoTile icon="📞" label="Phone" value={formatPhone(c.phone)} href={googleVoiceCallHref(c.phone)} action="Call" />}
+        {c.email && <InfoTile icon="✉️" label="Email" value={c.email} href={`mailto:${c.email}`} action="Email" />}
         <InfoTile icon="🔑" label="Gate / entry code" value={c.gate_code || "—"} mono={!!c.gate_code} />
         <InfoTile icon="🕐" label="Last delivered" value={activity[0]?.date ? new Date(activity[0].date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"} />
       </div>
@@ -719,17 +721,34 @@ function EditCustomer({
 }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
+  // Prefer the stored parts; fall back to parsing the one-line address so the
+  // split fields are pre-filled even before the migration backfills them.
+  const parsed = parseAddress(c.address);
+  const street0 = (c.street ?? parsed.street) || "";
+  const town0 = (c.town ?? parsed.town) || "";
+  const zip0 = (c.zip ?? parsed.zip) || "";
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const name = (fd.get("name") as string).trim();
-    const address = (fd.get("address") as string).trim();
+    const street = (fd.get("street") as string).trim();
+    const town = (fd.get("town") as string).trim();
+    const zip = (fd.get("zip") as string).trim();
+    const email = (fd.get("email") as string).trim();
     const phone = (fd.get("phone") as string).trim();
+    const delivery_notes = (fd.get("delivery_notes") as string).trim();
+    const address = composeAddress({ street, town, zip });
     start(async () => {
-      const res = await updateCustomer(c.id, { name, address, phone: phone || undefined });
+      const res = await updateCustomer(c.id, {
+        name, street, town, zip, address,
+        email, phone: phone || undefined, delivery_notes,
+      });
       if (res.error) { setError(res.error); return; }
-      onSaved({ name, address, phone: phone || null });
+      onSaved({
+        name, street, town, zip, address,
+        email: email || null, phone: phone || null, delivery_notes: delivery_notes || null,
+      });
     });
   }
 
@@ -745,13 +764,31 @@ function EditCustomer({
         <input name="name" defaultValue={c.name} required className={field} />
       </div>
       <div>
-        <span className={label}>Address</span>
-        <input name="address" defaultValue={c.address} required className={field} />
-        <p className="text-[11px] text-charcoal/40 font-body mt-1">Changing the address re-pins them on the map.</p>
+        <span className={label}>Street</span>
+        <input name="street" defaultValue={street0} required className={field} placeholder="1 Bay St" />
+      </div>
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <span className={label}>Town</span>
+          <input name="town" defaultValue={town0} className={field} placeholder="Sag Harbor" />
+        </div>
+        <div className="w-32">
+          <span className={label}>Zip</span>
+          <input name="zip" defaultValue={zip0} inputMode="numeric" className={field} placeholder="11963" />
+        </div>
+      </div>
+      <p className="text-[11px] text-charcoal/40 font-body -mt-1">Changing the address re-pins them on the map.</p>
+      <div>
+        <span className={label}>Email</span>
+        <input name="email" type="email" defaultValue={c.email ?? ""} className={field} placeholder="name@email.com" />
       </div>
       <div>
         <span className={label}>Phone</span>
         <input name="phone" defaultValue={c.phone ?? ""} className={field} />
+      </div>
+      <div>
+        <span className={label}>Notes</span>
+        <textarea name="delivery_notes" defaultValue={c.delivery_notes ?? ""} rows={3} className={`${field} resize-none`} placeholder="Delivery preferences, access, etc." />
       </div>
       {error && <p className="text-sm text-red-600 font-body">{error}</p>}
       <div className="flex gap-2">
@@ -776,9 +813,14 @@ function AddForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (c:
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     start(async () => {
+      const street = (fd.get("street") as string) || "";
+      const town = (fd.get("town") as string) || "";
+      const zip = (fd.get("zip") as string) || "";
       const res = await createCustomer({
         name: fd.get("name") as string,
-        address: fd.get("address") as string,
+        street, town, zip,
+        address: composeAddress({ street, town, zip }),
+        email: (fd.get("email") as string) || undefined,
         phone: (fd.get("phone") as string) || undefined,
         gate_code: (fd.get("gate_code") as string) || undefined,
         delivery_notes: (fd.get("delivery_notes") as string) || undefined,
@@ -875,9 +917,13 @@ function AddForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (c:
     <form onSubmit={submit} className="p-5 md:p-8 md:max-w-2xl space-y-3">
       <button type="button" onClick={onCancel} className="md:hidden text-sm text-charcoal/50 font-body">← Back</button>
       <h2 className="font-serif text-2xl font-light text-charcoal">New Customer</h2>
-      {["name", "address"].map((n) => (
-        <input key={n} name={n} placeholder={n[0].toUpperCase() + n.slice(1)} required className="w-full p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary" />
-      ))}
+      <input name="name" placeholder="Name" required className="w-full p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary" />
+      <input name="street" placeholder="Street (e.g. 1 Bay St)" required className="w-full p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary" />
+      <div className="flex gap-3">
+        <input name="town" placeholder="Town" className="flex-1 p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary" />
+        <input name="zip" placeholder="Zip" inputMode="numeric" className="w-32 p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary" />
+      </div>
+      <input name="email" type="email" placeholder="Email" className="w-full p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary" />
       <input name="phone" placeholder="Phone (optional)" className="w-full p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary" />
       <input name="gate_code" placeholder="Gate code (optional)" className="w-full p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary" />
       <textarea name="delivery_notes" placeholder="Notes (optional)" rows={2} className="w-full p-3 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm resize-none focus:outline-none focus:border-green-primary" />
