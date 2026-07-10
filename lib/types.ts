@@ -30,6 +30,10 @@ export interface Customer {
   // be on more than one (e.g. a twice-weekly commercial account).
   delivery_days?: DeliveryDay[] | null;
   active: boolean;
+  // Too far to service right now: shelved from route building + the master
+  // route, but kept in the directory so it can be brought back. Optional until
+  // the out_of_range migration runs.
+  out_of_range?: boolean | null;
   created_at: string;
 }
 

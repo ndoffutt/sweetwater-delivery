@@ -13,6 +13,7 @@ import {
   placeAtEndOfRoute,
   reorderRoute,
   setDeliveryDays,
+  setCustomerRange,
   type RoutePositioning,
 } from "@/lib/actions/customers";
 import RouteMap from "@/components/RouteMap";
@@ -31,7 +32,7 @@ export interface Activity {
 }
 
 const TAGS = ["VIP", "Year-round", "Seasonal", "Commercial"];
-const FILTERS = ["All", "VIP", "Year-round", "Seasonal", "Commercial"] as const;
+const FILTERS = ["All", "VIP", "Year-round", "Seasonal", "Commercial", "Out of range"] as const;
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -171,13 +172,23 @@ export default function CustomerDirectory({
 
   const lastDelivered = (id: string) => activity[id]?.[0]?.date;
 
-  // Every customer should have a route spot; surface the ones that don't.
-  const unpositioned = customers.filter((c) => c.route_seq == null);
+  const outOfRangeCount = customers.filter((c) => c.out_of_range).length;
+
+  // Every IN-RANGE customer should have a route spot; surface the ones that
+  // don't. Shelved (out-of-range) customers intentionally have no spot, so they
+  // must not count toward this nag.
+  const unpositioned = customers.filter((c) => c.route_seq == null && !c.out_of_range);
 
   const filtered = customers
     .filter((c) => {
-      if (onlyUnpositioned && c.route_seq != null) return false;
-      if (filter !== "All" && !(c.tags ?? []).includes(filter)) return false;
+      // Out-of-range customers live only under the "Out of range" filter — they
+      // stay out of every other view (and route building) until brought back.
+      if (filter === "Out of range") { if (!c.out_of_range) return false; }
+      else {
+        if (c.out_of_range) return false;
+        if (onlyUnpositioned && c.route_seq != null) return false;
+        if (filter !== "All" && !(c.tags ?? []).includes(filter)) return false;
+      }
       if (query) {
         const q = query.toLowerCase();
         return c.name.toLowerCase().includes(q) || c.address.toLowerCase().includes(q);
@@ -264,13 +275,16 @@ export default function CustomerDirectory({
           />
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex gap-1.5 flex-wrap">
-              {FILTERS.map((f) => (
+              {FILTERS
+                // Only surface the "Out of range" chip once something is shelved.
+                .filter((f) => f !== "Out of range" || outOfRangeCount > 0)
+                .map((f) => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
                   className={`px-3 py-1 rounded-full text-xs font-body ${filter === f ? "bg-green-primary text-cream" : "bg-cream-dark text-charcoal/60"}`}
                 >
-                  {f}
+                  {f === "Out of range" ? `Out of range ${outOfRangeCount}` : f}
                 </button>
               ))}
             </div>
@@ -349,9 +363,11 @@ export default function CustomerDirectory({
                 <div className="flex items-center gap-1.5">
                   {(c.tags ?? []).includes("VIP") && <span className="text-gold-primary text-sm">★</span>}
                   <span className="font-body font-medium text-charcoal truncate">{c.name}</span>
-                  {c.route_seq == null && (
+                  {c.out_of_range ? (
+                    <span className="shrink-0 text-[10px] font-body uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-charcoal/10 text-charcoal/50" title="Shelved — too far to service now">Out of range</span>
+                  ) : c.route_seq == null ? (
                     <span className="shrink-0 text-[10px] font-body uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-gold-primary/20 text-gold-dark" title="No route spot yet">⚠ No spot</span>
-                  )}
+                  ) : null}
                 </div>
                 <p className="text-xs text-charcoal/40 font-body truncate">{c.address}</p>
               </div>
@@ -465,6 +481,11 @@ function Detail({
     onPatch({ tags: next });
     pending(() => saveCustomerTags(c.id, next));
   }
+  function setRange(outOfRange: boolean) {
+    // Shelving also drops the route spot (server clears it too).
+    onPatch({ out_of_range: outOfRange, ...(outOfRange ? { route_seq: null } : {}) });
+    pending(() => { setCustomerRange(c.id, outOfRange); });
+  }
   async function saveNotes() {
     onPatch({ gate_code: gate.trim() || null, delivery_notes: notes.trim() || null });
     await saveCustomerNotes(c.id, { gate_code: gate.trim() || null, delivery_notes: notes.trim() || null });
@@ -508,6 +529,22 @@ function Detail({
         </button>
       </div>
 
+      {/* Out-of-range banner: shelved from route building until brought back. */}
+      {c.out_of_range && (
+        <div className="flex items-center gap-3 bg-charcoal/5 border border-charcoal/15 rounded-xl px-3 py-2.5">
+          <span>🚫</span>
+          <p className="text-xs font-body text-charcoal flex-1">
+            <b>Out of range.</b> Hidden from route building and the master route.
+          </p>
+          <button
+            onClick={() => setRange(false)}
+            className="shrink-0 min-h-tap px-3 py-1.5 rounded-lg bg-green-primary text-cream text-xs font-body uppercase tracking-widest"
+          >
+            Bring back
+          </button>
+        </div>
+      )}
+
       {/* Info tiles (redesign): the four facts a dispatcher reaches for */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
         <InfoTile icon="📍" label="Address" value={c.address}
@@ -517,8 +554,9 @@ function Detail({
         <InfoTile icon="🕐" label="Last delivered" value={activity[0]?.date ? new Date(activity[0].date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"} />
       </div>
 
-      {/* Route position — every customer should have a spot */}
-      {pos?.ok && (
+      {/* Route position — every in-range customer should have a spot. Shelved
+          customers have no spot by design, so this section is hidden for them. */}
+      {pos?.ok && !c.out_of_range && (
         <div>
           <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-2">Route Position</p>
           {pos.current != null ? (
@@ -649,7 +687,25 @@ function Detail({
         )}
       </div>
 
-      <button onClick={() => { if (confirm(`Remove ${c.name}?`)) onDelete(); }} className="text-xs text-red-400 font-body uppercase tracking-widest">Remove customer</button>
+      {/* Range + remove: shelving keeps the customer, removing soft-deletes. */}
+      <div className="flex items-center justify-between gap-3 pt-1">
+        {!c.out_of_range ? (
+          <button
+            onClick={() => setRange(true)}
+            className="min-h-tap px-3 py-2 rounded-lg border border-cream-dark text-charcoal/60 text-xs font-body uppercase tracking-widest"
+          >
+            🚫 Mark out of range
+          </button>
+        ) : (
+          <button
+            onClick={() => setRange(false)}
+            className="min-h-tap px-3 py-2 rounded-lg border border-green-primary text-green-primary text-xs font-body uppercase tracking-widest"
+          >
+            Bring back into range
+          </button>
+        )}
+        <button onClick={() => { if (confirm(`Remove ${c.name}?`)) onDelete(); }} className="text-xs text-red-400 font-body uppercase tracking-widest">Remove customer</button>
+      </div>
     </div>
   );
 }

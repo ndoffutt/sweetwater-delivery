@@ -236,3 +236,27 @@ export async function deleteCustomer(id: string) {
   revalidatePath("/dispatch/customers");
   return { success: true };
 }
+
+// Shelve a customer as out of range (too far to service now) or bring them
+// back. Shelving also pulls them from the master route so the numbering closes
+// up; bringing them back leaves them unpositioned and the directory prompts for
+// a new route spot.
+export async function setCustomerRange(id: string, outOfRange: boolean) {
+  await requireSession("dispatcher");
+  const supabase = createAdminClient();
+
+  const update: Record<string, unknown> = { out_of_range: outOfRange };
+  if (outOfRange) update.route_seq = null;
+
+  const { error } = await supabase.from("customers").update(update).eq("id", id);
+  if (error) return { error: error.message };
+
+  if (outOfRange) {
+    // Collapse the gap left in the route order (best-effort).
+    try { await normalizeRouteSeqs(supabase); } catch { /* non-fatal */ }
+  }
+
+  revalidatePath("/dispatch/customers");
+  revalidatePath("/dispatch");
+  return { success: true };
+}

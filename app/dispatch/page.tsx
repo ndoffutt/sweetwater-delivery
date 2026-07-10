@@ -7,6 +7,7 @@ import DispatchConsole, { type InitialStop } from "@/components/DispatchConsole"
 import { getOpenExceptions } from "@/lib/actions/exceptions";
 import type { DeliveryDay } from "@/lib/deliveryDay";
 import { isOverdueForVisit, needsAttention, daysSinceVisit, overdueDaysFor, hasManualRequest } from "@/lib/prospectVisit";
+import { outOfRangeIdSet } from "@/lib/customerRange";
 import type { Prospect } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -147,11 +148,17 @@ export default async function DispatchPage() {
     .filter((c) => c.lat != null && c.lng != null)
     .map((c) => ({ name: c.name, lat: c.lat as number, lng: c.lng as number, seq: c.route_seq }));
 
+  // Out-of-range customers are shelved: kept in the directory but excluded from
+  // the manual route-builder picker. (They're already gone from the master
+  // route below since shelving clears route_seq.) Tolerant of the column not
+  // existing yet — then the set is empty and everyone stays selectable.
+  const oorSet = await outOfRangeIdSet(supabase);
+
   const allCustomers = (((allCustomerRows ?? []) as unknown) as {
     id: string; name: string; address: string; phone: string | null;
     lat: number | null; lng: number | null; route_seq: number | null; tags: string[] | null;
     delivery_days?: DeliveryDay[] | null;
-  }[]).map((c) => ({
+  }[]).filter((c) => !oorSet.has(c.id)).map((c) => ({
     id: c.id,
     name: c.name,
     address: c.address,
