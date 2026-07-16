@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/session";
-import { recordAndSend } from "@/lib/messaging";
+import { recordAndSend, canTransmitSms } from "@/lib/messaging";
 import { trackUrl } from "@/lib/track";
 import type { StopStatus } from "@/lib/types";
 
@@ -12,7 +12,8 @@ import type { StopStatus } from "@/lib/types";
 async function autoText(
   supabase: ReturnType<typeof createAdminClient>,
   stopId: string,
-  message: string
+  message: string,
+  transmit: boolean
 ) {
   const { data: stop } = await supabase
     .from("route_stops")
@@ -27,6 +28,7 @@ async function autoText(
     customerId: (stop as unknown as { customer_id: string }).customer_id,
     stopId,
     senderName: "Auto",
+    transmit,
   });
 }
 
@@ -36,7 +38,8 @@ async function autoText(
 // embedded links before texts may carry URLs; until then this is a no-op.
 async function notifyRouteStarted(
   supabase: ReturnType<typeof createAdminClient>,
-  routeId: string
+  routeId: string,
+  transmit: boolean
 ) {
   if (process.env.TRACK_LINKS !== "1") return;
   const { data: stops } = await supabase
@@ -59,6 +62,7 @@ async function notifyRouteStarted(
           customerId: s.customer_id,
           stopId: s.id,
           senderName: "Auto",
+          transmit,
         })
       )
   );
@@ -179,7 +183,7 @@ export async function updateStopStatus(stopId: string, status: StopStatus) {
       .eq("status", "dispatched")
       .select("id");
     if (started && started.length > 0) {
-      await notifyRouteStarted(supabase, stop.route_id);
+      await notifyRouteStarted(supabase, stop.route_id, canTransmitSms(session.role));
     }
   }
 
@@ -189,11 +193,12 @@ export async function updateStopStatus(stopId: string, status: StopStatus) {
   }
 
   // Auto-text the customer on arrive / complete (per the map-first flow).
+  const transmit = canTransmitSms(session.role);
   if (status === "arrived") {
-    await autoText(supabase, stopId, "Hi! Your Sweetwater's delivery is on the way.");
+    await autoText(supabase, stopId, "Hi! Your Sweetwater's delivery is on the way.", transmit);
   }
   if (status === "completed") {
-    await autoText(supabase, stopId, "Your Sweetwater's delivery is complete.");
+    await autoText(supabase, stopId, "Your Sweetwater's delivery is complete.", transmit);
     await logDeliveryVisit(supabase, stop.customer_id, session.name);
   }
 
@@ -292,6 +297,7 @@ export async function sendSms(stopId: string, message: string) {
     customerId: (stop as unknown as { customer_id: string }).customer_id,
     stopId,
     senderName: session.name,
+    transmit: canTransmitSms(session.role),
   });
   if (res.status === "failed") return { error: res.error || "Couldn't send" };
   return { success: true };
