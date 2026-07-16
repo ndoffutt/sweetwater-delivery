@@ -7,6 +7,12 @@ import { recordAndSend, canTransmitSms } from "@/lib/messaging";
 import { trackUrl } from "@/lib/track";
 import type { StopStatus } from "@/lib/types";
 
+// Master switch for ALL automated customer texts (arrive/complete notifications
+// + the out-for-delivery blast). OFF by default during the Twilio rollout — set
+// AUTO_TEXTS=1 in the environment to turn automated texting back on once it's
+// been tested. Manual texts (Messages inbox, one-off stop sends) are unaffected.
+const autoTextsOn = () => process.env.AUTO_TEXTS === "1";
+
 // Best-effort auto-text on arrive/complete. Sends for real once Twilio is
 // configured; until then it's recorded as pending. No-op without a phone.
 async function autoText(
@@ -182,7 +188,7 @@ export async function updateStopStatus(stopId: string, status: StopStatus) {
       .eq("id", stop.route_id)
       .eq("status", "dispatched")
       .select("id");
-    if (started && started.length > 0) {
+    if (started && started.length > 0 && autoTextsOn()) {
       await notifyRouteStarted(supabase, stop.route_id, canTransmitSms(session.role));
     }
   }
@@ -192,13 +198,16 @@ export async function updateStopStatus(stopId: string, status: StopStatus) {
     await maybeCompleteRoute(supabase, stop.route_id);
   }
 
-  // Auto-text the customer on arrive / complete (per the map-first flow).
+  // Auto-text the customer on arrive / complete (per the map-first flow) — only
+  // when automated texting is switched on. Manual sends are unaffected.
   const transmit = canTransmitSms(session.role);
-  if (status === "arrived") {
+  if (autoTextsOn() && status === "arrived") {
     await autoText(supabase, stopId, "Hi! Your Sweetwater's delivery is on the way.", transmit);
   }
   if (status === "completed") {
-    await autoText(supabase, stopId, "Your Sweetwater's delivery is complete.", transmit);
+    if (autoTextsOn()) {
+      await autoText(supabase, stopId, "Your Sweetwater's delivery is complete.", transmit);
+    }
     await logDeliveryVisit(supabase, stop.customer_id, session.name);
   }
 
