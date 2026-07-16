@@ -21,6 +21,12 @@ const BRIDGE = process.env.TWILIO_BRIDGE_PHONE;
 export const smsConfigured = () => Boolean(SID && TOKEN && FROM);
 export const callConfigured = () => Boolean(SID && TOKEN && FROM && BRIDGE);
 
+// Rollout gate: during the initial Twilio launch, ONLY the Owner (Nate, role
+// "admin") actually transmits SMS — every other login records the message as
+// pending, so it's saved in the app but never leaves. Widen this list (e.g.
+// add "dispatcher") to open sending up to the Manager later.
+export const canTransmitSms = (role: string | null | undefined) => role === "admin";
+
 /** Last 10 digits - the key used to match numbers to customers and threads. */
 export const phoneDigits = (p: string | null | undefined) =>
   (p || "").replace(/\D/g, "").slice(-10);
@@ -66,6 +72,9 @@ export async function recordAndSend(opts: {
   customerId?: string | null;
   stopId?: string | null;
   senderName?: string | null;
+  // Whether this send is actually allowed to leave the app (rollout gate, see
+  // canTransmitSms). When false the message is recorded as pending only.
+  transmit?: boolean;
 }): Promise<{ id?: string; status: string; error?: string }> {
   const supabase = createAdminClient();
 
@@ -94,7 +103,8 @@ export async function recordAndSend(opts: {
     return { status: "pending" };
   }
 
-  if (!smsConfigured()) return { id: row.id, status: "pending" };
+  // Not configured, or this sender isn't cleared to transmit yet → record only.
+  if (!smsConfigured() || !opts.transmit) return { id: row.id, status: "pending" };
 
   const sent = await twilioPost("Messages", {
     From: FROM!,

@@ -2,9 +2,10 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/session";
-import { recordAndSend, placeBridgeCall, phoneDigits, callConfigured } from "@/lib/messaging";
+import { recordAndSend, placeBridgeCall, phoneDigits, callConfigured, canTransmitSms } from "@/lib/messaging";
 
-/** Send a text from the office number (any signed-in device: manager or driver). */
+/** Send a text from the office number. During Twilio rollout only the Owner
+ *  (Nate) actually transmits; other logins record the message as pending. */
 export async function sendThreadMessage(phone: string, body: string) {
   const session = await requireSession();
   const text = body.trim();
@@ -27,6 +28,7 @@ export async function sendThreadMessage(phone: string, body: string) {
     body: text,
     customerId: match?.id ?? null,
     senderName: session.name,
+    transmit: canTransmitSms(session.role),
   });
   if (res.status === "failed") return { error: res.error || "Couldn't send" };
   return { success: true, status: res.status };
