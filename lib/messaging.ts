@@ -107,7 +107,9 @@ export async function recordAndSend(opts: {
   if (!smsConfigured() || !opts.transmit) return { id: row.id, status: "pending" };
 
   const sent = await twilioPost("Messages", {
-    From: FROM!,
+    // Normalize the office number to E.164 (+1…) — Twilio rejects a "From" like
+    // "631-537-5120", so accept whatever format the env var was entered in.
+    From: toE164(FROM!),
     To: toE164(opts.phone),
     Body: opts.body,
     // Delivery receipts post back here and flip the bubble to delivered/failed.
@@ -131,9 +133,9 @@ export async function recordAndSend(opts: {
  */
 export async function placeBridgeCall(customerPhone: string): Promise<{ error?: string }> {
   if (!callConfigured()) return { error: "Calling isn't set up yet" };
-  const twiml = `<Response><Say voice="alice">Connecting you to the customer.</Say><Dial callerId="${FROM}">${toE164(customerPhone)}</Dial></Response>`;
+  const twiml = `<Response><Say voice="alice">Connecting you to the customer.</Say><Dial callerId="${toE164(FROM!)}">${toE164(customerPhone)}</Dial></Response>`;
   const res = await twilioPost("Calls", {
-    From: FROM!,
+    From: toE164(FROM!),
     To: toE164(BRIDGE!),
     Twiml: twiml,
   });
