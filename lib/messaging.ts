@@ -17,8 +17,13 @@ const SID = process.env.TWILIO_ACCOUNT_SID;
 const TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const FROM = process.env.TWILIO_NUMBER;
 const BRIDGE = process.env.TWILIO_BRIDGE_PHONE;
+// A2P 10DLC: preferred way to send is via the approved Messaging Service (its
+// SID starts with "MG"), which carries the campaign registration and picks a
+// valid sender from its pool. When set, we send with MessagingServiceSid
+// instead of a raw From number.
+const MSGSVC = process.env.TWILIO_MESSAGING_SERVICE_SID;
 
-export const smsConfigured = () => Boolean(SID && TOKEN && FROM);
+export const smsConfigured = () => Boolean(SID && TOKEN && (MSGSVC || FROM));
 export const callConfigured = () => Boolean(SID && TOKEN && FROM && BRIDGE);
 
 // Rollout gate: during the initial Twilio launch, ONLY the Owner (Nate, role
@@ -107,9 +112,10 @@ export async function recordAndSend(opts: {
   if (!smsConfigured() || !opts.transmit) return { id: row.id, status: "pending" };
 
   const sent = await twilioPost("Messages", {
-    // Normalize the office number to E.164 (+1…) — Twilio rejects a "From" like
-    // "631-537-5120", so accept whatever format the env var was entered in.
-    From: toE164(FROM!),
+    // Prefer the approved Messaging Service (A2P); otherwise send From the
+    // office number, normalized to E.164 (+1…) so a "631-537-5120" env value
+    // still works.
+    ...(MSGSVC ? { MessagingServiceSid: MSGSVC } : { From: toE164(FROM!) }),
     To: toE164(opts.phone),
     Body: opts.body,
     // Delivery receipts post back here and flip the bubble to delivered/failed.
