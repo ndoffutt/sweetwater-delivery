@@ -8,10 +8,13 @@ import { trackUrl } from "@/lib/track";
 import type { StopStatus } from "@/lib/types";
 
 // Master switch for ALL automated customer texts (arrive/complete notifications
-// + the out-for-delivery blast). OFF by default during the Twilio rollout — set
-// AUTO_TEXTS=1 in the environment to turn automated texting back on once it's
-// been tested. Manual texts (Messages inbox, one-off stop sends) are unaffected.
-const autoTextsOn = () => process.env.AUTO_TEXTS === "1";
+// + the out-for-delivery blast). HARD OFF during the Twilio rollout — automated
+// texting is fully disabled regardless of environment, so nothing can fire.
+// To re-enable once texting is fully tested, change this back to
+//   process.env.AUTO_TEXTS === "1"
+// (and set AUTO_TEXTS=1). Manual texts (Messages inbox, one-off sends) are
+// unaffected either way.
+const autoTextsOn = () => false;
 
 // Best-effort auto-text on arrive/complete. Sends for real once Twilio is
 // configured; until then it's recorded as pending. No-op without a phone.
