@@ -290,6 +290,22 @@ export async function setPickupNone(stopId: string, none: boolean) {
   return { success: true };
 }
 
+// Driver went, but there was nothing to drop off (pickup-only visit). Clears any
+// accidental drop-off confirmation so the record can't contradict itself.
+export async function setDropoffNone(stopId: string, none: boolean) {
+  await requireSession();
+  const supabase = createAdminClient();
+
+  const { error } = await supabase
+    .from("route_stops")
+    .update(none ? { dropoff_none: true, dropoff_confirmed: false } : { dropoff_none: false })
+    .eq("id", stopId);
+
+  if (error) return { error: error.message };
+  revalidatePath(`/driver/stop/${stopId}`);
+  return { success: true };
+}
+
 export async function sendSms(stopId: string, message: string) {
   const session = await requireSession();
   const supabase = createAdminClient();

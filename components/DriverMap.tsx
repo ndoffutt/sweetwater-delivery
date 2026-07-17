@@ -433,8 +433,17 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
 
   function toggleDrop(s: RouteStop) {
     const v = !s.dropoff_confirmed;
-    patch(s.id, { dropoff_confirmed: v });
-    startTransition(async () => { await runStopAction({ kind: "dropoff", stopId: s.id, confirmed: v }); });
+    // Confirming a drop-off cancels "nothing to drop off" — they can't both be true.
+    patch(s.id, { dropoff_confirmed: v, ...(v ? { dropoff_none: false } : {}) });
+    startTransition(async () => {
+      if (v && s.dropoff_none) await runStopAction({ kind: "dropoffNone", stopId: s.id, none: false });
+      await runStopAction({ kind: "dropoff", stopId: s.id, confirmed: v });
+    });
+  }
+  function toggleNothingToDrop(s: RouteStop) {
+    const v = !s.dropoff_none;
+    patch(s.id, { dropoff_none: v, ...(v ? { dropoff_confirmed: false } : {}) });
+    startTransition(async () => { await runStopAction({ kind: "dropoffNone", stopId: s.id, none: v }); });
   }
   function togglePick(s: RouteStop) {
     const v = !s.pickup_confirmed;
@@ -476,7 +485,16 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
   // confirm + photo, No records that the driver checked. Unplanned pick-ups
   // (a bag left out) were getting missed because nobody asked.
   const dropNeeded = !!target && (target.has_dropoff || target.dropoff_confirmed);
-  const dropOK = !dropNeeded || (!!target?.dropoff_confirmed && kindPhotos(target!, "dropoff") > 0);
+  // Drop-off resolves the same way pick-up does: excused with "nothing to drop
+  // off", or confirmed + photographed. A pickup-only visit at a drop-off stop
+  // (which happens) can now finish without faking a drop-off or skipping.
+  const dropOK =
+    !dropNeeded ||
+    (!!target?.dropoff_none
+      ? true
+      : !!target?.dropoff_confirmed
+      ? kindPhotos(target!, "dropoff") > 0
+      : false);
   const pickResolved =
     !!target &&
     (target.pickup_none
@@ -484,12 +502,12 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
       : target.pickup_confirmed
       ? kindPhotos(target, "pickup") > 0
       : false);
-  const didSomething = !!target && (target.dropoff_confirmed || target.pickup_confirmed || !!target.pickup_none);
+  const didSomething = !!target && (target.dropoff_confirmed || target.pickup_confirmed || !!target.pickup_none || !!target.dropoff_none);
   const canComplete = !!target && dropOK && pickResolved && didSomething;
   const completeHint = !target
     ? ""
     : !dropOK
-    ? target.dropoff_confirmed ? "Add a drop-off photo to finish" : "Confirm the drop-off"
+    ? target.dropoff_confirmed ? "Add a drop-off photo to finish" : "Confirm the drop-off — or mark “nothing to drop off”"
     : !pickResolved
     ? target.pickup_confirmed
       ? "Add a pick-up photo to finish"
@@ -649,21 +667,32 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
 
               {target.status === "arrived" && (
                 <>
-                  {/* ── Drop-off: confirm + its own photo ── */}
-                  {(target.has_dropoff || target.dropoff_confirmed) ? (
+                  {/* ── Drop-off: confirm + photo, or "nothing to drop off"
+                      (pickup-only visit at a drop-off stop). ── */}
+                  {(target.has_dropoff || target.dropoff_confirmed || target.dropoff_none) ? (
                     <div style={{ marginBottom: 14 }}>
                       <div style={{ marginBottom: 9, marginLeft: 2 }}>
-                        <Label>Drop-off <span style={{ color: dropOK ? C.green : C.goldDark }}>· photo required</span></Label>
+                        <Label>Drop-off <span style={{ color: dropOK ? C.green : C.goldDark }}>{target.dropoff_none ? "· nothing to drop off" : "· photo required"}</span></Label>
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
                         <CheckRow label="Dropped off" icon="arrowDown" checked={target.dropoff_confirmed} onClick={() => toggleDrop(target)} />
-                        <PhotoCapture
-                          stopId={target.id}
-                          kind="dropoff"
-                          title="Drop-off photo"
-                          existingPhotos={dropPhotos}
-                          onPhotoAdded={() => bumpPhoto(target.id, "dropoff")}
-                        />
+                        {!target.dropoff_confirmed && (
+                          <button onClick={() => toggleNothingToDrop(target)} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 14, cursor: "pointer", background: target.dropoff_none ? C.goldDark : "#fff", border: `2px solid ${target.dropoff_none ? C.goldDark : C.creamDark}`, borderRadius: 16, padding: "18px 18px", minHeight: 64, boxShadow: target.dropoff_none ? "0 3px 10px rgba(184,130,31,0.25)" : "0 1px 3px rgba(0,0,0,0.05)" }}>
+                            <div style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: target.dropoff_none ? "rgba(255,255,255,0.25)" : "transparent", border: target.dropoff_none ? "none" : "2.5px solid rgba(26,26,26,0.22)" }}>
+                              {target.dropoff_none && <Icon name="check" size={20} color="#fff" strokeWidth={3} />}
+                            </div>
+                            <div style={{ fontFamily: C.body, fontSize: 16.5, fontWeight: target.dropoff_none ? 600 : 500, color: target.dropoff_none ? "#fff" : C.charcoal }}>Nothing to drop off</div>
+                          </button>
+                        )}
+                        {!target.dropoff_none && (
+                          <PhotoCapture
+                            stopId={target.id}
+                            kind="dropoff"
+                            title="Drop-off photo"
+                            existingPhotos={dropPhotos}
+                            onPhotoAdded={() => bumpPhoto(target.id, "dropoff")}
+                          />
+                        )}
                       </div>
                     </div>
                   ) : (

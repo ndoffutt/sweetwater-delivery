@@ -19,6 +19,7 @@ import {
   confirmDropoff,
   confirmPickup,
   setPickupNone,
+  setDropoffNone,
   flagStop,
 } from "@/lib/actions/stops";
 import { completeProspectVisit, skipProspectVisit } from "@/lib/actions/prospectVisits";
@@ -40,6 +41,7 @@ export type StopActionInput =
   | { kind: "status"; stopId: string; status: StopStatus }
   | { kind: "dropoff" | "pickup"; stopId: string; confirmed: boolean }
   | { kind: "pickupNone"; stopId: string; none: boolean }
+  | { kind: "dropoffNone"; stopId: string; none: boolean }
   | { kind: "flag"; stopId: string; reason: string }
   // Prospect-visit stops carry the route_prospect_visits id + prospect id so the
   // server action can run on replay. stopId is the synthetic `pv-…` id, used only
@@ -205,6 +207,7 @@ async function dispatchAction(a: QueuedAction): Promise<void> {
   else if (a.kind === "dropoff") result = await confirmDropoff(a.stopId, a.confirmed);
   else if (a.kind === "pickup") result = await confirmPickup(a.stopId, a.confirmed);
   else if (a.kind === "pickupNone") result = await setPickupNone(a.stopId, a.none);
+  else if (a.kind === "dropoffNone") result = await setDropoffNone(a.stopId, a.none);
   else if (a.kind === "flag") result = await flagStop(a.stopId, a.reason);
   else if (a.kind === "prospectVisit") result = await completeProspectVisit(a.visitId, a.prospectId, a.notes, a.touchType);
   else if (a.kind === "prospectSkip") result = await skipProspectVisit(a.visitId, a.reason);

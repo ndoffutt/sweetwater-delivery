@@ -24,6 +24,7 @@ interface DeliveryStop {
   dropoffConfirmed?: boolean;
   pickupConfirmed?: boolean;
   pickupNone?: boolean;
+  dropoffNone?: boolean;
   photos: { url: string; kind: "dropoff" | "pickup" | null }[];
 }
 
@@ -119,7 +120,9 @@ export default function DeliveryDetail({ stop }: { stop: DeliveryStop }) {
         {(stop.status === "completed" || stop.status === "skipped") && (
           <p className="text-xs font-body text-charcoal/60 mt-2">
             {[
-              stop.hasDropoff || stop.dropoffConfirmed
+              stop.dropoffNone
+                ? "↓ Nothing to drop off"
+                : stop.hasDropoff || stop.dropoffConfirmed
                 ? stop.dropoffConfirmed ? "↓ Drop-off confirmed" : "↓ Drop-off NOT confirmed"
                 : null,
               stop.pickupNone
