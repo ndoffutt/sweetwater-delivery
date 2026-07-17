@@ -68,6 +68,9 @@ export interface RouteStop {
   // Driver went, but the customer had nothing out — satisfies the pickup
   // obligation without a photo or a skip. Optional until the migration runs.
   pickup_none?: boolean;
+  // Driver went, but there was nothing to drop off (pickup-only visit) —
+  // satisfies the drop-off obligation without a photo or a skip.
+  dropoff_none?: boolean;
   notes: string | null;
   arrived_at: string | null;
   completed_at: string | null;

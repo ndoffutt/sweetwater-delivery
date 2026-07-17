@@ -28,7 +28,7 @@ export default async function DeliveryDetailPage({ params }: { params: { id: str
     id: string; status: string; has_dropoff: boolean; has_pickup: boolean;
     piece_count: number | null; notes: string | null; arrived_at: string | null;
     completed_at: string | null;
-    dropoff_confirmed: boolean | null; pickup_confirmed: boolean | null; pickup_none?: boolean | null;
+    dropoff_confirmed: boolean | null; pickup_confirmed: boolean | null; pickup_none?: boolean | null; dropoff_none?: boolean | null;
     customers: { id: string; name: string; address: string; phone: string | null } | null;
     routes: { date: string } | null;
     stop_photos: { storage_path: string; kind?: "dropoff" | "pickup" | null }[] | null;
@@ -53,6 +53,7 @@ export default async function DeliveryDetailPage({ params }: { params: { id: str
         dropoffConfirmed: !!s.dropoff_confirmed,
         pickupConfirmed: !!s.pickup_confirmed,
         pickupNone: !!s.pickup_none,
+        dropoffNone: !!s.dropoff_none,
         photos: (s.stop_photos ?? []).map((p) => ({ url: photoUrl(p.storage_path), kind: p.kind ?? null })),
       }}
     />
