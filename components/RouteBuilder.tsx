@@ -209,6 +209,11 @@ export default function RouteBuilder({
                     : null}
                 </span>
               ) : null}
+              {/* Proof gap: a completed delivery with no photo on the server —
+                  the driver's photos may be stranded on their phone. */}
+              {stop.status === "completed" && stop.kind !== "prospect_visit" && (stop.photos ?? []).filter(Boolean).length === 0 && (
+                <span className="block text-xs text-gold-dark font-body mt-0.5">⚠ No photo proof</span>
+              )}
             </button>
 
             {/* Status */}
@@ -362,6 +367,15 @@ export default function RouteBuilder({
                         </a>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {!isProspect && photos.length === 0 && s.completed_at && (
+                  <div className="flex items-start gap-2 bg-gold-primary/10 border border-gold-primary/40 rounded-xl px-3 py-2.5">
+                    <span className="text-gold-dark">⚠</span>
+                    <p className="font-body text-xs text-charcoal/75 leading-snug">
+                      <b>No photo proof</b> for this delivery. The driver&apos;s photos may still be uploading from their phone (they should open the app on Wi-Fi), or weren&apos;t captured.
+                    </p>
                   </div>
                 )}
 

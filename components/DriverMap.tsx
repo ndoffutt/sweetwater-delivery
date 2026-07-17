@@ -585,6 +585,18 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
         })()}
       </div>
 
+      {/* PHOTO-UPLOAD WARNING — proof photos upload separately from the (tiny)
+          status updates and can lag on weak signal. Make it loud so the driver
+          keeps the app open on Wi-Fi and the proof isn't left stranded. */}
+      {sync.pendingPhotos > 0 && (
+        <div style={{ position: "absolute", top: 78, left: 16, right: 16, zIndex: 11, display: "flex", alignItems: "center", gap: 10, background: "rgba(213,154,41,0.96)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: 14, padding: "11px 14px", boxShadow: "0 8px 24px rgba(0,0,0,0.2)" }}>
+          <Icon name="cloud" size={20} color="#fff" />
+          <div style={{ flex: 1, fontFamily: C.body, fontSize: 13, fontWeight: 600, color: "#fff", lineHeight: 1.35 }}>
+            {sync.pendingPhotos} photo{sync.pendingPhotos === 1 ? "" : "s"} still uploading — keep this app open{online ? " on Wi-Fi" : " and get back on signal"} until it finishes.
+          </div>
+        </div>
+      )}
+
       {/* RECENTER */}
       {!allDone && (
         <button onClick={() => flash("Re-centered on you")} style={{ position: "absolute", right: 16, bottom: sheet === "full" ? "auto" : 310, top: sheet === "full" ? 72 : "auto", zIndex: 9, width: 46, height: 46, borderRadius: 14, background: "rgba(255,255,255,0.92)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", boxShadow: "0 4px 14px rgba(0,0,0,0.15)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -599,7 +611,23 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
             <div style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(2,115,62,0.1)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}><Icon name="check" size={38} color={C.green} strokeWidth={2.4} /></div>
             <div style={{ fontFamily: C.serif, fontSize: 28, color: C.green, fontWeight: 500 }}>Route Complete</div>
             <div style={{ fontSize: 14, color: "rgba(26,26,26,0.5)", marginTop: 3 }}>All {stops.length} stops done. Head back to the shop.</div>
-            <button onClick={markRouteDone} style={{ marginTop: 18, width: "100%", minHeight: 56, borderRadius: 16, background: C.green, color: C.cream, border: "none", cursor: "pointer", fontSize: 15, fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase" }}>Done</button>
+            {sync.pendingPhotos > 0 && (
+              <div style={{ marginTop: 14, background: "rgba(213,154,41,0.14)", border: "1px solid rgba(213,154,41,0.5)", borderRadius: 13, padding: "12px 14px", textAlign: "left", display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <Icon name="cloud" size={19} color={C.goldDark} />
+                <div style={{ fontFamily: C.body, fontSize: 13, color: C.charcoal, lineHeight: 1.4 }}>
+                  <b>{sync.pendingPhotos} photo{sync.pendingPhotos === 1 ? "" : "s"} haven&apos;t uploaded yet.</b> Keep the app open{online ? " on Wi-Fi" : " and get back on signal"} until this clears, or the proof may be lost.
+                </div>
+              </div>
+            )}
+            <button
+              onClick={() => {
+                if (sync.pendingPhotos > 0 && !window.confirm(`${sync.pendingPhotos} photo${sync.pendingPhotos === 1 ? "" : "s"} still haven't uploaded and may be lost if you close now. Close anyway?`)) return;
+                markRouteDone();
+              }}
+              style={{ marginTop: 18, width: "100%", minHeight: 56, borderRadius: 16, background: sync.pendingPhotos > 0 ? C.goldDark : C.green, color: C.cream, border: "none", cursor: "pointer", fontSize: 15, fontWeight: 500, letterSpacing: "0.16em", textTransform: "uppercase" }}
+            >
+              {sync.pendingPhotos > 0 ? "Waiting on photos…" : "Done"}
+            </button>
           </div>
         </BottomShell>
       ) : target && target.kind === "prospect_visit" && target.prospect_visit ? (
