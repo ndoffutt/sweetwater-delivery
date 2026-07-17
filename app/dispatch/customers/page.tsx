@@ -62,7 +62,7 @@ export default async function CustomersPage({
     .select("id,customer_id,completed_at,has_dropoff,has_pickup,piece_count,stop_photos(storage_path),routes(date)")
     .eq("status", "completed")
     .order("completed_at", { ascending: false })
-    .limit(600);
+    .limit(2000);
 
   const photoUrl = (p: string) =>
     supabase.storage.from("stop-photos").getPublicUrl(p).data.publicUrl;

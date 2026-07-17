@@ -556,6 +556,41 @@ function Detail({
         <InfoTile icon="🕐" label="Last delivered" value={activity[0]?.date ? new Date(activity[0].date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"} />
       </div>
 
+      {/* Delivery history — the reason you open a customer: everything we've
+          done for them. Front and center, full history, newest first. */}
+      <div>
+        <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-2">
+          Delivery History{activity.length ? ` · ${activity.length}` : ""}
+        </p>
+        {activity.length === 0 ? (
+          <p className="text-sm text-charcoal/40 font-body">No deliveries yet.</p>
+        ) : (
+          <div className="space-y-2 max-h-[26rem] overflow-auto pr-1">
+            {activity.map((a) => (
+              <div key={a.id} className="bg-cream rounded-lg border border-cream-dark p-3">
+                <Link href={`/dispatch/delivery/${a.id}`} className="flex items-center gap-2 text-sm font-body text-charcoal hover:underline underline-offset-2">
+                  <span className="text-charcoal/50">{new Date(a.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
+                  {a.dropoff && <span className="text-xs text-green-primary">↓ Drop</span>}
+                  {a.pickup && <span className="text-xs text-gold-dark">↑ Pick</span>}
+                  {a.pieces > 0 && <span className="text-xs text-charcoal/40">{a.pieces} pcs</span>}
+                  <span className="ml-auto text-charcoal/30">›</span>
+                </Link>
+                {a.photos.length > 0 && (
+                  <div className="flex gap-2 mt-2">
+                    {a.photos.map((u, j) => (
+                      <a key={j} href={u} target="_blank" rel="noopener noreferrer">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={u} alt="proof" className="w-16 h-16 object-cover rounded-md border border-cream-dark" />
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Route position — every in-range customer should have a spot. Shelved
           customers have no spot by design, so this section is hidden for them. */}
       {pos?.ok && !c.out_of_range && (
@@ -657,37 +692,6 @@ function Detail({
       )}
       {saved && <p className="text-center text-xs text-green-primary font-body">✓ Saved</p>}
 
-      {/* Recent activity */}
-      <div>
-        <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-2">Recent Activity</p>
-        {activity.length === 0 ? (
-          <p className="text-sm text-charcoal/40 font-body">No deliveries yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {activity.slice(0, 6).map((a) => (
-              <div key={a.id} className="bg-cream rounded-lg border border-cream-dark p-3">
-                <Link href={`/dispatch/delivery/${a.id}`} className="flex items-center gap-2 text-sm font-body text-charcoal hover:underline underline-offset-2">
-                  <span className="text-charcoal/50">{new Date(a.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
-                  {a.dropoff && <span className="text-xs text-green-primary">↓ Drop</span>}
-                  {a.pickup && <span className="text-xs text-gold-dark">↑ Pick</span>}
-                  {a.pieces > 0 && <span className="text-xs text-charcoal/40">{a.pieces} pcs</span>}
-                  <span className="ml-auto text-charcoal/30">›</span>
-                </Link>
-                {a.photos.length > 0 && (
-                  <div className="flex gap-2 mt-2">
-                    {a.photos.map((u, j) => (
-                      <a key={j} href={u} target="_blank" rel="noopener noreferrer">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={u} alt="proof" className="w-16 h-16 object-cover rounded-md border border-cream-dark" />
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       {/* Range + remove: shelving keeps the customer, removing soft-deletes. */}
       <div className="flex items-center justify-between gap-3 pt-1">
