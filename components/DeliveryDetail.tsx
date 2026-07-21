@@ -41,8 +41,14 @@ const fmtTime = (iso: string | null) =>
 
 export default function DeliveryDetail({ stop }: { stop: DeliveryStop }) {
   const router = useRouter();
-  const [dropoff, setDropoff] = useState(stop.hasDropoff);
-  const [pickup, setPickup] = useState(stop.hasPickup);
+  // Show what ACTUALLY happened, not just the scheduled tasks: a stop set up as
+  // a drop-off where the driver marked "nothing to drop off" and did a pickup
+  // should read as a pick-up. Confirmations win; fall back to the schedule for
+  // stops that aren't done yet.
+  const initDrop = stop.dropoffConfirmed || (stop.hasDropoff && !stop.dropoffNone);
+  const initPick = stop.pickupConfirmed || (stop.hasPickup && !stop.pickupNone);
+  const [dropoff, setDropoff] = useState(initDrop);
+  const [pickup, setPickup] = useState(initPick);
   const [pieces, setPieces] = useState(stop.pieceCount);
   const [notes, setNotes] = useState(stop.notes ?? "");
   const [status, setStatus] = useState<StopStatus>((stop.status as StopStatus) ?? "completed");
@@ -50,8 +56,8 @@ export default function DeliveryDetail({ stop }: { stop: DeliveryStop }) {
   const [saved, setSaved] = useState(false);
 
   const dirty =
-    dropoff !== stop.hasDropoff ||
-    pickup !== stop.hasPickup ||
+    dropoff !== initDrop ||
+    pickup !== initPick ||
     pieces !== stop.pieceCount ||
     notes !== (stop.notes ?? "") ||
     status !== (stop.status as StopStatus);
