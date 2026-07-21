@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { getSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { easternToday } from "@/lib/date";
@@ -60,6 +61,17 @@ export default async function ReportsPage() {
   const createdDates = ((custRows ?? []) as { created_at: string }[])
     .map((c) => new Date(c.created_at))
     .filter((d) => !isNaN(d.getTime()));
+
+  // --- Website signups (all statuses) ---
+  const { data: signupRows } = await supabase
+    .from("customer_signups")
+    .select("id, full_name, status, created_at, customer_id")
+    .order("created_at", { ascending: false });
+  const signups = (signupRows ?? []) as { id: string; full_name: string; status: string; created_at: string; customer_id: string | null }[];
+  const signupTotal = signups.length;
+  const signupPending = signups.filter((s) => s.status === "pending").length;
+  const signupAdded = signups.filter((s) => s.status === "added").length;
+  const recentSignups = signups.slice(0, 8);
 
   const nowET = new Date(easternToday() + "T12:00:00");
   const growth: { label: string; total: number }[] = [];
@@ -160,6 +172,36 @@ export default async function ReportsPage() {
         <Stat label="Photos" value={photosThisWeek} />
         <Stat label="Flagged" value={flaggedThisWeek} />
       </div>
+
+      {/* Website signups */}
+      <div className="flex items-baseline justify-between mb-3">
+        <h3 className="font-body text-xs uppercase tracking-widest text-charcoal/30">Website signups</h3>
+        <Link href="/dispatch/signups" className="font-body text-xs text-green-primary">See all ›</Link>
+      </div>
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <Stat label="Total" value={signupTotal} />
+        <Stat label="New" value={signupPending} />
+        <Stat label="Became customers" value={signupAdded} />
+      </div>
+      {recentSignups.length > 0 && (
+        <div className="bg-cream rounded-xl border border-cream-dark p-4 space-y-2.5 mb-8">
+          {recentSignups.map((s) => (
+            <Link
+              key={s.id}
+              href={s.status === "added" && s.customer_id ? `/dispatch/customers?id=${s.customer_id}` : "/dispatch/signups"}
+              className="flex items-center justify-between gap-3"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-body text-sm text-charcoal truncate">{s.full_name}</span>
+                <span className={`shrink-0 text-[10px] font-body uppercase tracking-wide px-1.5 py-0.5 rounded-full ${s.status === "added" ? "bg-green-primary/10 text-green-primary" : s.status === "pending" ? "bg-gold-primary/20 text-gold-dark" : "bg-charcoal/5 text-charcoal/40"}`}>
+                  {s.status === "added" ? "Customer" : s.status === "pending" ? "New" : "Dismissed"}
+                </span>
+              </div>
+              <span className="font-body text-xs text-charcoal/40 shrink-0">{new Date(s.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+            </Link>
+          ))}
+        </div>
+      )}
 
       {/* Stops per week */}
       <h3 className="font-body text-xs uppercase tracking-widest text-charcoal/30 mb-3">Stops per week</h3>
