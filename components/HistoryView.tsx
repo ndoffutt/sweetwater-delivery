@@ -201,7 +201,6 @@ export default function HistoryView({
                             ) : (
                               <span>Arrived {time(s.arrivedAt)} → {time(s.completedAt)}</span>
                             )}
-                            {!isProspect && dur(mins(s.arrivedAt, s.completedAt)) && <span className="text-green-primary">⏱ {dur(mins(s.arrivedAt, s.completedAt))} on site</span>}
                             {i > 0 && dur(mins(prevDone, s.arrivedAt ?? s.completedAt)) && <span className="text-charcoal/40">🚐 {dur(mins(prevDone, s.arrivedAt ?? s.completedAt))} drive</span>}
                             {s.dropoff && <span className="text-green-primary">↓ Drop-off</span>}
                             {s.pickup && <span className="text-gold-dark">↑ Pick-up</span>}
