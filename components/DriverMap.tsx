@@ -56,8 +56,25 @@ function mergeWithCache(initial: RouteStop[]): RouteStop[] {
     return initial.map((s) => {
       const c = cached.get(s.id);
       if (!c) return s;
-      if ((statusRank[c.status] ?? 0) > (statusRank[s.status] ?? 0)) {
-        return { ...s, status: c.status, arrived_at: c.arrived_at ?? s.arrived_at, completed_at: c.completed_at ?? s.completed_at, dropoff_confirmed: c.dropoff_confirmed || s.dropoff_confirmed, pickup_confirmed: c.pickup_confirmed || s.pickup_confirmed };
+      // The local cache is the driver's working copy, saved on every change. If
+      // it's at-or-ahead of the server for this stop, take its FULL outcome
+      // snapshot — status, both confirmations, both "nothing" flags, skip note,
+      // and timestamps — so nothing the driver did offline (which can't have
+      // synced yet) is lost to a stale server render. This is a consistent
+      // snapshot, so mutually-exclusive flags never contradict. Server wins only
+      // when it's strictly further along (e.g. a manager edit while offline).
+      if ((statusRank[c.status] ?? 0) >= (statusRank[s.status] ?? 0)) {
+        return {
+          ...s,
+          status: c.status,
+          arrived_at: c.arrived_at ?? s.arrived_at,
+          completed_at: c.completed_at ?? s.completed_at,
+          dropoff_confirmed: c.dropoff_confirmed,
+          pickup_confirmed: c.pickup_confirmed,
+          dropoff_none: c.dropoff_none,
+          pickup_none: c.pickup_none,
+          notes: c.notes ?? s.notes,
+        };
       }
       return s;
     });
