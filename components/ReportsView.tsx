@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { timingTrusted, TIMING_START_LABEL } from "@/lib/timing";
+import { TIMING_START_LABEL } from "@/lib/timing";
+import { MAX_STOP_MIN, type TripLeg } from "@/lib/vanTrips";
 
 export interface StopRow {
   id: string;
@@ -54,9 +55,6 @@ const weekLabel = (key: string) =>
 
 interface Bucket { key: string; label: string; stops: number; items: number }
 
-const minutesBetween = (a: string | null, b: string | null) =>
-  a && b ? Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000) : null;
-
 function median(xs: number[]): number | null {
   if (xs.length === 0) return null;
   const s = xs.slice().sort((a, b) => a - b);
@@ -65,15 +63,6 @@ function median(xs: number[]): number | null {
 
 const fmtMin = (m: number | null) =>
   m == null ? "—" : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
-
-// Time actually spent at a stop. Real routes produce two kinds of noise:
-//   • 0-minute stops — the driver tapped arrive and complete together, so no
-//     dwell was recorded. Counted separately as "logged together" rather than
-//     dragging the average to zero.
-//   • runaway stops (>60m) — the driver forgot to hit complete until later.
-// Both are excluded from the typical-time figure, which is a median so a single
-// forgotten stop can't skew it.
-const DWELL_MAX = 60;
 
 // ── Bar chart ──────────────────────────────────────────────────
 // One measure per chart. Stops and items differ by an order of magnitude, so
@@ -241,11 +230,12 @@ const TP_ICON: Record<string, string> = {
 };
 
 export default function ReportsView({
-  stops, customerDates, touchpoints,
+  stops, customerDates, touchpoints, legs = [],
 }: {
   stops: StopRow[];
   customerDates: string[];
   touchpoints: TouchpointRow[];
+  legs?: TripLeg[];
 }) {
   // Drill path: null = all months → month → week → day
   const [month, setMonth] = useState<string | null>(null);
@@ -254,31 +244,6 @@ export default function ReportsView({
 
   const completed = useMemo(() => stops.filter((s) => s.status === "completed"), [stops]);
 
-  // Drive time into each stop: chain each route by ACTUAL arrival order, not the
-  // planned stop_order — drivers regularly resequence on the road, and using the
-  // plan produces negative "drive times".
-  const driveInto = useMemo(() => {
-    const byRoute = new Map<string, StopRow[]>();
-    for (const s of completed) {
-      if (!s.arrivedAt) continue;
-      if (!timingTrusted(s.date)) continue; // pre-Bouncie durations are unreliable
-      const list = byRoute.get(s.routeId) ?? [];
-      list.push(s);
-      byRoute.set(s.routeId, list);
-    }
-    const out = new Map<string, number>();
-    byRoute.forEach((list) => {
-      list.sort((a, b) => (a.arrivedAt! < b.arrivedAt! ? -1 : 1));
-      for (let i = 1; i < list.length; i++) {
-        const m = minutesBetween(list[i - 1].completedAt, list[i].arrivedAt);
-        if (m != null && m >= 0 && m <= 90) out.set(list[i].id, m);
-      }
-    });
-    return out;
-  }, [completed]);
-
-  const onSiteFor = (s: StopRow) =>
-    timingTrusted(s.date) ? minutesBetween(s.arrivedAt, s.completedAt) : null;
 
   // Stops in the current drill scope.
   const scoped = useMemo(() => {
@@ -327,49 +292,55 @@ export default function ReportsView({
     return r.length;
   }, [stops, month, week, day]);
 
-  // How the driving day actually went, for the current scope.
+  // How the driving day actually went — straight from the van's own trip record,
+  // so it doesn't depend on the driver tapping arrive/complete at the right time.
   const timing = useMemo(() => {
-    const dwellAll = scoped.map(onSiteFor).filter((m): m is number => m != null && m >= 0);
-    const loggedTogether = dwellAll.filter((m) => m === 0).length;
-    const dwell = dwellAll.filter((m) => m > 0 && m <= DWELL_MAX);
-    const overran = dwellAll.filter((m) => m > DWELL_MAX).length;
-    const drives = scoped.map((s) => driveInto.get(s.id)).filter((m): m is number => m != null);
+    // Restrict the legs to whatever the drill-down is showing.
+    const inScope = legs.filter((l) => {
+      if (day) return l.day === day;
+      if (week) return weekStartKey(l.day) === week;
+      if (month) return monthKey(l.day) === month;
+      return true;
+    });
 
-    // Time out per day = first arrival → last completion on that day.
-    const byDay = new Map<string, { first: string; last: string }>();
-    for (const s of scoped) {
-      if (!s.arrivedAt || !s.completedAt) continue;
-      if (!timingTrusted(s.date)) continue;
-      const cur = byDay.get(s.date);
-      if (!cur) byDay.set(s.date, { first: s.arrivedAt, last: s.completedAt });
-      else {
-        if (s.arrivedAt < cur.first) cur.first = s.arrivedAt;
-        if (s.completedAt > cur.last) cur.last = s.completedAt;
-      }
+    const drives = inScope.map((l) => l.driveMin).filter((m) => m > 0);
+    const dwell = inScope
+      .map((l) => l.stopAfterMin)
+      .filter((m): m is number => m != null && m > 0);
+
+    // Day out = first engine-on to last engine-off, per day.
+    const byDay = new Map<string, { drive: number; stop: number; miles: number; idle: number }>();
+    for (const l of inScope) {
+      const cur = byDay.get(l.day) ?? { drive: 0, stop: 0, miles: 0, idle: 0 };
+      cur.drive += l.driveMin;
+      cur.stop += l.stopAfterMin ?? 0;
+      cur.miles += l.distance ?? 0;
+      cur.idle += l.idleMin;
+      byDay.set(l.day, cur);
     }
     const dayLengths: number[] = [];
-    byDay.forEach((v) => {
-      const m = minutesBetween(v.first, v.last);
-      if (m != null && m > 0) dayLengths.push(m);
-    });
+    byDay.forEach((v) => dayLengths.push(v.drive + v.stop));
 
     const medDwell = median(dwell);
     const medDrive = median(drives);
+    const totalDrive = inScope.reduce((n, l) => n + l.driveMin, 0);
+    const totalStop = dwell.reduce((n, m) => n + m, 0);
+
     return {
       medDwell,
       medDrive,
-      loggedTogether,
-      overran,
       measured: dwell.length,
-      dayLengths,
+      legCount: inScope.length,
+      dayCount: byDay.size,
       medDay: median(dayLengths),
-      // Of a typical stop-to-stop cycle, how much is driving vs on site.
+      miles: Math.round(inScope.reduce((n, l) => n + (l.distance ?? 0), 0)),
+      idleMin: inScope.reduce((n, l) => n + l.idleMin, 0),
+      hardEvents: inScope.reduce((n, l) => n + l.hardEvents, 0),
+      // Of the time the van was out, how much was spent parked at stops.
       shareOnSite:
-        medDwell != null && medDrive != null && medDwell + medDrive > 0
-          ? Math.round((medDwell / (medDwell + medDrive)) * 100)
-          : null,
+        totalDrive + totalStop > 0 ? Math.round((totalStop / (totalDrive + totalStop)) * 100) : null,
     };
-  }, [scoped, driveInto]);
+  }, [legs, month, week, day]);
 
   // Day view: the actual drops, click through to the full delivery record.
   const dayStops = useMemo(
@@ -428,17 +399,17 @@ export default function ReportsView({
       <div className="flex items-baseline justify-between mb-3">
         <h3 className="font-body text-xs uppercase tracking-widest text-charcoal/30">Time &amp; motion</h3>
         <span className="font-body text-[11px] text-charcoal/35">
-          {timing.measured} stop{timing.measured === 1 ? "" : "s"} timed
+          🚐 from the van
         </span>
       </div>
       <div className="bg-cream rounded-xl border border-cream-dark p-4 sm:p-5 mb-8">
-        {timing.measured === 0 && timing.loggedTogether === 0 ? (
+        {timing.legCount === 0 ? (
           <div className="text-center py-3">
             <p className="text-sm text-charcoal/45 font-body">No timing for this range.</p>
             <p className="text-[11px] text-charcoal/35 font-body mt-1.5 max-w-sm mx-auto leading-relaxed">
-              Drive and on-site times start {TIMING_START_LABEL}, when the van&apos;s GPS
-              went in. Earlier numbers came only from driver taps and weren&apos;t
-              reliable, so they&apos;re left out.
+              Drive and stop times come from the van&apos;s own trip record, starting
+              {" "}{TIMING_START_LABEL}. Earlier numbers came only from driver taps and
+              weren&apos;t reliable, so they&apos;re left out.
             </p>
           </div>
         ) : (
@@ -458,7 +429,7 @@ export default function ReportsView({
               </div>
             </div>
 
-            {/* Where a stop-to-stop cycle goes */}
+            {/* How the van's day splits between parked and moving */}
             {timing.shareOnSite != null && (
               <>
                 <div className="flex h-2.5 rounded-full overflow-hidden gap-[2px] mb-1.5">
@@ -466,25 +437,36 @@ export default function ReportsView({
                   <div style={{ width: `${100 - timing.shareOnSite}%`, background: GOLD }} />
                 </div>
                 <div className="flex justify-between text-[11px] font-body text-charcoal/50 mb-3">
-                  <span><span className="inline-block w-2 h-2 rounded-sm align-middle mr-1" style={{ background: GREEN }} />At the door {timing.shareOnSite}%</span>
+                  <span><span className="inline-block w-2 h-2 rounded-sm align-middle mr-1" style={{ background: GREEN }} />Parked at stops {timing.shareOnSite}%</span>
                   <span>Driving {100 - timing.shareOnSite}% <span className="inline-block w-2 h-2 rounded-sm align-middle ml-1" style={{ background: GOLD }} /></span>
                 </div>
               </>
             )}
 
-            <p className="text-[11px] font-body text-charcoal/45 leading-relaxed border-t border-cream-dark pt-3">
-              Typical = median, so one forgotten stop can&apos;t skew it.
-              {timing.loggedTogether > 0 && (
-                <>
-                  {" "}<b className="text-gold-dark">{timing.loggedTogether}</b> stop
-                  {timing.loggedTogether === 1 ? " was" : "s were"} logged with arrive and
-                  complete tapped together, so no time on site was captured for
-                  {timing.loggedTogether === 1 ? " it" : " them"}.
-                </>
-              )}
-              {timing.overran > 0 && (
-                <> {timing.overran} ran past an hour (likely a late &ldquo;complete&rdquo;) and {timing.overran === 1 ? "is" : "are"} excluded.</>
-              )}
+            {/* Vehicle facts the phone could never give us */}
+            <div className="grid grid-cols-3 gap-2 border-t border-cream-dark pt-3 mb-3">
+              <div className="text-center">
+                <div className="font-body text-sm text-charcoal tabular-nums">{timing.miles}</div>
+                <div className="text-[10px] text-charcoal/40 font-body uppercase tracking-wide">Miles</div>
+              </div>
+              <div className="text-center">
+                <div className="font-body text-sm text-charcoal tabular-nums">{fmtMin(timing.idleMin)}</div>
+                <div className="text-[10px] text-charcoal/40 font-body uppercase tracking-wide">Idling</div>
+              </div>
+              <div className="text-center">
+                <div className={`font-body text-sm tabular-nums ${timing.hardEvents > 0 ? "text-gold-dark" : "text-charcoal"}`}>
+                  {timing.hardEvents}
+                </div>
+                <div className="text-[10px] text-charcoal/40 font-body uppercase tracking-wide">Hard brake/accel</div>
+              </div>
+            </div>
+
+            <p className="text-[11px] font-body text-charcoal/45 leading-relaxed">
+              Measured by the van itself — {timing.legCount} drive
+              {timing.legCount === 1 ? "" : "s"} across {timing.dayCount} day
+              {timing.dayCount === 1 ? "" : "s"}. A stop is the time parked between two
+              drives; gaps over {MAX_STOP_MIN} minutes count as a break, not a stop.
+              Typical = median.
             </p>
           </>
         )}
@@ -501,8 +483,6 @@ export default function ReportsView({
               <p className="p-6 text-center text-sm text-charcoal/40 font-body">No completed drops this day.</p>
             ) : (
               dayStops.map((s) => {
-                const dwell = onSiteFor(s);
-                const drive = driveInto.get(s.id);
                 return (
                   <Link
                     key={s.id}
@@ -517,21 +497,16 @@ export default function ReportsView({
                         {s.photos > 0 && ` · ${s.photos} photo${s.photos === 1 ? "" : "s"}`}
                         {s.photos === 0 && <span className="text-gold-dark"> · no photo</span>}
                       </div>
-                      <div className="text-[11px] font-body text-charcoal/45 mt-0.5">
-                        {s.arrivedAt && (
-                          <span>
-                            {new Date(s.arrivedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                          </span>
-                        )}
-                        {drive != null && <span className="text-charcoal/35"> · 🚐 {fmtMin(drive)} drive</span>}
-                        {dwell != null && dwell > 0 && dwell <= DWELL_MAX && (
-                          <span className="text-green-primary"> · ⏱ {fmtMin(dwell)} on site</span>
-                        )}
-                        {dwell === 0 && <span className="text-charcoal/35"> · logged together</span>}
-                        {dwell != null && dwell > DWELL_MAX && (
-                          <span className="text-gold-dark"> · ⏱ {fmtMin(dwell)} (late complete?)</span>
-                        )}
-                      </div>
+                      {/* Clock times only — per-stop durations came from driver
+                          taps and aren't trustworthy. Real drive/stop timing is
+                          in Time & motion, measured by the van. */}
+                      {(s.arrivedAt || s.completedAt) && (
+                        <div className="text-[11px] font-body text-charcoal/45 mt-0.5">
+                          {s.arrivedAt && new Date(s.arrivedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                          {s.arrivedAt && s.completedAt && " → "}
+                          {s.completedAt && new Date(s.completedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                        </div>
+                      )}
                     </div>
                     <span className="text-charcoal/25 shrink-0">›</span>
                   </Link>
