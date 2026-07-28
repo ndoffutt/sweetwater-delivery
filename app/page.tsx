@@ -2,8 +2,22 @@ import LoginScreen from "@/components/LoginScreen";
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams?: { [key: string]: string | string[] | undefined };
+}) {
   const session = await getSession();
+
+  // Bouncie's OAuth redirect lands here as "/?code=…". Hand it to the setup
+  // page instead of bouncing to /owner, which silently dropped the code — the
+  // reason approving the van looked like it "went straight to the homepage".
+  const rawCode = searchParams?.code;
+  const code = Array.isArray(rawCode) ? rawCode[0] : rawCode;
+  if (code && session?.role === "admin") {
+    redirect(`/dispatch/bouncie-setup?code=${encodeURIComponent(code)}`);
+  }
+
   if (session) {
     redirect(session.role === "driver" ? "/driver" : "/owner");
   }

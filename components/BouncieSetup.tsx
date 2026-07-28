@@ -1,27 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { testBouncieCode, type BouncieTestResult } from "@/lib/actions/bouncie";
 
 const AUTHORIZE_URL =
   "https://auth.bouncie.com/dialog/authorize?response_type=code&client_id=sweetwater-delivery&redirect_uri=https://sweetwater-delivery.vercel.app";
 
-export default function BouncieSetup() {
-  const [code, setCode] = useState("");
+export default function BouncieSetup({ initialCode = "" }: { initialCode?: string }) {
+  const [code, setCode] = useState(initialCode);
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState<BouncieTestResult | null>(null);
+  const autoRan = useRef(false);
 
-  async function run() {
+  const run = useCallback(async (value: string) => {
     setBusy(true);
     setRes(null);
     try {
-      setRes(await testBouncieCode(code));
+      setRes(await testBouncieCode(value));
     } catch {
       setRes({ ok: false, message: "Something went wrong running the test." });
     } finally {
       setBusy(false);
     }
-  }
+  }, []);
+
+  // Arriving straight from Bouncie's redirect: test at once, while the code is
+  // as fresh as it will ever be.
+  useEffect(() => {
+    if (initialCode && !autoRan.current) {
+      autoRan.current = true;
+      void run(initialCode);
+    }
+  }, [initialCode, run]);
 
   return (
     <div className="p-5 md:p-8 md:max-w-2xl md:mx-auto space-y-5">
@@ -69,7 +79,7 @@ export default function BouncieSetup() {
           className="w-full bg-cream-dark/60 rounded-lg px-3 py-3 font-mono text-sm text-charcoal focus:outline-none focus:ring-2 focus:ring-green-primary/40"
         />
         <button
-          onClick={run}
+          onClick={() => run(code)}
           disabled={busy || !code.trim()}
           className="w-full min-h-tap bg-green-primary text-cream font-body text-xs uppercase tracking-widest py-3 rounded-lg disabled:opacity-50"
         >
