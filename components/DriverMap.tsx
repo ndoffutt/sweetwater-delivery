@@ -316,7 +316,10 @@ function Toast({ toast }: { toast: string | null }) {
   );
 }
 
-const firstName = (n: string) => n.replace(/^(Mr\.|Mrs\.|Ms\.|Dr\.|The)\s+/i, "").split(/[\s/]/)[0];
+// Null-safe: a stop whose customer record is missing/soft-deleted must never
+// crash the driver screen. Falls back to a friendly generic.
+const firstName = (n: string | null | undefined) =>
+  (n ?? "").replace(/^(Mr\.|Mrs\.|Ms\.|Dr\.|The)\s+/i, "").split(/[\s/]/)[0] || "the customer";
 
 function mapsHref(c: { address: string; lat: number | null; lng: number | null }) {
   const dest = c.lat != null && c.lng != null ? `${c.lat},${c.lng}` : encodeURIComponent(c.address);
@@ -427,7 +430,7 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
   function arrive(s: RouteStop) {
     patch(s.id, { status: "arrived", arrived_at: new Date().toISOString() });
     setSheet("full");
-    flash(online ? `✓ Texted ${firstName(s.customer!.name)}: “On our way”` : "Saved on phone, will sync when signal returns");
+    flash(online ? `✓ Texted ${firstName(s.customer?.name)}: “On our way”` : "Saved on phone, will sync when signal returns");
     startTransition(async () => {
       await runStopAction({ kind: "status", stopId: s.id, status: "arrived" });
       // Only refetch when online — an RSC refresh with no signal throws and
@@ -441,7 +444,7 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
     const next = stops.find((x) => x.status === "pending" && x.id !== s.id);
     setTargetId(next ? next.id : s.id);
     setSheet("peek");
-    flash(online ? `✓ Delivered, ${firstName(s.customer!.name)} notified` : "Saved on phone, will sync when signal returns");
+    flash(online ? `✓ Delivered, ${firstName(s.customer?.name)} notified` : "Saved on phone, will sync when signal returns");
     startTransition(async () => {
       await runStopAction({ kind: "status", stopId: s.id, status: "completed" });
       safeRefresh();
@@ -833,7 +836,7 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
       {overview && <OverviewSheet stops={stops} targetId={targetId} isManager={isManager} onPick={(id) => { selectPin(id); setOverview(false); }} onClose={() => setOverview(false)} onBack={() => router.push("/dispatch")} onSignOut={async () => { await logout(); router.push("/"); }} />}
       {problemFor && (
         <ProblemSheet
-          name={firstName(problemFor.customer!.name)}
+          name={firstName(problemFor.customer?.name)}
           progress={(() => {
             const bits: string[] = [];
             if (problemFor.dropoff_confirmed) bits.push("drop-off confirmed");
