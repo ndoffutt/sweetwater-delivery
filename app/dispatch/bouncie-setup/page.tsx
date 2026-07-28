@@ -4,9 +4,15 @@ import BouncieSetup from "@/components/BouncieSetup";
 
 export const dynamic = "force-dynamic";
 
-export default async function BouncieSetupPage() {
+export default async function BouncieSetupPage({
+  searchParams,
+}: {
+  searchParams?: { [key: string]: string | string[] | undefined };
+}) {
   const session = await getSession();
   if (!session) redirect("/");
   if (session.role !== "admin") redirect("/dispatch");
-  return <BouncieSetup />;
+  const raw = searchParams?.code;
+  const code = Array.isArray(raw) ? raw[0] : raw;
+  return <BouncieSetup initialCode={code ?? ""} />;
 }
