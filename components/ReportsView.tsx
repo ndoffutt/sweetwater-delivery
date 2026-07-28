@@ -253,7 +253,10 @@ export default function ReportsView({
       for (const s of completed.filter((x) => monthKey(x.date) === month))
         add(weekStartKey(s.date), weekLabel(weekStartKey(s.date)), s);
     } else {
-      for (const s of completed.filter((x) => weekStartKey(x.date) === week))
+      // Keep the parent month in scope: a week straddling two months must not
+      // offer day bars that the (month-scoped) detail view would then exclude.
+      // This also keeps the sums nesting — days total to the week, weeks to the month.
+      for (const s of completed.filter((x) => weekStartKey(x.date) === week && (!month || monthKey(x.date) === month)))
         add(s.date, dayLabel(s.date), s);
     }
     return Array.from(agg.values()).sort((a, b) => a.key.localeCompare(b.key));
