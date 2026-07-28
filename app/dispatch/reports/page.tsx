@@ -45,12 +45,14 @@ export default async function ReportsPage() {
     piece_count: number | null;
     customer_id: string | null;
     dropoff_confirmed: boolean | null;
+    arrived_at: string | null;
+    completed_at: string | null;
     customers: { name: string; address: string } | null;
     stop_photos: { id: string }[] | null;
   }>((from, to) =>
     supabase
       .from("route_stops")
-      .select("id,route_id,status,piece_count,customer_id,dropoff_confirmed,customers(name,address),stop_photos(id)")
+      .select("id,route_id,status,piece_count,customer_id,dropoff_confirmed,arrived_at,completed_at,customers(name,address),stop_photos(id)")
       .in("status", ["completed", "skipped"])
       .is("deleted_at", null)
       .range(from, to)
@@ -61,6 +63,7 @@ export default async function ReportsPage() {
     if (!date) return [];
     return [{
       id: s.id,
+      routeId: s.route_id,
       date,
       status: s.status,
       pieces: s.piece_count ?? 0,
@@ -68,6 +71,8 @@ export default async function ReportsPage() {
       customerName: s.customers?.name ?? "Unknown",
       town: s.customers?.address?.split(",")[1]?.trim() ?? null,
       photos: s.stop_photos?.length ?? 0,
+      arrivedAt: s.arrived_at,
+      completedAt: s.completed_at,
     }];
   });
 
