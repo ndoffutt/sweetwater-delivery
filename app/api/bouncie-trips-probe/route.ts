@@ -46,8 +46,14 @@ export async function GET(request: NextRequest) {
 
     if (!imei) return NextResponse.json(out);
 
-    const since = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
-    const url = `${API_BASE}/trips?imei=${encodeURIComponent(imei)}&gps-format=polyline&starts-after=${encodeURIComponent(since)}`;
+    // Bouncie rejects windows wider than a week: "Start and End dates must be
+    // within a week of each other". History has to be pulled week by week.
+    const now = new Date();
+    const since = new Date(now.getTime() - 6.5 * 24 * 3600 * 1000);
+    const url =
+      `${API_BASE}/trips?imei=${encodeURIComponent(imei)}&gps-format=polyline` +
+      `&starts-after=${encodeURIComponent(since.toISOString())}` +
+      `&ends-before=${encodeURIComponent(now.toISOString())}`;
     const tripRes = await fetch(url, { headers: { Authorization: access }, cache: "no-store" });
     out.tripsStatus = tripRes.status;
     const text = await tripRes.text();
