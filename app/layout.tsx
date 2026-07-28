@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import SwRegister from "@/components/SwRegister";
+import ErrorCatcher from "@/components/ErrorCatcher";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -30,6 +31,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="font-body text-charcoal bg-cream antialiased">
         <SwRegister />
+        <ErrorCatcher />
         {children}
       </body>
     </html>
