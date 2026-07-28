@@ -5,6 +5,7 @@ import Link from "next/link";
 
 export interface StopRow {
   id: string;
+  routeId: string;
   date: string; // YYYY-MM-DD (Eastern calendar day of the route)
   status: string; // completed | skipped
   pieces: number;
@@ -12,6 +13,8 @@ export interface StopRow {
   customerName: string;
   town: string | null;
   photos: number;
+  arrivedAt: string | null;
+  completedAt: string | null;
 }
 export interface TouchpointRow {
   id: string;
@@ -49,6 +52,27 @@ const weekLabel = (key: string) =>
   `Wk of ${atNoon(key).toLocaleDateString("en-US", { month: "numeric", day: "numeric" })}`;
 
 interface Bucket { key: string; label: string; stops: number; items: number }
+
+const minutesBetween = (a: string | null, b: string | null) =>
+  a && b ? Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000) : null;
+
+function median(xs: number[]): number | null {
+  if (xs.length === 0) return null;
+  const s = xs.slice().sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+}
+
+const fmtMin = (m: number | null) =>
+  m == null ? "—" : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
+
+// Time actually spent at a stop. Real routes produce two kinds of noise:
+//   • 0-minute stops — the driver tapped arrive and complete together, so no
+//     dwell was recorded. Counted separately as "logged together" rather than
+//     dragging the average to zero.
+//   • runaway stops (>60m) — the driver forgot to hit complete until later.
+// Both are excluded from the typical-time figure, which is a median so a single
+// forgotten stop can't skew it.
+const DWELL_MAX = 60;
 
 // ── Bar chart ──────────────────────────────────────────────────
 // One measure per chart. Stops and items differ by an order of magnitude, so
@@ -229,6 +253,30 @@ export default function ReportsView({
 
   const completed = useMemo(() => stops.filter((s) => s.status === "completed"), [stops]);
 
+  // Drive time into each stop: chain each route by ACTUAL arrival order, not the
+  // planned stop_order — drivers regularly resequence on the road, and using the
+  // plan produces negative "drive times".
+  const driveInto = useMemo(() => {
+    const byRoute = new Map<string, StopRow[]>();
+    for (const s of completed) {
+      if (!s.arrivedAt) continue;
+      const list = byRoute.get(s.routeId) ?? [];
+      list.push(s);
+      byRoute.set(s.routeId, list);
+    }
+    const out = new Map<string, number>();
+    byRoute.forEach((list) => {
+      list.sort((a, b) => (a.arrivedAt! < b.arrivedAt! ? -1 : 1));
+      for (let i = 1; i < list.length; i++) {
+        const m = minutesBetween(list[i - 1].completedAt, list[i].arrivedAt);
+        if (m != null && m >= 0 && m <= 90) out.set(list[i].id, m);
+      }
+    });
+    return out;
+  }, [completed]);
+
+  const onSiteFor = (s: StopRow) => minutesBetween(s.arrivedAt, s.completedAt);
+
   // Stops in the current drill scope.
   const scoped = useMemo(() => {
     let r = completed;
@@ -275,6 +323,49 @@ export default function ReportsView({
     if (day) r = r.filter((s) => s.date === day);
     return r.length;
   }, [stops, month, week, day]);
+
+  // How the driving day actually went, for the current scope.
+  const timing = useMemo(() => {
+    const dwellAll = scoped.map(onSiteFor).filter((m): m is number => m != null && m >= 0);
+    const loggedTogether = dwellAll.filter((m) => m === 0).length;
+    const dwell = dwellAll.filter((m) => m > 0 && m <= DWELL_MAX);
+    const overran = dwellAll.filter((m) => m > DWELL_MAX).length;
+    const drives = scoped.map((s) => driveInto.get(s.id)).filter((m): m is number => m != null);
+
+    // Time out per day = first arrival → last completion on that day.
+    const byDay = new Map<string, { first: string; last: string }>();
+    for (const s of scoped) {
+      if (!s.arrivedAt || !s.completedAt) continue;
+      const cur = byDay.get(s.date);
+      if (!cur) byDay.set(s.date, { first: s.arrivedAt, last: s.completedAt });
+      else {
+        if (s.arrivedAt < cur.first) cur.first = s.arrivedAt;
+        if (s.completedAt > cur.last) cur.last = s.completedAt;
+      }
+    }
+    const dayLengths: number[] = [];
+    byDay.forEach((v) => {
+      const m = minutesBetween(v.first, v.last);
+      if (m != null && m > 0) dayLengths.push(m);
+    });
+
+    const medDwell = median(dwell);
+    const medDrive = median(drives);
+    return {
+      medDwell,
+      medDrive,
+      loggedTogether,
+      overran,
+      measured: dwell.length,
+      dayLengths,
+      medDay: median(dayLengths),
+      // Of a typical stop-to-stop cycle, how much is driving vs on site.
+      shareOnSite:
+        medDwell != null && medDrive != null && medDwell + medDrive > 0
+          ? Math.round((medDwell / (medDwell + medDrive)) * 100)
+          : null,
+    };
+  }, [scoped, driveInto]);
 
   // Day view: the actual drops, click through to the full delivery record.
   const dayStops = useMemo(
@@ -329,6 +420,65 @@ export default function ReportsView({
         <Stat label="Flagged" value={flagged} />
       </div>
 
+      {/* Time & motion — what the driving day actually looked like */}
+      <div className="flex items-baseline justify-between mb-3">
+        <h3 className="font-body text-xs uppercase tracking-widest text-charcoal/30">Time &amp; motion</h3>
+        <span className="font-body text-[11px] text-charcoal/35">
+          {timing.measured} stop{timing.measured === 1 ? "" : "s"} timed
+        </span>
+      </div>
+      <div className="bg-cream rounded-xl border border-cream-dark p-4 sm:p-5 mb-8">
+        {timing.measured === 0 && timing.loggedTogether === 0 ? (
+          <p className="text-sm text-charcoal/40 font-body text-center py-3">No timing recorded in this range.</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
+              <div className="text-center">
+                <div className="font-serif text-2xl font-light text-charcoal">{fmtMin(timing.medDwell)}</div>
+                <div className="text-[10px] text-charcoal/40 font-body uppercase tracking-wide mt-1">Typical on site</div>
+              </div>
+              <div className="text-center">
+                <div className="font-serif text-2xl font-light text-charcoal">{fmtMin(timing.medDrive)}</div>
+                <div className="text-[10px] text-charcoal/40 font-body uppercase tracking-wide mt-1">Typical drive</div>
+              </div>
+              <div className="text-center">
+                <div className="font-serif text-2xl font-light text-charcoal">{fmtMin(timing.medDay)}</div>
+                <div className="text-[10px] text-charcoal/40 font-body uppercase tracking-wide mt-1">Typical day out</div>
+              </div>
+            </div>
+
+            {/* Where a stop-to-stop cycle goes */}
+            {timing.shareOnSite != null && (
+              <>
+                <div className="flex h-2.5 rounded-full overflow-hidden gap-[2px] mb-1.5">
+                  <div style={{ width: `${timing.shareOnSite}%`, background: GREEN }} />
+                  <div style={{ width: `${100 - timing.shareOnSite}%`, background: GOLD }} />
+                </div>
+                <div className="flex justify-between text-[11px] font-body text-charcoal/50 mb-3">
+                  <span><span className="inline-block w-2 h-2 rounded-sm align-middle mr-1" style={{ background: GREEN }} />At the door {timing.shareOnSite}%</span>
+                  <span>Driving {100 - timing.shareOnSite}% <span className="inline-block w-2 h-2 rounded-sm align-middle ml-1" style={{ background: GOLD }} /></span>
+                </div>
+              </>
+            )}
+
+            <p className="text-[11px] font-body text-charcoal/45 leading-relaxed border-t border-cream-dark pt-3">
+              Typical = median, so one forgotten stop can&apos;t skew it.
+              {timing.loggedTogether > 0 && (
+                <>
+                  {" "}<b className="text-gold-dark">{timing.loggedTogether}</b> stop
+                  {timing.loggedTogether === 1 ? " was" : "s were"} logged with arrive and
+                  complete tapped together, so no time on site was captured for
+                  {timing.loggedTogether === 1 ? " it" : " them"}.
+                </>
+              )}
+              {timing.overran > 0 && (
+                <> {timing.overran} ran past an hour (likely a late &ldquo;complete&rdquo;) and {timing.overran === 1 ? "is" : "are"} excluded.</>
+              )}
+            </p>
+          </>
+        )}
+      </div>
+
       {/* Day detail — the drops themselves */}
       {day ? (
         <>
@@ -339,24 +489,43 @@ export default function ReportsView({
             {dayStops.length === 0 ? (
               <p className="p-6 text-center text-sm text-charcoal/40 font-body">No completed drops this day.</p>
             ) : (
-              dayStops.map((s) => (
-                <Link
-                  key={s.id}
-                  href={`/dispatch/delivery/${s.id}`}
-                  className="flex items-center gap-3 p-3.5 hover:bg-cream-dark/40 transition-colors"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="font-body text-sm text-charcoal truncate">{s.customerName}</div>
-                    <div className="text-[11px] text-charcoal/40 font-body">
-                      {s.town ?? "—"}
-                      {s.pieces > 0 && ` · ${s.pieces} pcs`}
-                      {s.photos > 0 && ` · ${s.photos} photo${s.photos === 1 ? "" : "s"}`}
-                      {s.photos === 0 && <span className="text-gold-dark"> · no photo</span>}
+              dayStops.map((s) => {
+                const dwell = onSiteFor(s);
+                const drive = driveInto.get(s.id);
+                return (
+                  <Link
+                    key={s.id}
+                    href={`/dispatch/delivery/${s.id}`}
+                    className="flex items-center gap-3 p-3.5 hover:bg-cream-dark/40 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="font-body text-sm text-charcoal truncate">{s.customerName}</div>
+                      <div className="text-[11px] text-charcoal/40 font-body">
+                        {s.town ?? "—"}
+                        {s.pieces > 0 && ` · ${s.pieces} pcs`}
+                        {s.photos > 0 && ` · ${s.photos} photo${s.photos === 1 ? "" : "s"}`}
+                        {s.photos === 0 && <span className="text-gold-dark"> · no photo</span>}
+                      </div>
+                      <div className="text-[11px] font-body text-charcoal/45 mt-0.5">
+                        {s.arrivedAt && (
+                          <span>
+                            {new Date(s.arrivedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                          </span>
+                        )}
+                        {drive != null && <span className="text-charcoal/35"> · 🚐 {fmtMin(drive)} drive</span>}
+                        {dwell != null && dwell > 0 && dwell <= DWELL_MAX && (
+                          <span className="text-green-primary"> · ⏱ {fmtMin(dwell)} on site</span>
+                        )}
+                        {dwell === 0 && <span className="text-charcoal/35"> · logged together</span>}
+                        {dwell != null && dwell > DWELL_MAX && (
+                          <span className="text-gold-dark"> · ⏱ {fmtMin(dwell)} (late complete?)</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <span className="text-charcoal/25 shrink-0">›</span>
-                </Link>
-              ))
+                    <span className="text-charcoal/25 shrink-0">›</span>
+                  </Link>
+                );
+              })
             )}
           </div>
           <button
