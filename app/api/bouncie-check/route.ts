@@ -38,6 +38,14 @@ export async function GET(request: NextRequest) {
     secretShape: shape(process.env.BOUNCIE_CLIENT_SECRET),
     codeShape: shape(process.env.BOUNCIE_CODE),
     redirectUri: process.env.BOUNCIE_REDIRECT_URI ?? null,
+    // Equality checks reveal nothing about the values themselves but catch the
+    // classic mix-up of pasting the same string into two fields.
+    codeEqualsSecret:
+      Boolean(process.env.BOUNCIE_CODE) &&
+      (process.env.BOUNCIE_CODE || "").trim() === (process.env.BOUNCIE_CLIENT_SECRET || "").trim(),
+    codeEqualsClientId:
+      Boolean(process.env.BOUNCIE_CODE) &&
+      (process.env.BOUNCIE_CODE || "").trim() === (process.env.BOUNCIE_CLIENT_ID || "").trim(),
   };
 
   try {
