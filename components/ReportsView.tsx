@@ -295,7 +295,7 @@ export default function ReportsView({
   const Stat = ({ label, value }: { label: string; value: number }) => (
     <div className="bg-cream rounded-xl border border-cream-dark p-3.5 text-center">
       <div className="font-serif text-2xl sm:text-3xl font-light text-charcoal tabular-nums">{value}</div>
-      <div className="text-[10px] text-charcoal/40 font-body uppercase tracking-widest mt-1">{label}</div>
+      <div className="text-[10px] text-charcoal/40 font-body uppercase tracking-wide mt-1">{label}</div>
     </div>
   );
 
@@ -318,7 +318,8 @@ export default function ReportsView({
       </div>
 
       {/* Scoped stats — these follow the drill-down */}
-      <div className="grid grid-cols-4 gap-2 sm:gap-3 mb-7">
+      {/* 2x2 on phones so the labels never clip; 4 across once there's room */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-7">
         <Stat label="Stops" value={totalStops} />
         <Stat label="Items" value={totalItems} />
         <Stat label="Photos" value={totalPhotos} />
