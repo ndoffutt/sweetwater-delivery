@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { compressImage } from "@/lib/compressImage";
 import { resolveManifestStops, dispatchRoute, saveDraftRoute, clearTodaysRoute, type LastScan } from "@/lib/actions/manifest";
 import type { StopResolution } from "@/lib/manifest/match";
 import { routeMiles, routeEtaMinutes, formatMiles, formatDuration, cheapestInsertion, seqBetween, SHOP } from "@/lib/geo";
+import { checkRoute } from "@/lib/optimize";
 import { dayForLocation, dayForDow, DAY_LABEL, RUN_DAYS, type DeliveryDay } from "@/lib/deliveryDay";
 import RouteMap from "@/components/RouteMap";
 import NearbyVisits, { type NearbyItem } from "@/components/NearbyVisits";
@@ -463,6 +464,26 @@ export default function DispatchConsole({
   const miles = routeMiles(coords);
   const eta = routeEtaMinutes(coords, stopCoords.filter(Boolean).length);
 
+  // Pre-dispatch route check. The day's order comes from the master route
+  // sequence, which is tuned for the full customer list — for whoever happens to
+  // be on today's list it can be well short of the best order. This compares the
+  // two so a bad ordering is caught before the van leaves.
+  const routeCheck = useMemo(
+    () => (included.length >= 3 ? checkRoute(included, SHOP) : null),
+    [included]
+  );
+
+  // Reorder the included stops into the optimised sequence, leaving excluded
+  // rows after them. "Reset order" still restores the original list.
+  function applyOptimizedOrder() {
+    if (!routeCheck) return;
+    setRows((cur) => {
+      const inc = cur.filter((r) => r.included);
+      const exc = cur.filter((r) => !r.included);
+      return [...routeCheck.order.map((i) => inc[i]).filter(Boolean), ...exc];
+    });
+  }
+
   const mapStops = included.map((r, i) => ({
     id: r.key,
     stop_order: i + 1,
@@ -775,6 +796,44 @@ export default function DispatchConsole({
               )}
             </div>
           </div>
+
+          {/* Route check — is this the best order for today's list? */}
+          {!dispatched && routeCheck && (
+            <div
+              className={`flex items-center gap-3 px-4 py-3 border-b border-cream-dark ${
+                routeCheck.alreadyOptimal ? "bg-green-primary/[0.06]" : "bg-gold-primary/[0.10]"
+              }`}
+            >
+              <span className="shrink-0 text-base leading-none">
+                {routeCheck.alreadyOptimal ? "✓" : "🧭"}
+              </span>
+              <div className="flex-1 min-w-0">
+                {routeCheck.alreadyOptimal ? (
+                  <p className="font-body text-[12.5px] text-green-primary">
+                    Route order looks good — about {formatMiles(routeCheck.currentMiles)} of driving.
+                  </p>
+                ) : (
+                  <>
+                    <p className="font-body text-[12.5px] text-charcoal">
+                      Reordering saves <b>{formatMiles(routeCheck.savedMiles)}</b>
+                      {" "}— {formatMiles(routeCheck.currentMiles)} → {formatMiles(routeCheck.bestMiles)}
+                    </p>
+                    <p className="font-body text-[11px] text-charcoal/45">
+                      {routeCheck.movedCount} stop{routeCheck.movedCount === 1 ? "" : "s"} would move
+                    </p>
+                  </>
+                )}
+              </div>
+              {!routeCheck.alreadyOptimal && (
+                <button
+                  onClick={applyOptimizedOrder}
+                  className="shrink-0 min-h-tap px-3.5 py-2 bg-green-primary text-cream text-[11px] font-body uppercase tracking-widest rounded-lg"
+                >
+                  Reorder
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="p-2">
             {/* Dispatched: read-only woven route — deliveries + prospect visits
