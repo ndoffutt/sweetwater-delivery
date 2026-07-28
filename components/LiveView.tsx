@@ -18,6 +18,15 @@ interface DriverLoc {
   accuracy: number | null;
   created_at: string;
 }
+interface Van {
+  lat: number;
+  lng: number;
+  heading: number | null;
+  speed: number | null;
+  address: string | null;
+  lastUpdated: string | null;
+  nickName: string | null;
+}
 
 const time = (iso: string | null) =>
   iso ? new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "·";
@@ -31,6 +40,7 @@ const elapsed = (iso: string | null) => {
 export default function LiveView() {
   const [route, setRoute] = useState<LiveRoute | null>(null);
   const [driver, setDriver] = useState<DriverLoc | null>(null);
+  const [van, setVan] = useState<Van | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [stale, setStale] = useState(false);
   const [target, setTarget] = useState<string>("");
@@ -43,6 +53,7 @@ export default function LiveView() {
       const data = await res.json();
       setRoute(data.route);
       setDriver(data.driver);
+      setVan(data.van ?? null);
       setStale(false);
     } catch {
       setStale(true);
@@ -68,9 +79,16 @@ export default function LiveView() {
   // Auto-follow the current stop unless the manager has clicked a pin.
   const focusId = touched.current ? target : current?.id ?? "";
 
-  const driverPos = driver ? { lat: driver.lat, lng: driver.lng } : null;
-  const lastPing = driver ? new Date(driver.created_at) : null;
-  const pingAgeMin = lastPing ? Math.round((Date.now() - lastPing.getTime()) / 60000) : null;
+  // The van's own GPS (Bouncie) is the real vehicle position — prefer it on the
+  // map and fall back to the driver's phone ping when the van isn't reporting.
+  const phonePos = driver ? { lat: driver.lat, lng: driver.lng } : null;
+  const vanPos = van ? { lat: van.lat, lng: van.lng } : null;
+  const mapDot = vanPos ?? phonePos;
+  const usingVan = Boolean(vanPos);
+  const posAge = usingVan
+    ? elapsed(van?.lastUpdated ?? null)
+    : elapsed(driver?.created_at ?? null);
+  const vanSpeed = van?.speed != null ? Math.round(van.speed) : null;
 
   if (!loaded) {
     return (
@@ -113,7 +131,7 @@ export default function LiveView() {
             touched.current = true;
             setTarget(id);
           }}
-          driverPos={driverPos}
+          driverPos={mapDot}
         />
         {/* Live badge */}
         <div className="absolute top-3 left-3 flex items-center gap-2 bg-charcoal/80 text-cream rounded-full px-3 py-1.5 backdrop-blur">
@@ -134,12 +152,24 @@ export default function LiveView() {
             <p className="text-xs text-charcoal/40 font-body mt-0.5">
               {done}/{stops.length} stops · started {time(route.started_at)}
               {route.status === "in_progress" && route.started_at && ` · out ${elapsed(route.started_at)}`}
-              {pingAgeMin != null && ` · ping ${pingAgeMin <= 0 ? "just now" : `${pingAgeMin}m ago`}`}
             </p>
+            {mapDot && (
+              <p className="text-[11px] text-charcoal/45 font-body mt-1">
+                {usingVan ? (
+                  <>
+                    🚐 <span className="text-green-primary font-medium">Van GPS</span>
+                    {vanSpeed != null && ` · ${vanSpeed} mph`}
+                    {posAge && ` · ${posAge} ago`}
+                  </>
+                ) : (
+                  <>📱 Phone GPS{posAge && ` · ${posAge} ago`}</>
+                )}
+              </p>
+            )}
           </div>
-          {driverPos && (
+          {mapDot && (
             <a
-              href={`https://maps.google.com/?q=${driverPos.lat},${driverPos.lng}`}
+              href={`https://maps.google.com/?q=${mapDot.lat},${mapDot.lng}`}
               target="_blank"
               rel="noopener noreferrer"
               className="min-h-tap px-4 py-2 bg-green-primary text-cream text-xs font-body uppercase tracking-widest rounded-lg shrink-0"

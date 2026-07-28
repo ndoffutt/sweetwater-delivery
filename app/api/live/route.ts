@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifySessionToken, COOKIE_NAME } from "@/lib/auth";
 import { easternToday } from "@/lib/date";
+import { getVanLocation } from "@/lib/bouncie";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,12 @@ export async function GET(request: NextRequest) {
     .order("stop_order", { referencedTable: "route_stops" })
     .maybeSingle();
 
-  if (!route) return NextResponse.json({ route: null, driver: null });
+  // Live van position from the Bouncie OBD device (best-effort; null when
+  // Bouncie isn't configured or is unreachable). This is the actual vehicle, so
+  // the office map prefers it over the driver's phone ping.
+  const van = await getVanLocation();
+
+  if (!route) return NextResponse.json({ route: null, driver: null, van });
 
   // Latest driver location ping for this route.
   let driver = null;
@@ -46,5 +52,5 @@ export async function GET(request: NextRequest) {
     .maybeSingle();
   driver = loc;
 
-  return NextResponse.json({ route, driver });
+  return NextResponse.json({ route, driver, van });
 }
