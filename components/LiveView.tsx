@@ -114,6 +114,35 @@ export default function LiveView() {
             Go to Dispatch
           </a>
         </div>
+
+        {/* The van reports even with no route dispatched — so the office can
+            always see where it is, not just on delivery days. */}
+        {van && (
+          <div className="bg-cream rounded-xl border border-cream-dark p-4 mt-3 flex items-center gap-3">
+            <span className="text-2xl shrink-0">🚐</span>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="font-body text-sm text-charcoal">
+                {van.nickName?.trim() || "Van"}
+                <span className="text-charcoal/45">
+                  {" · "}
+                  {van.speed != null && van.speed > 0 ? `moving ${Math.round(van.speed)} mph` : "parked"}
+                </span>
+              </p>
+              <p className="text-[11px] text-charcoal/40 font-body truncate">
+                {van.address ?? `${van.lat.toFixed(4)}, ${van.lng.toFixed(4)}`}
+                {elapsed(van.lastUpdated) ? ` · ${elapsed(van.lastUpdated)} ago` : ""}
+              </p>
+            </div>
+            <a
+              href={`https://maps.google.com/?q=${van.lat},${van.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="min-h-tap px-3.5 py-2 bg-green-primary text-cream text-[11px] font-body uppercase tracking-widest rounded-lg shrink-0"
+            >
+              Map
+            </a>
+          </div>
+        )}
       </div>
     );
   }
