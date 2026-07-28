@@ -85,7 +85,17 @@ export function optimizeOrder<T extends Stoppable>(items: T[], anchor: LatLng): 
     if (!improved) break;
   }
 
-  return [...tour.map((t) => t.idx), ...unlocated];
+  // A loop costs the same driven either way round (shop → stops → shop is
+  // symmetric), so of the two equivalent directions prefer the one that stays
+  // closer to the order the office already knows. Same mileage, far fewer stops
+  // appearing to "move" — which keeps the suggestion easy to trust.
+  const forward = tour.map((t) => t.idx);
+  const backward = forward.slice().reverse();
+  const churn = (order: number[]) =>
+    order.reduce((sum, origIdx, newIdx) => sum + Math.abs(origIdx - newIdx), 0);
+  const chosen = churn(backward) < churn(forward) ? backward : forward;
+
+  return [...chosen, ...unlocated];
 }
 
 export interface RouteCheck {
