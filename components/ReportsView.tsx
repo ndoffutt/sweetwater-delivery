@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { timingTrusted, TIMING_START_LABEL } from "@/lib/timing";
 
 export interface StopRow {
   id: string;
@@ -260,6 +261,7 @@ export default function ReportsView({
     const byRoute = new Map<string, StopRow[]>();
     for (const s of completed) {
       if (!s.arrivedAt) continue;
+      if (!timingTrusted(s.date)) continue; // pre-Bouncie durations are unreliable
       const list = byRoute.get(s.routeId) ?? [];
       list.push(s);
       byRoute.set(s.routeId, list);
@@ -275,7 +277,8 @@ export default function ReportsView({
     return out;
   }, [completed]);
 
-  const onSiteFor = (s: StopRow) => minutesBetween(s.arrivedAt, s.completedAt);
+  const onSiteFor = (s: StopRow) =>
+    timingTrusted(s.date) ? minutesBetween(s.arrivedAt, s.completedAt) : null;
 
   // Stops in the current drill scope.
   const scoped = useMemo(() => {
@@ -336,6 +339,7 @@ export default function ReportsView({
     const byDay = new Map<string, { first: string; last: string }>();
     for (const s of scoped) {
       if (!s.arrivedAt || !s.completedAt) continue;
+      if (!timingTrusted(s.date)) continue;
       const cur = byDay.get(s.date);
       if (!cur) byDay.set(s.date, { first: s.arrivedAt, last: s.completedAt });
       else {
@@ -429,7 +433,14 @@ export default function ReportsView({
       </div>
       <div className="bg-cream rounded-xl border border-cream-dark p-4 sm:p-5 mb-8">
         {timing.measured === 0 && timing.loggedTogether === 0 ? (
-          <p className="text-sm text-charcoal/40 font-body text-center py-3">No timing recorded in this range.</p>
+          <div className="text-center py-3">
+            <p className="text-sm text-charcoal/45 font-body">No timing for this range.</p>
+            <p className="text-[11px] text-charcoal/35 font-body mt-1.5 max-w-sm mx-auto leading-relaxed">
+              Drive and on-site times start {TIMING_START_LABEL}, when the van&apos;s GPS
+              went in. Earlier numbers came only from driver taps and weren&apos;t
+              reliable, so they&apos;re left out.
+            </p>
+          </div>
         ) : (
           <>
             <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
