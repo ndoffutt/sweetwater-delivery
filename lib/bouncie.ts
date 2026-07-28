@@ -79,6 +79,77 @@ interface BouncieVehicle {
   };
 }
 
+export interface BouncieTrip {
+  transactionId: string;
+  imei: string;
+  startTime: string;
+  endTime: string;
+  distance?: number;
+  averageSpeed?: number;
+  maxSpeed?: number;
+  totalIdleDuration?: number;
+  hardBrakingCount?: number;
+  hardAccelerationCount?: number;
+  startOdometer?: number;
+  endOdometer?: number;
+  fuelConsumed?: number;
+  timeZone?: string;
+  gps?: string;
+}
+
+/** IMEI of the van (first vehicle, or BOUNCIE_IMEI when set). */
+export async function getVanImei(): Promise<string | null> {
+  if (!bouncieConfigured()) return null;
+  const want = (process.env.BOUNCIE_IMEI || "").trim();
+  if (want) return want;
+  try {
+    const token = await getAccessToken();
+    if (!token) return null;
+    const res = await fetch(`${API_BASE}/vehicles`, { headers: { Authorization: token }, cache: "no-store" });
+    if (!res.ok) return null;
+    const vehicles = (await res.json()) as BouncieVehicle[];
+    return vehicles?.find((v) => v.imei)?.imei ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Bouncie rejects any window wider than a week ("Start and End dates must be
+// within a week of each other"), so requests are chunked into 6-day slices.
+const WINDOW_MS = 6 * 24 * 3600 * 1000;
+
+/**
+ * Trips between two instants, walking the range in week-safe chunks.
+ * Best-effort: a failed chunk is skipped rather than losing the whole sync.
+ */
+export async function getTrips(from: Date, to: Date): Promise<BouncieTrip[]> {
+  if (!bouncieConfigured()) return [];
+  const token = await getAccessToken();
+  const imei = await getVanImei();
+  if (!token || !imei) return [];
+
+  const out: BouncieTrip[] = [];
+  for (let start = from.getTime(); start < to.getTime(); start += WINDOW_MS) {
+    const end = Math.min(start + WINDOW_MS, to.getTime());
+    const url =
+      `${API_BASE}/trips?imei=${encodeURIComponent(imei)}&gps-format=polyline` +
+      `&starts-after=${encodeURIComponent(new Date(start).toISOString())}` +
+      `&ends-before=${encodeURIComponent(new Date(end).toISOString())}`;
+    try {
+      const res = await fetch(url, { headers: { Authorization: token }, cache: "no-store" });
+      if (!res.ok) continue;
+      const chunk = (await res.json()) as BouncieTrip[];
+      if (Array.isArray(chunk)) out.push(...chunk);
+    } catch {
+      // skip this window; the next sync will pick it up
+    }
+  }
+  // De-duplicate across overlapping window edges.
+  const seen = new Map<string, BouncieTrip>();
+  for (const t of out) if (t?.transactionId) seen.set(t.transactionId, t);
+  return Array.from(seen.values());
+}
+
 // Live position of the van. Returns null when unconfigured or on any failure.
 // If BOUNCIE_IMEI is set, that specific vehicle is picked; otherwise the first
 // vehicle with a valid location is used (fine for a single-van fleet).

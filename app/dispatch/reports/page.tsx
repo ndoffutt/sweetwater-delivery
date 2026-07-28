@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import ReportsView, { type StopRow, type TouchpointRow } from "@/components/ReportsView";
+import { loadVanTrips, deriveLegs, syncVanTripsIfStale } from "@/lib/vanTrips";
+import { easternDay } from "@/lib/date";
+import { TIMING_START } from "@/lib/timing";
 
 export const dynamic = "force-dynamic";
 
@@ -111,7 +114,22 @@ export default async function ReportsPage() {
     createdAt: t.created_at,
   }));
 
+  // Van trips are the device-truthful source for drive and on-site time. Top up
+  // recent trips on view (cheap: one week-window request, upserted by id) so the
+  // report is current even before the nightly cron has run. Failures are silent —
+  // the report still renders from whatever is already stored.
+  await syncVanTripsIfStale(120).catch(() => null);
+  const legs = deriveLegs(
+    await loadVanTrips(TIMING_START + "T00:00:00Z"),
+    (iso) => easternDay(new Date(iso))
+  );
+
   return (
-    <ReportsView stops={stops} customerDates={customerDates} touchpoints={touchpoints} />
+    <ReportsView
+      stops={stops}
+      customerDates={customerDates}
+      touchpoints={touchpoints}
+      legs={legs}
+    />
   );
 }
