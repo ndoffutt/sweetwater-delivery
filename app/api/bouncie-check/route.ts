@@ -15,43 +15,71 @@ export async function GET(request: NextRequest) {
   if (!user || user.role !== "admin")
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Shape-check the stored values WITHOUT revealing them. These three checks
+  // catch the usual causes: the authorize URL pasted instead of the code, a
+  // trailing newline from a copy/paste, or a whole "code=…" fragment.
+  const shape = (v: string | undefined) =>
+    !v
+      ? null
+      : {
+          length: v.length,
+          looksLikeUrl: /https?:\/\/|:\/\//.test(v),
+          containsEquals: v.includes("="),
+          containsQuestion: v.includes("?"),
+          hasOuterWhitespace: v !== v.trim(),
+          allUrlSafeChars: /^[A-Za-z0-9._~-]+$/.test(v.trim()),
+        };
+
   const out: Record<string, unknown> = {
     configured: Boolean(
       process.env.BOUNCIE_CLIENT_ID && process.env.BOUNCIE_CLIENT_SECRET && process.env.BOUNCIE_CODE
     ),
-    hasClientId: Boolean(process.env.BOUNCIE_CLIENT_ID),
-    hasSecret: Boolean(process.env.BOUNCIE_CLIENT_SECRET),
-    hasCode: Boolean(process.env.BOUNCIE_CODE),
+    clientIdShape: shape(process.env.BOUNCIE_CLIENT_ID),
+    secretShape: shape(process.env.BOUNCIE_CLIENT_SECRET),
+    codeShape: shape(process.env.BOUNCIE_CODE),
     redirectUri: process.env.BOUNCIE_REDIRECT_URI ?? null,
   };
 
   try {
-    const form = new URLSearchParams({
-      client_id: process.env.BOUNCIE_CLIENT_ID || "",
-      client_secret: process.env.BOUNCIE_CLIENT_SECRET || "",
+    const id = (process.env.BOUNCIE_CLIENT_ID || "").trim();
+    const secret = (process.env.BOUNCIE_CLIENT_SECRET || "").trim();
+    const code = (process.env.BOUNCIE_CODE || "").trim();
+    const redirect = (process.env.BOUNCIE_REDIRECT_URI || "").trim();
+
+    // Try every plausible encoding of the grant so a format problem can be told
+    // apart from a genuinely bad code. Whichever returns a token wins.
+    const base: Record<string, string> = {
+      client_id: id,
+      client_secret: secret,
       grant_type: "authorization_code",
-      code: process.env.BOUNCIE_CODE || "",
-    });
-    if (process.env.BOUNCIE_REDIRECT_URI) form.set("redirect_uri", process.env.BOUNCIE_REDIRECT_URI);
-    const tRes = await fetch(TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: form.toString(),
-      cache: "no-store",
-    });
-    out.tokenStatus = tRes.status;
-    const tText = await tRes.text();
-    // Report the error body (Bouncie returns a plain message, no secrets) but
-    // never the access_token on success.
+      code,
+    };
+    const variants: { name: string; json: boolean; withRedirect: boolean }[] = [
+      { name: "form+redirect", json: false, withRedirect: true },
+      { name: "form", json: false, withRedirect: false },
+      { name: "json+redirect", json: true, withRedirect: true },
+      { name: "json", json: true, withRedirect: false },
+    ];
+
+    const attempts: Record<string, unknown>[] = [];
     let accessToken: string | null = null;
-    try {
-      const tJson = JSON.parse(tText);
-      accessToken = tJson.access_token ?? null;
-      out.gotAccessToken = Boolean(accessToken);
-      if (!accessToken) out.tokenBody = tText.slice(0, 300);
-    } catch {
-      out.tokenBody = tText.slice(0, 300);
+
+    for (const v of variants) {
+      const payload = { ...base, ...(v.withRedirect && redirect ? { redirect_uri: redirect } : {}) };
+      const res = await fetch(TOKEN_URL, {
+        method: "POST",
+        headers: { "Content-Type": v.json ? "application/json" : "application/x-www-form-urlencoded" },
+        body: v.json ? JSON.stringify(payload) : new URLSearchParams(payload).toString(),
+        cache: "no-store",
+      });
+      const text = await res.text();
+      let tok: string | null = null;
+      try { tok = (JSON.parse(text) as { access_token?: string }).access_token ?? null; } catch { /* not json */ }
+      attempts.push({ variant: v.name, status: res.status, gotToken: Boolean(tok), body: tok ? undefined : text.slice(0, 180) });
+      if (tok) { accessToken = tok; out.workingVariant = v.name; break; }
     }
+    out.attempts = attempts;
+    out.gotAccessToken = Boolean(accessToken);
 
     if (accessToken) {
       const vRes = await fetch(`${API_BASE}/vehicles`, {

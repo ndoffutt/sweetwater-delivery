@@ -42,13 +42,16 @@ async function getAccessToken(): Promise<string | null> {
   if (cachedToken && Date.now() < cachedToken.expiresAt) return cachedToken.value;
   try {
     // OAuth token endpoints take application/x-www-form-urlencoded, not JSON.
+    // Values are trimmed — a trailing newline pasted into an env var silently
+    // invalidates the grant.
     const form = new URLSearchParams({
-      client_id: process.env.BOUNCIE_CLIENT_ID || "",
-      client_secret: process.env.BOUNCIE_CLIENT_SECRET || "",
+      client_id: (process.env.BOUNCIE_CLIENT_ID || "").trim(),
+      client_secret: (process.env.BOUNCIE_CLIENT_SECRET || "").trim(),
       grant_type: "authorization_code",
-      code: process.env.BOUNCIE_CODE || "",
+      code: (process.env.BOUNCIE_CODE || "").trim(),
     });
-    if (process.env.BOUNCIE_REDIRECT_URI) form.set("redirect_uri", process.env.BOUNCIE_REDIRECT_URI);
+    const redirect = (process.env.BOUNCIE_REDIRECT_URI || "").trim();
+    if (redirect) form.set("redirect_uri", redirect);
     const res = await fetch(TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
