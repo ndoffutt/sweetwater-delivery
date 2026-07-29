@@ -100,7 +100,7 @@ function daysSince(iso: string | null): number | null {
 }
 
 function agoLabel(days: number | null): string {
-  if (days == null) return "never";
+  if (days == null) return "no touch yet";
   if (days === 0) return "today";
   if (days === 1) return "1d ago";
   if (days < 60) return `${days}d ago`;
@@ -147,7 +147,7 @@ export default function ProspectDirectory({
   const [callOnly, setCallOnly] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   const [adding, setAdding] = useState(false);
-  const [view, setView] = useState<"list" | "map">("list");
+  const [view, setView] = useState<"list" | "map" | "board">("list");
   const [sort, setSort] = useState<ProspectSort>("town");
   const [, startTransition] = useTransition();
 
@@ -213,6 +213,8 @@ export default function ProspectDirectory({
   const Toggle = () => (
     <div className="inline-flex rounded-lg bg-cream-dark/60 p-0.5 text-xs font-body">
       <button onClick={() => setView("list")} className={`px-3 py-1.5 rounded-md uppercase tracking-wide ${view === "list" ? "bg-cream text-charcoal shadow-sm" : "text-charcoal/50"}`}>List</button>
+      {/* The board needs width — desktop only */}
+      <button onClick={() => { setView("board"); setAdding(false); }} className={`hidden md:block px-3 py-1.5 rounded-md uppercase tracking-wide ${view === "board" ? "bg-cream text-charcoal shadow-sm" : "text-charcoal/50"}`}>Board</button>
       <button onClick={() => { setView("map"); setAdding(false); }} className={`px-3 py-1.5 rounded-md uppercase tracking-wide ${view === "map" ? "bg-cream text-charcoal shadow-sm" : "text-charcoal/50"}`}>Map</button>
     </div>
   );
@@ -279,6 +281,104 @@ export default function ProspectDirectory({
             </div>
           )}
         </div>
+      </div>
+    );
+  }
+
+  // ── Board view (desktop): the pipeline as columns ──
+  if (view === "board") {
+    const pool = prospects.filter((p) => {
+      if (typeFilter !== "all" && p.business_type !== typeFilter) return false;
+      if (!query) return true;
+      const q = query.toLowerCase();
+      return p.name.toLowerCase().includes(q) || (p.contact_name ?? "").toLowerCase().includes(q) || (p.address ?? "").toLowerCase().includes(q);
+    });
+    const columns = STATUSES.filter((s) => s.id !== "dead");
+    return (
+      <div className="flex flex-col md:h-screen">
+        <div className="p-4 border-b border-cream-dark flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="font-serif text-2xl font-light text-charcoal leading-none">Prospects</h2>
+            <p className="text-[11px] text-charcoal/40 font-body uppercase tracking-widest mt-1">Pipeline board</p>
+          </div>
+          <div className="flex items-center gap-2 flex-1 justify-end">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search…"
+              className="w-56 p-2 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary"
+            />
+            <Toggle />
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto p-4">
+          <div className="grid grid-cols-4 gap-3 min-w-[860px] items-start">
+            {columns.map((col) => {
+              const cards = pool
+                .filter((p) => p.status === col.id)
+                .sort((a, b) => {
+                  const na = needsAttention(a); const nb = needsAttention(b);
+                  if (na !== nb) return na ? -1 : 1;
+                  const pr = priorityRank(a.priority) - priorityRank(b.priority);
+                  return pr !== 0 ? pr : a.name.localeCompare(b.name);
+                });
+              return (
+                <div key={col.id} className="bg-cream-dark/40 rounded-2xl p-2.5">
+                  <p className="font-body text-[11px] uppercase tracking-widest text-charcoal/45 px-1.5 pb-2">
+                    {col.label} · {cards.length}
+                  </p>
+                  <div className="space-y-2">
+                    {cards.map((p) => {
+                      const days = daysSince(lastTouch(p));
+                      const attn = needsAttention(p);
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => setSelectedId(p.id)}
+                          className={`w-full text-left bg-cream rounded-xl border p-2.5 transition-colors hover:border-green-primary/40 ${attn ? "border-gold-primary/50" : "border-cream-dark"}`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            {p.priority === "high" && <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-gold-primary" title="High priority" />}
+                            <span className="font-body text-[13px] font-medium text-charcoal truncate">{p.name}</span>
+                          </div>
+                          <p className="text-[11px] text-charcoal/40 font-body truncate mt-0.5">
+                            {prospectTown(p) || typeLabel(p.business_type)}
+                            {p.contact_name ? ` · ${p.contact_name}` : ""}
+                          </p>
+                          <p className={`text-[11px] font-body mt-1 ${attn ? "text-gold-dark font-medium" : "text-charcoal/40"}`}>
+                            {attn ? "due for touch" : agoLabel(days)}
+                          </p>
+                        </button>
+                      );
+                    })}
+                    {cards.length === 0 && (
+                      <p className="text-center text-[11px] text-charcoal/30 font-body py-4">None</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {/* Detail slides over the board */}
+        {selected && (
+          <div className="fixed inset-0 z-40 flex justify-end" onClick={() => setSelectedId(null)}>
+            <div className="absolute inset-0 bg-charcoal/30" />
+            <div className="relative w-full max-w-xl bg-cream overflow-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <Detail
+                key={selected.id}
+                p={selected}
+                onBack={() => setSelectedId(null)}
+                onPatch={(f) => patch(selected.id, f)}
+                onDelete={() => {
+                  setProspects((ps) => ps.filter((x) => x.id !== selected.id));
+                  setSelectedId(null);
+                  startTransition(() => { deleteProspect(selected.id); });
+                }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -389,13 +489,13 @@ export default function ProspectDirectory({
                   </p>
                 </div>
                 <div className="shrink-0 flex flex-col items-end gap-1">
-                  {p.priority && p.priority !== "medium" && (
-                    <span className={`text-[10px] font-body uppercase tracking-wider px-2 py-0.5 rounded-full ${priorityStyle(p.priority)}`}>
-                      {p.priority === "high" ? "High" : "Low"}
+                  <span className="inline-flex items-center gap-1.5">
+                    {p.priority === "high" && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-gold-primary" title="High priority" />
+                    )}
+                    <span className={`text-[10px] font-body uppercase tracking-wider px-2 py-0.5 rounded-full ${statusStyle(p.status)}`}>
+                      {STATUSES.find((s) => s.id === p.status)?.label}
                     </span>
-                  )}
-                  <span className={`text-[10px] font-body uppercase tracking-wider px-2 py-0.5 rounded-full ${statusStyle(p.status)}`}>
-                    {STATUSES.find((s) => s.id === p.status)?.label}
                   </span>
                   <span className={`text-[11px] font-body ${cold ? "text-gold-dark font-medium" : "text-charcoal/40"}`}>
                     {agoLabel(days)}
