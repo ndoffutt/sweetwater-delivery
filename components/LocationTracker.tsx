@@ -55,20 +55,21 @@ export default function LocationTracker({
     };
   }, [routeId, intervalMs]);
 
+  // Quiet by design: a small dot is enough. The old version printed "Location
+  // permission denied" across the top of the driver screen all day — an error
+  // banner the driver can't act on mid-route is just noise. The dot's title
+  // still explains itself on tap-and-hold / hover.
   return (
-    <div className="flex items-center gap-1.5 text-xs font-body">
+    <div
+      className="flex items-center gap-1.5 text-xs font-body"
+      title={tracking ? "GPS tracking on" : error ?? "Locating…"}
+    >
       <div
         className={`w-2 h-2 rounded-full ${
-          tracking
-            ? "bg-green-light animate-pulse"
-            : error
-            ? "bg-red-500"
-            : "bg-charcoal/30"
+          tracking ? "bg-green-light animate-pulse" : error ? "bg-red-500/70" : "bg-charcoal/30"
         }`}
       />
-      <span className="text-cream/50">
-        {tracking ? "GPS" : error || "..."}
-      </span>
+      {tracking && <span className="text-cream/50">GPS</span>}
     </div>
   );
 }

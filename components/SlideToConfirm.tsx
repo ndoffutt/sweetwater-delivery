@@ -44,7 +44,7 @@ export default function SlideToConfirm({
     <div ref={trackRef} style={{ position: "relative", height: 62, borderRadius: 16, background: "rgba(2,115,62,0.1)", border: "1.5px solid rgba(2,115,62,0.25)", overflow: "hidden", userSelect: "none", touchAction: "none" }}>
       {/* Label sits in the track to the RIGHT of the knob's resting spot, so a
           long label (e.g. "Slide to log touchpoint") is never clipped by it. */}
-      <div style={{ position: "absolute", left: knob + 14, right: 14, top: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: '"Jost", system-ui, sans-serif', fontSize: 13.5, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", color: GREEN, opacity: 1 - pct * 1.2, whiteSpace: "nowrap", overflow: "hidden" }}>
+      <div style={{ position: "absolute", left: knob + 14, right: 14, top: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: 'var(--font-poppins), system-ui, sans-serif', fontSize: 13.5, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", color: GREEN, opacity: 1 - pct * 1.2, whiteSpace: "nowrap", overflow: "hidden" }}>
         {done ? "" : label}
       </div>
       <div

@@ -36,8 +36,8 @@ function StreetMap({ children }: { children?: React.ReactNode }) {
         <path d="M-2 64 Q30 56 60 60 T102 52" stroke="#fff" strokeWidth="3" fill="none" strokeOpacity="0.95" />
         <path d="M20 -2 Q26 30 40 50 T58 102" stroke="#fff" strokeWidth="2.6" fill="none" strokeOpacity="0.95" />
       </svg>
-      <span style={{ position: "absolute", left: "8%", top: "60%", transform: "rotate(-6deg)", fontFamily: '"Jost", system-ui, sans-serif', fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(26,26,26,0.32)", pointerEvents: "none" }}>Montauk Hwy</span>
-      <span style={{ position: "absolute", left: "70%", top: "86%", fontFamily: '"Jost", system-ui, sans-serif', fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(26,26,26,0.32)", pointerEvents: "none" }}>Atlantic Ocean</span>
+      <span style={{ position: "absolute", left: "8%", top: "60%", transform: "rotate(-6deg)", fontFamily: 'var(--font-poppins), system-ui, sans-serif', fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(26,26,26,0.32)", pointerEvents: "none" }}>Montauk Hwy</span>
+      <span style={{ position: "absolute", left: "70%", top: "86%", fontFamily: 'var(--font-poppins), system-ui, sans-serif', fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(26,26,26,0.32)", pointerEvents: "none" }}>Atlantic Ocean</span>
       {children}
     </div>
   );
@@ -48,7 +48,7 @@ function Pin({ n, done, active }: { n: number; done?: boolean; active?: boolean 
   return (
     <div style={{ position: "relative", filter: active ? "drop-shadow(0 4px 8px rgba(0,0,0,0.3))" : "drop-shadow(0 2px 4px rgba(0,0,0,0.25))" }}>
       <div style={{ width: active ? 36 : 28, height: active ? 36 : 28, borderRadius: "50% 50% 50% 0", transform: "rotate(-45deg)", background: bg, border: "2px solid #fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ transform: "rotate(45deg)", color: done ? "#fff" : active ? CHARCOAL : "#fff", fontFamily: '"Jost", system-ui, sans-serif', fontSize: active ? 15 : 12, fontWeight: 700 }}>
+        <span style={{ transform: "rotate(45deg)", color: done ? "#fff" : active ? CHARCOAL : "#fff", fontFamily: 'var(--font-poppins), system-ui, sans-serif', fontSize: active ? 15 : 12, fontWeight: 700 }}>
           {done ? "✓" : n}
         </span>
       </div>

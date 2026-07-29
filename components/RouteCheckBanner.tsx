@@ -1,4 +1,5 @@
 import { formatMiles } from "@/lib/geo";
+import Glyph from "@/components/Glyph";
 import type { RoadRouteCheck } from "@/lib/routeCheck";
 
 /**
@@ -27,7 +28,7 @@ export default function RouteCheckBanner({
     if (check.alreadyGood) return null; // nothing worth saying on weak data
     return (
       <div className="flex items-start gap-3 bg-cream border border-cream-dark rounded-xl px-4 py-3">
-        <span className="shrink-0 text-base leading-none">🧭</span>
+        <span className="shrink-0 text-gold-dark mt-0.5"><Glyph name="compass" className="w-4.5 h-4.5 w-[18px] h-[18px]" /></span>
         <div className="min-w-0">
           <p className="font-body text-[12.5px] text-charcoal/70">
             This route&apos;s order looks like it could be tightened.
@@ -44,7 +45,7 @@ export default function RouteCheckBanner({
   if (check.alreadyGood) {
     return (
       <div className="flex items-center gap-3 bg-green-primary/[0.07] border border-green-primary/25 rounded-xl px-4 py-3">
-        <span className="shrink-0 text-base leading-none">✓</span>
+        <span className="shrink-0 text-green-primary"><Glyph name="check" className="w-[18px] h-[18px]" /></span>
         <p className="font-body text-[12.5px] text-green-primary">
           Well ordered — {formatMiles(check.currentMiles)} of driving, about as short as it gets.
         </p>
@@ -54,7 +55,7 @@ export default function RouteCheckBanner({
 
   return (
     <div className="flex items-start gap-3 bg-gold-primary/[0.10] border border-gold-primary/35 rounded-xl px-4 py-3">
-      <span className="shrink-0 text-base leading-none">🧭</span>
+      <span className="shrink-0 text-gold-dark mt-0.5"><Glyph name="compass" className="w-4.5 h-4.5 w-[18px] h-[18px]" /></span>
       <div className="min-w-0">
         <p className="font-body text-[12.5px] text-charcoal">
           {dispatched ? "This route drove" : "This route is"}{" "}

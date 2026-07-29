@@ -91,7 +91,7 @@ export default function ProspectVisitSheet({
         }}>🔔</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 11.5, letterSpacing: "0.18em", textTransform: "uppercase", color: "#d59a29", fontWeight: 600 }}>Prospect visit</div>
-          <div style={{ fontFamily: "var(--font-serif, 'Cormorant Garamond', serif)", fontSize: 24, fontWeight: 500, color: "#1a1a1a", lineHeight: 1.06, marginTop: 2 }}>{pv.name}</div>
+          <div style={{ fontFamily: "var(--font-lora), Georgia, serif", fontSize: 24, fontWeight: 500, color: "#1a1a1a", lineHeight: 1.06, marginTop: 2 }}>{pv.name}</div>
           {pv.address && (
             <div style={{ fontSize: 13.5, color: "rgba(26,26,26,0.5)", marginTop: 2 }}>{pv.address}</div>
           )}

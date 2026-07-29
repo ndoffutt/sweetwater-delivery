@@ -17,7 +17,7 @@ function ShopPin() {
       <div style={{ width: 26, height: 26, borderRadius: 8, background: CHARCOAL, border: "2px solid #fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>
         🏠
       </div>
-      <span style={{ marginTop: 2, fontFamily: '"Jost", system-ui, sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: CHARCOAL, background: "rgba(255,255,255,0.85)", borderRadius: 4, padding: "1px 4px" }}>
+      <span style={{ marginTop: 2, fontFamily: 'var(--font-poppins), system-ui, sans-serif', fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: CHARCOAL, background: "rgba(255,255,255,0.85)", borderRadius: 4, padding: "1px 4px" }}>
         Shop
       </span>
     </div>
@@ -33,7 +33,7 @@ function Pin({ n, done, active, suggested }: { n: number; done?: boolean; active
         <span style={{ position: "absolute", left: "50%", top: "50%", width: 44, height: 44, marginLeft: -22, marginTop: -22, borderRadius: "50%", background: "rgba(213,154,41,0.35)", animation: "swPulse 1.4s ease-out infinite" }} />
       )}
       <div style={{ position: "relative", width: big ? 34 : 26, height: big ? 34 : 26, borderRadius: "50% 50% 50% 0", transform: "rotate(-45deg)", background: bg, border: suggested ? "2px dashed #fff" : "2px solid #fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ transform: "rotate(45deg)", color: done ? "#fff" : big ? CHARCOAL : "#fff", fontFamily: '"Jost", system-ui, sans-serif', fontSize: big ? 14 : 11, fontWeight: 700 }}>
+        <span style={{ transform: "rotate(45deg)", color: done ? "#fff" : big ? CHARCOAL : "#fff", fontFamily: 'var(--font-poppins), system-ui, sans-serif', fontSize: big ? 14 : 11, fontWeight: 700 }}>
           {done ? "✓" : n}
         </span>
       </div>

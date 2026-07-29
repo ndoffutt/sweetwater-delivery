@@ -29,9 +29,9 @@ async function pageAll<T>(
 export default async function ReportsPage() {
   const session = await getSession();
   if (!session) redirect("/");
-  // Reports are owner-only (Nate). Managers and drivers can't reach it, even by
+  // Reports are for the office (owner + manager). Drivers can’t reach it, even by
   // typing the URL.
-  if (session.role !== "admin") redirect("/dispatch");
+  if (session.role !== "admin" && session.role !== "dispatcher") redirect("/dispatch");
 
   const supabase: Client = createAdminClient();
 

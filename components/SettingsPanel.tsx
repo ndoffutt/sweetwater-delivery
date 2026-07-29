@@ -189,7 +189,7 @@ export default function SettingsPanel({
           <div className="font-serif text-lg font-light leading-none">Settings</div>
           <div className="text-[10px] uppercase tracking-[0.18em] text-gold-light">Sweetwater&apos;s</div>
         </div>
-        <Link href="/owner" className="text-[11px] uppercase tracking-[0.16em] text-cream/70 min-h-tap flex items-center">← Home</Link>
+        <Link href="/dispatch" className="text-[11px] uppercase tracking-[0.16em] text-cream/70 min-h-tap flex items-center">← Console</Link>
       </header>
 
       <div className="p-5 md:p-8 max-w-2xl mx-auto space-y-6">

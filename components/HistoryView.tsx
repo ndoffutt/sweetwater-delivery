@@ -60,7 +60,7 @@ export default function HistoryView({
   const router = useRouter();
 
   return (
-    <div className="p-5 md:p-8 md:max-w-3xl md:mx-auto">
+    <div className="p-5 md:p-8 md:max-w-6xl md:mx-auto">
       <Link href="/dispatch" className="inline-flex items-center gap-1.5 text-charcoal/50 font-body text-xs uppercase tracking-widest mb-3">
         ← Today
       </Link>
@@ -121,7 +121,9 @@ export default function HistoryView({
           No completed routes yet.
         </div>
       ) : (
-        <div className="space-y-3">
+        // Two columns of day cards on desktop; an expanded day takes the full
+        // width so its map and stop list have room.
+        <div className="space-y-3 md:space-y-0 md:grid md:grid-cols-2 md:gap-3 md:items-start">
           {routes.map((r) => {
             const expanded = open === r.id;
             const done = r.stops.filter((s) => s.status === "completed").length;
@@ -133,7 +135,7 @@ export default function HistoryView({
             // completion — falls back to first-arrival→last-stop when either is missing.
             const outTotal = dur(mins(r.startedAt ?? firstArrived, r.completedAt ?? lastDone)) ?? dur(mins(firstArrived, lastDone));
             return (
-              <div key={r.id} className="bg-cream rounded-xl border border-cream-dark overflow-hidden">
+              <div key={r.id} className={`bg-cream rounded-xl border border-cream-dark overflow-hidden ${expanded ? "md:col-span-2" : ""}`}>
                 <button onClick={() => setOpen(expanded ? null : r.id)} className="w-full flex items-center justify-between p-4 text-left">
                   <div>
                     <div className="font-body font-medium text-charcoal">

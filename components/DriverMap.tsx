@@ -24,8 +24,8 @@ const C = {
   cream: "#FAF7F2",
   creamDark: "#F0EBE1",
   charcoal: "#1A1A1A",
-  serif: '"Cormorant Garamond", Georgia, serif',
-  body: '"Jost", system-ui, sans-serif',
+  serif: 'var(--font-lora), Georgia, serif',
+  body: 'var(--font-poppins), system-ui, sans-serif',
 };
 
 const STORAGE_BASE = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/storage/v1/object/public/stop-photos/`;
@@ -630,7 +630,26 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
           <div style={{ textAlign: "center", padding: "6px 0 8px" }}>
             <div style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(2,115,62,0.1)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}><Icon name="check" size={38} color={C.green} strokeWidth={2.4} /></div>
             <div style={{ fontFamily: C.serif, fontSize: 28, color: C.green, fontWeight: 500 }}>Route Complete</div>
-            <div style={{ fontSize: 14, color: "rgba(26,26,26,0.5)", marginTop: 3 }}>All {stops.length} stops done. Head back to the shop.</div>
+            <div style={{ fontSize: 14, color: "rgba(26,26,26,0.5)", marginTop: 3 }}>Head back to the shop.</div>
+            {/* End-of-day summary — what actually happened, at a glance */}
+            {(() => {
+              const done = stops.filter((s) => s.status === "completed").length;
+              const skipped = stops.filter((s) => s.status === "skipped").length;
+              const photos = stops.reduce((n, s) => n + (s.photos?.length ?? 0), 0);
+              const cell = (v: string, l: string) => (
+                <div style={{ textAlign: "center" as const }}>
+                  <div style={{ fontFamily: C.serif, fontSize: 22, color: C.charcoal }}>{v}</div>
+                  <div style={{ fontFamily: C.body, fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(26,26,26,0.45)", marginTop: 2 }}>{l}</div>
+                </div>
+              );
+              return (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 14, background: "rgba(2,115,62,0.05)", border: "1px solid rgba(2,115,62,0.15)", borderRadius: 13, padding: "12px 8px" }}>
+                  {cell(String(done), "Delivered")}
+                  {cell(skipped ? String(skipped) : "0", "Flagged")}
+                  {cell(sync.pendingPhotos > 0 ? `${photos - sync.pendingPhotos}/${photos}` : String(photos), sync.pendingPhotos > 0 ? "Photos synced" : "Photos")}
+                </div>
+              );
+            })()}
             {sync.pendingPhotos > 0 && (
               <div style={{ marginTop: 14, background: "rgba(213,154,41,0.14)", border: "1px solid rgba(213,154,41,0.5)", borderRadius: 13, padding: "12px 14px", textAlign: "left", display: "flex", gap: 10, alignItems: "flex-start" }}>
                 <Icon name="cloud" size={19} color={C.goldDark} />
