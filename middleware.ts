@@ -92,6 +92,11 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|manifest.json|icon-.*\\.png).*)",
+    // /api/photo is excluded deliberately: running middleware on it puts an
+    // extra hop in front of a large multipart upload, and the body was arriving
+    // at the handler empty/truncated ("no boundary found in multipart body"),
+    // failing every photo upload. The route authenticates itself from the same
+    // cookie, so skipping middleware costs nothing.
+    "/((?!api/photo|_next/static|_next/image|favicon.ico|manifest.json|icon-.*\\.png).*)",
   ],
 };

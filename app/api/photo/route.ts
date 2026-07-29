@@ -9,22 +9,48 @@ export async function POST(request: NextRequest) {
   const user = await verifySessionToken(token.value);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const formData = await request.formData();
+  // Parsing the multipart body has been failing in production with
+  // "no boundary found in multipart body" — the body arrives empty or truncated,
+  // so undici can't find the boundary the Content-Type header promises. Let it
+  // surface as a retryable 503 (never 400, which makes the offline queue delete
+  // the photo) and log what actually arrived so the cause is visible next time.
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch (err) {
+    console.error("[photo] multipart parse failed", {
+      contentType: request.headers.get("content-type"),
+      contentLength: request.headers.get("content-length"),
+      transferEncoding: request.headers.get("transfer-encoding"),
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return NextResponse.json({ error: "Could not read upload" }, { status: 503 });
+  }
+
   const file = formData.get("photo") as File | null;
   const stopId = formData.get("stopId") as string | null;
   const rawKind = formData.get("kind");
   const kind = rawKind === "dropoff" || rawKind === "pickup" ? rawKind : null;
 
-  if (!file || !stopId) {
-    return NextResponse.json({ error: "Missing photo or stopId" }, { status: 400 });
+  // A body that parsed but arrived without its parts is the same truncation
+  // problem, not a bad client — 503 so the queue retries instead of discarding.
+  if (!file || typeof file === "string" || file.size === 0) {
+    console.error("[photo] upload missing/empty file part", {
+      contentLength: request.headers.get("content-length"),
+      keys: Array.from(formData.keys()),
+    });
+    return NextResponse.json({ error: "Upload incomplete" }, { status: 503 });
+  }
+  if (!stopId) {
+    return NextResponse.json({ error: "Missing stopId" }, { status: 400 });
   }
 
-  // Defense in depth: Vercel already rejects request bodies over ~4.5MB before
-  // this handler runs, but if that ever changes (or on a different host), don't
-  // let an oversized photo retry forever in the client's offline queue — a 400
-  // tells it to drop the item instead of blocking every photo queued behind it.
+  // Vercel rejects request bodies over ~4.5MB before this handler even runs, so
+  // treat anything near that as too big. 413 (never 400) — the client drops a
+  // photo on 400, and proof photos must never be destroyed for being too large.
+  // On 413 the client re-compresses the stored blob and retries.
   if (file.size > 4 * 1024 * 1024) {
-    return NextResponse.json({ error: "Photo too large" }, { status: 400 });
+    return NextResponse.json({ error: "Photo too large" }, { status: 413 });
   }
 
   const supabase = createAdminClient();
