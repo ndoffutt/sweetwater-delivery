@@ -526,7 +526,9 @@ export default function DispatchConsole({
   const checkKey = included.map((r) => r.key).join(",");
   const alreadySent = phase === "dispatched";
   useEffect(() => {
-    if (included.length < 3 || alreadySent) { setRoadCheck(null); return; }
+    // Runs pre-dispatch (to fix the order in time) AND post-dispatch (so the
+    // verdict is visible right on Today, not only on the route detail page).
+    if (included.length < 3) { setRoadCheck(null); return; }
     let cancelled = false;
     const t = setTimeout(async () => {
       try {
@@ -842,6 +844,19 @@ export default function DispatchConsole({
     <div className="p-4 md:p-8 md:max-w-5xl xl:max-w-[1400px] md:mx-auto pb-24 md:pb-8">
       <Header dateLabel={dateLabel} dispatched={dispatched} outSince={dispatched ? today?.startedAt : null} />
       <VanChip />
+      {/* Route-order verdict, visible where the office actually looks. Quiet
+          when good; specific when the order cost real miles. */}
+      {dispatched && roadCheck && (
+        <div className={`mt-2.5 flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 ${roadCheck.alreadyGood ? "bg-green-primary/[0.06] border-green-primary/25" : "bg-gold-primary/[0.10] border-gold-primary/35"}`}>
+          <span className="font-body text-[12px]">
+            {roadCheck.alreadyGood ? (
+              <span className="text-green-primary">✓ Route went out well ordered — about {formatMiles(roadCheck.currentMiles)} of driving.</span>
+            ) : (
+              <span className="text-charcoal">This order drives <b>{formatMiles(roadCheck.savedMiles)}</b> further than the best one — worth a reshuffle next time.</span>
+            )}
+          </span>
+        </div>
+      )}
       <SignupBanner count={pendingSignups} />
 
       {!dispatched && wrongDayCount > 0 && runDay && (

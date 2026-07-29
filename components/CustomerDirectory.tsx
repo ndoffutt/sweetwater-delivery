@@ -372,9 +372,18 @@ export default function CustomerDirectory({
                 </div>
                 <p className="text-xs text-charcoal/40 font-body truncate">{c.address}</p>
               </div>
-              {lastDelivered(c.id) && (
-                <span className="text-[11px] text-charcoal/40 font-body shrink-0">{fmtDate(lastDelivered(c.id)!)}</span>
-              )}
+              <span className="shrink-0 flex flex-col items-end gap-1">
+                {sort !== "route" && (c.delivery_days?.length ?? 0) > 0 && (
+                  <span className="px-1.5 h-5 rounded-md flex items-center text-[10px] font-body font-semibold bg-green-primary/10 text-green-primary" title={formatDays(c.delivery_days)}>
+                    {RUN_DAYS.filter((d) => c.delivery_days?.includes(d)).map((d) => DAY_INITIAL[d]).join("·")}
+                  </span>
+                )}
+                {lastDelivered(c.id) && (
+                  <span className="text-[11px] text-charcoal/40 font-body" title="Last delivered">
+                    Del. {fmtDate(lastDelivered(c.id)!)}
+                  </span>
+                )}
+              </span>
             </button>
             );
           })}
