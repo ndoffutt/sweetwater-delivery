@@ -308,6 +308,11 @@ export default function SettingsPanel({
                     </span>
                     <span className="font-body font-medium text-charcoal truncate">{deletionTitle(d)}</span>
                   </div>
+                  {typeof d.before_state?.removal_reason === "string" && d.before_state.removal_reason && (
+                    <p className="text-[12px] font-body text-charcoal/70 mt-1 italic">
+                      &ldquo;{d.before_state.removal_reason}&rdquo;
+                    </p>
+                  )}
                   <div className="flex items-center gap-2 mt-1.5 text-[11px] font-body text-charcoal/45 flex-wrap">
                     <span>by <b className="text-charcoal/70">{d.deleted_by_name ?? "system"}</b></span>
                     <span>·</span>

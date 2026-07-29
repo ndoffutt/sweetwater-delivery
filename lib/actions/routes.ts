@@ -53,17 +53,23 @@ export async function addStopToRoute(
   return { success: true };
 }
 
-export async function removeStop(routeId: string, stopId: string) {
+export async function removeStop(routeId: string, stopId: string, reason?: string) {
   const session = await requireSession("dispatcher");
   const supabase = createAdminClient();
 
-  // Soft delete — the audit trigger captures the dropped stop in
-  // deletion_audit so it can be reviewed (and reversed) from Settings.
-  // Falls back to hard delete on a pre-migration environment.
+  // Soft delete — the audit trigger captures the dropped stop (including the
+  // reason, set in this same update) in deletion_audit so it can be reviewed
+  // from Settings. Falls back to hard delete on a pre-migration environment;
+  // if only removal_reason is missing, retry once without it rather than
+  // losing the removal entirely.
+  const base = { deleted_at: new Date().toISOString(), deleted_by: session.id };
   let { error } = await supabase
     .from("route_stops")
-    .update({ deleted_at: new Date().toISOString(), deleted_by: session.id })
+    .update(reason ? { ...base, removal_reason: reason } : base)
     .eq("id", stopId);
+  if (error && /removal_reason/i.test(error.message) && /(does not exist|schema cache|could not find)/i.test(error.message)) {
+    ({ error } = await supabase.from("route_stops").update(base).eq("id", stopId));
+  }
   if (error && /deleted_at|deleted_by/i.test(error.message) && /(does not exist|schema cache|could not find)/i.test(error.message)) {
     ({ error } = await supabase.from("route_stops").delete().eq("id", stopId));
   }

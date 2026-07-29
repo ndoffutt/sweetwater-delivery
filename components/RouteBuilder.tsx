@@ -19,6 +19,8 @@ interface RouteBuilderProps {
   customers: Customer[];
 }
 
+const stopName = (s: RouteStop) => s.customer?.name ?? s.prospect_visit?.name ?? "this stop";
+
 function fmtTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], {
     hour: "numeric",
@@ -38,6 +40,11 @@ export default function RouteBuilder({
   const [showAdd, setShowAdd] = useState(false);
   const [addQuery, setAddQuery] = useState("");
   const [isPending, startTransition] = useTransition();
+  // Removing a stop asks why (e.g. "out of town") — captured in the same
+  // soft-delete write, so it shows up next to the entry in Settings →
+  // Recently Deleted instead of a removal nobody can explain later.
+  const [removeTarget, setRemoveTarget] = useState<RouteStop | null>(null);
+  const [removeReason, setRemoveReason] = useState("");
   // Tapping a delivery card opens its details here (a popup), instead of
   // navigating off to a separate delivery/customer screen.
   const [detailStop, setDetailStop] = useState<RouteStop | null>(null);
@@ -72,13 +79,13 @@ export default function RouteBuilder({
     return c.name.toLowerCase().includes(q) || (c.address ?? "").toLowerCase().includes(q);
   });
 
-  function handleRemove(stop: RouteStop) {
+  function handleRemove(stop: RouteStop, reason: string) {
     setStops((s) => s.filter((st) => st.id !== stop.id));
     startTransition(async () => {
       if (stop.kind === "prospect_visit" && stop.prospect_visit) {
-        await removeProspectVisit(routeId, stop.prospect_visit.prospect_id);
+        await removeProspectVisit(routeId, stop.prospect_visit.prospect_id, reason);
       } else {
-        await removeStop(routeId, stop.id);
+        await removeStop(routeId, stop.id, reason);
       }
       router.refresh();
     });
@@ -246,7 +253,7 @@ export default function RouteBuilder({
               )}
               {editable && (
                 <button
-                  onClick={() => handleRemove(stop)}
+                  onClick={() => { setRemoveTarget(stop); setRemoveReason(""); }}
                   disabled={isPending}
                   className="block mt-1 text-xs text-red-400 hover:text-red-600"
                 >
@@ -423,6 +430,44 @@ export default function RouteBuilder({
           </div>
         );
       })()}
+
+      {/* Remove-with-reason — captured so a later "why isn't so-and-so on the
+          route" question has an answer instead of a bare audit-log entry. */}
+      {removeTarget && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-charcoal/40 p-4" onClick={() => setRemoveTarget(null)}>
+          <div className="bg-cream rounded-2xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-serif text-lg font-medium text-charcoal">
+              Remove {stopName(removeTarget)}?
+            </h3>
+            <p className="text-xs text-charcoal/45 font-body mt-1 mb-3">
+              Why is this stop coming off the route? Shows up in Settings → Recently Deleted.
+            </p>
+            <input
+              autoFocus
+              value={removeReason}
+              onChange={(e) => setRemoveReason(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && removeReason.trim()) { handleRemove(removeTarget, removeReason.trim()); setRemoveTarget(null); } }}
+              placeholder="e.g. out of town, called to cancel…"
+              className="w-full p-2.5 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary"
+            />
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => setRemoveTarget(null)}
+                className="flex-1 min-h-tap border border-cream-dark rounded-xl text-charcoal/50 font-body text-xs uppercase tracking-widest"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { handleRemove(removeTarget, removeReason.trim()); setRemoveTarget(null); }}
+                disabled={!removeReason.trim()}
+                className="flex-1 min-h-tap bg-red-500 disabled:bg-cream-dark disabled:text-charcoal/30 text-cream rounded-xl font-body text-xs uppercase tracking-widest"
+              >
+                Remove stop
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
