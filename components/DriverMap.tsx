@@ -574,6 +574,14 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
           <div style={{ width: 80, height: 80, borderRadius: "50%", background: "rgba(2,115,62,0.1)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}><Icon name="check" size={42} color={C.green} strokeWidth={2.4} /></div>
           <div style={{ fontFamily: C.serif, fontSize: 30, color: C.green, fontWeight: 500 }}>All done for today</div>
           <div style={{ fontSize: 14.5, color: "rgba(26,26,26,0.55)", marginTop: 6, lineHeight: 1.5 }}>Nice work — every stop on today&apos;s route is complete.</div>
+          {sync.pendingPhotos > 0 && (
+            <div style={{ marginTop: 16, background: "rgba(213,154,41,0.14)", border: "1px solid rgba(213,154,41,0.5)", borderRadius: 13, padding: "12px 14px", textAlign: "left", display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <Icon name="cloud" size={19} color={C.goldDark} />
+              <div style={{ fontFamily: C.body, fontSize: 13, color: C.charcoal, lineHeight: 1.4 }}>
+                <b>{sync.pendingPhotos} photo{sync.pendingPhotos === 1 ? "" : "s"} still uploading in the background.</b> They&apos;re saved on this phone — keep the app open{online ? "" : " and get back on signal"} and this will clear on its own.
+              </div>
+            </div>
+          )}
           {isManager && (
             <button onClick={() => router.push("/dispatch")} style={{ marginTop: 20, minHeight: 52, padding: "0 28px", borderRadius: 16, background: C.green, color: C.cream, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase" }}>Back to Dispatch</button>
           )}
