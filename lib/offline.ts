@@ -23,6 +23,7 @@ import {
   flagStop,
 } from "@/lib/actions/stops";
 import { completeProspectVisit, skipProspectVisit } from "@/lib/actions/prospectVisits";
+import { compressImage } from "@/lib/compressImage";
 import type { StopStatus } from "@/lib/types";
 
 // ── Types ──────────────────────────────────────────────────────
@@ -221,6 +222,23 @@ async function dispatchAction(a: QueuedAction): Promise<void> {
 
 // ── Flush ──────────────────────────────────────────────────────
 
+/**
+ * Last-ditch shrink for a photo already sitting in the queue. Photos captured
+ * before compression was guaranteed (or whose compression failed) can be stored
+ * raw at full phone-camera size, which the upload endpoint refuses forever.
+ * Re-encoding on the way out rescues them instead of stranding the proof.
+ * Returns null if it can't be made smaller, so the caller leaves it untouched.
+ */
+async function shrinkQueued(p: QueuedPhoto): Promise<Blob | null> {
+  try {
+    const asFile = new File([p.blob], "photo.jpg", { type: p.type || "image/jpeg" });
+    const out = await compressImage(asFile);
+    return out.size < p.blob.size ? out : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function flush(): Promise<void> {
   if (syncing || typeof window === "undefined") return;
   if (!navigator.onLine) return;
@@ -253,8 +271,17 @@ export async function flush(): Promise<void> {
       } catch {
         break; // no network reached the server at all; remaining photos wait for the next flush
       }
+      // Too big for the platform's request-body limit (413 from us, or Vercel's
+      // own rejection before the handler runs). The blob was queued raw because
+      // compression failed at capture time, so shrink it NOW and retry on the
+      // next pass. Never drop it — an oversized photo is still valid proof.
+      if (res.status === 413 || res.status === 431) {
+        const shrunk = await shrinkQueued(p);
+        if (shrunk) await idbPut({ ...p, blob: shrunk, type: shrunk.type });
+        continue;
+      }
       if (res.status === 400) {
-        // Permanently invalid (e.g. stop no longer exists, or photo rejected as too large): drop it.
+        // Permanently invalid (the stop no longer exists): drop it.
         await idbDelete(p.id);
         continue;
       }

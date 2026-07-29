@@ -19,12 +19,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing photo or stopId" }, { status: 400 });
   }
 
-  // Defense in depth: Vercel already rejects request bodies over ~4.5MB before
-  // this handler runs, but if that ever changes (or on a different host), don't
-  // let an oversized photo retry forever in the client's offline queue — a 400
-  // tells it to drop the item instead of blocking every photo queued behind it.
+  // Vercel rejects request bodies over ~4.5MB before this handler even runs, so
+  // treat anything near that as too big. 413 (never 400) — the client drops a
+  // photo on 400, and proof photos must never be destroyed for being too large.
+  // On 413 the client re-compresses the stored blob and retries.
   if (file.size > 4 * 1024 * 1024) {
-    return NextResponse.json({ error: "Photo too large" }, { status: 400 });
+    return NextResponse.json({ error: "Photo too large" }, { status: 413 });
   }
 
   const supabase = createAdminClient();
