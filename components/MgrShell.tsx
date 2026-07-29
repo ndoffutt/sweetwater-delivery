@@ -17,13 +17,26 @@ const ITEMS: Record<NavId, NavItem> = {
   live: { id: "live", label: "Live", href: "/dispatch/live" },
   reports: { id: "reports", label: "Reports", href: "/dispatch/reports" },
 };
-// Redesigned console nav (both roles): Today / Customers / Prospects / Record.
-// Messages, Reports, Signups and Settings live on the /owner home instead of
-// eating console tabs. Live is merged into Today's dispatched state.
+// One navigation for everything. Four primary tabs (Today / Customers /
+// Prospects / Record) plus a secondary "More" group — no bouncing through a
+// separate home screen to reach Reports or Settings.
 const NAV_BY_ROLE: Record<"dispatcher" | "admin", NavItem[]> = {
   admin: [ITEMS.dispatch, ITEMS.customers, ITEMS.sales, ITEMS.history],
   dispatcher: [ITEMS.dispatch, ITEMS.customers, ITEMS.sales, ITEMS.history],
 };
+
+// Secondary destinations. Messages stays owner-only for now; Reports is open to
+// the manager as well.
+type MoreItem = { href: string; label: string; adminOnly?: boolean };
+const MORE_ITEMS: MoreItem[] = [
+  { href: "/dispatch/reports", label: "Reports" },
+  { href: "/dispatch/signups", label: "Signups" },
+  { href: "/dispatch/messages", label: "Messages", adminOnly: true },
+  { href: "/dispatch/route-plan", label: "Route plan", adminOnly: true },
+  { href: "/settings", label: "Settings" },
+];
+const moreFor = (role: "dispatcher" | "admin") =>
+  MORE_ITEMS.filter((m) => !m.adminOnly || role === "admin");
 
 function NavIcon({ id, className = "w-5 h-5" }: { id: NavId; className?: string }) {
   const p = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -60,8 +73,10 @@ export default function MgrShell({
   const pathname = usePathname();
   const router = useRouter();
   const NAV = NAV_BY_ROLE[role];
-  const hasMessages = NAV.some((n) => n.id === "messages");
+  const hasMessages = role === "admin"; // Messages lives under More, owner-only
   const hasSales = NAV.some((n) => n.id === "sales");
+  const [moreOpen, setMoreOpen] = useState(false);
+  useEffect(() => setMoreOpen(false), [pathname]);
 
   // Unread-texts badge on the Messages tab. Tolerant: 0 until the messaging
   // migration runs / Twilio is connected.
@@ -154,11 +169,22 @@ export default function MgrShell({
               </Link>
             );
           })}
+
+          <div className="pt-4 pb-1 px-3 text-[10px] uppercase tracking-[0.18em] text-cream/35 font-body">More</div>
+          {moreFor(role).map((m) => {
+            const on = pathname.startsWith(m.href);
+            return (
+              <Link key={m.href} href={m.href}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-body transition-colors ${on ? "bg-white/15 text-cream" : "text-cream/55 hover:text-cream hover:bg-white/5"}`}>
+                {m.label}
+                {m.href === "/dispatch/messages" && unread > 0 && (
+                  <span className="ml-auto bg-gold-primary text-charcoal text-[10px] font-body font-semibold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center">{unread}</span>
+                )}
+              </Link>
+            );
+          })}
         </nav>
         <div className="px-3 pb-3 space-y-1">
-          <Link href="/owner" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-body text-cream/65 hover:text-cream hover:bg-white/5 transition-colors">
-            ← Home
-          </Link>
           <Link href="/driver" className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-gold-primary/90 hover:bg-gold-primary text-charcoal text-sm font-body transition-colors">
             <TruckIcon /> Driver View
           </Link>
@@ -177,23 +203,43 @@ export default function MgrShell({
           <div className="font-serif text-lg font-light leading-none">{current.label}</div>
           <div className="text-[10px] uppercase tracking-[0.18em] text-gold-light">Sweetwater&apos;s Manager Console</div>
         </div>
-        <div className="flex items-center gap-3">
-          <Link href="/driver" className="flex items-center gap-1.5 bg-gold-primary text-charcoal rounded-full pl-2.5 pr-3 py-1.5 text-[11px] uppercase tracking-[0.12em] font-body">
-            <TruckIcon className="w-4 h-4" /> Drive
-          </Link>
-          <Link href="/owner" className="text-[11px] uppercase tracking-[0.16em] text-cream/70 min-h-tap flex items-center">
-            ← Home
-          </Link>
-        </div>
+        <Link href="/driver" className="flex items-center gap-1.5 bg-gold-primary text-charcoal rounded-full pl-2.5 pr-3 py-1.5 text-[11px] uppercase tracking-[0.12em] font-body">
+          <TruckIcon className="w-4 h-4" /> Drive
+        </Link>
       </header>
 
       {/* Content */}
       <main className="flex-1 min-w-0 md:overflow-auto pb-20 md:pb-0">{children}</main>
 
+      {/* Mobile "More" sheet */}
+      {moreOpen && (
+        <div className="md:hidden fixed inset-0 z-40" onClick={() => setMoreOpen(false)}>
+          <div className="absolute inset-0 bg-charcoal/40" />
+          <div
+            className="absolute bottom-0 inset-x-0 bg-cream rounded-t-2xl p-4 pb-8 space-y-1"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-10 h-1 rounded-full bg-charcoal/15 mx-auto mb-3" />
+            {moreFor(role).map((m) => (
+              <Link key={m.href} href={m.href}
+                className="flex items-center justify-between min-h-tap px-4 py-3 rounded-xl bg-cream-dark/50 font-body text-sm text-charcoal">
+                {m.label}
+                {m.href === "/dispatch/messages" && unread > 0 && (
+                  <span className="bg-gold-primary text-charcoal text-[10px] font-body font-semibold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center">{unread}</span>
+                )}
+              </Link>
+            ))}
+            <button onClick={signOut} className="w-full min-h-tap px-4 py-3 rounded-xl font-body text-sm text-charcoal/50 text-left">
+              Sign out
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Mobile bottom tabs */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-green-primary text-cream flex">
         {NAV.map((n) => {
-          const on = n.id === active;
+          const on = n.id === active && !moreOpen;
           return (
             <Link key={n.id} href={n.href}
               className={`relative flex-1 flex flex-col items-center gap-0.5 py-2.5 ${on ? "text-gold-light" : "text-cream/65"}`}>
@@ -205,6 +251,18 @@ export default function MgrShell({
             </Link>
           );
         })}
+        <button
+          onClick={() => setMoreOpen((v) => !v)}
+          className={`relative flex-1 flex flex-col items-center gap-0.5 py-2.5 ${moreOpen ? "text-gold-light" : "text-cream/65"}`}
+        >
+          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+            <circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" />
+          </svg>
+          <span className="text-[10px] font-body tracking-wide">More</span>
+          {hasMessages && unread > 0 && (
+            <span className="absolute top-1.5 right-[22%] w-2 h-2 rounded-full bg-gold-primary" />
+          )}
+        </button>
       </nav>
     </div>
   );

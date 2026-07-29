@@ -19,7 +19,7 @@ export default async function LoginPage({
   }
 
   if (session) {
-    redirect(session.role === "driver" ? "/driver" : "/owner");
+    redirect(session.role === "driver" ? "/driver" : "/dispatch");
   }
 
   return (
