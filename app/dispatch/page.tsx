@@ -19,6 +19,7 @@ interface RawStop {
   has_pickup: boolean;
   notes: string | null;
   piece_count: number | null;
+  deleted_at: string | null;
   customers: {
     id: string;
     name: string;
@@ -46,7 +47,7 @@ export default async function DispatchPage() {
     supabase
       .from("routes")
       .select(
-        `id,status,date,started_at,route_stops(stop_order,status,has_dropoff,has_pickup,notes,piece_count,customers(id,name,address,phone,lat,lng,tags${withDay ? ",delivery_days" : ""}))`
+        `id,status,date,started_at,route_stops(stop_order,status,has_dropoff,has_pickup,notes,piece_count,deleted_at,customers(id,name,address,phone,lat,lng,tags${withDay ? ",delivery_days" : ""}))`
       )
       .eq("date", today)
       .is("deleted_at", null)
@@ -126,7 +127,7 @@ export default async function DispatchPage() {
     : customersRes.data;
 
   const stops: InitialStop[] = (((route?.route_stops ?? []) as unknown) as RawStop[])
-    .filter((s) => s.customers)
+    .filter((s) => s.customers && !s.deleted_at)
     .map((s) => ({
       customerId: s.customers!.id,
       name: s.customers!.name,
