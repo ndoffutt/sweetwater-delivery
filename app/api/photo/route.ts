@@ -19,6 +19,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing photo or stopId" }, { status: 400 });
   }
 
+  // Defense in depth: Vercel already rejects request bodies over ~4.5MB before
+  // this handler runs, but if that ever changes (or on a different host), don't
+  // let an oversized photo retry forever in the client's offline queue — a 400
+  // tells it to drop the item instead of blocking every photo queued behind it.
+  if (file.size > 4 * 1024 * 1024) {
+    return NextResponse.json({ error: "Photo too large" }, { status: 400 });
+  }
+
   const supabase = createAdminClient();
 
   // Reject photos for stops that no longer exist (e.g. the route was cleared)
