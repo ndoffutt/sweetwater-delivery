@@ -26,13 +26,23 @@ export async function GET(request: NextRequest) {
       `id, date, status, started_at, completed_at,
        route_stops(id, route_id, customer_id, stop_order, status,
          has_dropoff, has_pickup, dropoff_confirmed, pickup_confirmed,
-         notes, arrived_at, completed_at,
+         notes, arrived_at, completed_at, deleted_at,
          customer:customers(id, name, address, lat, lng))`
     )
     .eq("date", today)
     .is("deleted_at", null)
     .order("stop_order", { referencedTable: "route_stops" })
     .maybeSingle();
+
+  // The .is("deleted_at", null) above only filters the outer `routes` row —
+  // Supabase doesn't apply it to the nested route_stops relation, so a removed
+  // stop (soft-deleted via removeStop) would otherwise keep showing up on the
+  // live dispatch board and keep the route from ever reading "done".
+  if (route) {
+    route.route_stops = (route.route_stops ?? []).filter(
+      (s: { deleted_at?: string | null }) => !s.deleted_at
+    );
+  }
 
   // Live van position from the Bouncie OBD device (best-effort; null when
   // Bouncie isn't configured or is unreachable). This is the actual vehicle, so
