@@ -536,6 +536,38 @@ export default function DispatchConsole({
     autoOrderedRef.current = false; // a rebuilt list may auto-order again
   }, [original]);
   const [autoOrderedMiles, setAutoOrderedMiles] = useState<number | null>(null);
+
+  // "What should I change" detail for the dispatched verdict. Scoped to only
+  // the stops the driver hasn't reached yet — reordering a completed stop
+  // makes no sense, so it's excluded from both the check and the suggestion.
+  const [reorderOpen, setReorderOpen] = useState(false);
+  const [reorderLoading, setReorderLoading] = useState(false);
+  const [pendingCheck, setPendingCheck] = useState<
+    { order: number[]; movedCount: number; savedMiles: number } | null
+  >(null);
+  const [pendingRows, setPendingRows] = useState<Row[]>([]);
+  async function loadReorderDetail() {
+    const pending = included.filter((r) => {
+      if (!r.customerId) return true;
+      const lv = liveByCustomer.get(r.customerId);
+      return !lv || (lv.status !== "completed" && lv.status !== "skipped");
+    });
+    setPendingRows(pending);
+    if (pending.length < 3) { setPendingCheck(null); return; }
+    setReorderLoading(true);
+    try {
+      const res = await fetch("/api/route-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stops: pending.map((r) => ({ id: r.key, lat: r.lat, lng: r.lng })) }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPendingCheck(data.check ?? null);
+      }
+    } catch { /* leave whatever was there */ }
+    setReorderLoading(false);
+  }
   useEffect(() => {
     // Runs pre-dispatch (to fix the order in time) AND post-dispatch (so the
     // verdict is visible right on Today, not only on the route detail page).
@@ -877,16 +909,76 @@ export default function DispatchConsole({
       <Header dateLabel={dateLabel} dispatched={dispatched} outSince={dispatched ? today?.startedAt : null} />
       <VanChip />
       {/* Route-order verdict, visible where the office actually looks. Quiet
-          when good; specific when the order cost real miles. */}
+          when good; specific — and clickable for the detail — when the order
+          cost real miles. */}
       {dispatched && roadCheck && (
-        <div className={`mt-2.5 flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 ${roadCheck.alreadyGood ? "bg-green-primary/[0.06] border-green-primary/25" : "bg-gold-primary/[0.10] border-gold-primary/35"}`}>
-          <span className="font-body text-[12px]">
-            {roadCheck.alreadyGood ? (
-              <span className="text-green-primary">✓ Route went out well ordered — about {formatMiles(roadCheck.currentMiles)} of driving.</span>
-            ) : (
-              <span className="text-charcoal">This order drives <b>{formatMiles(roadCheck.savedMiles)}</b> further than the best one — worth a reshuffle next time.</span>
-            )}
-          </span>
+        <div className={`mt-2.5 rounded-xl border ${roadCheck.alreadyGood ? "bg-green-primary/[0.06] border-green-primary/25" : "bg-gold-primary/[0.10] border-gold-primary/35"}`}>
+          {roadCheck.alreadyGood ? (
+            <div className="flex items-center gap-2.5 px-3.5 py-2.5">
+              <span className="font-body text-[12px] text-green-primary">
+                ✓ Route went out well ordered — about {formatMiles(roadCheck.currentMiles)} of driving.
+              </span>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={() => {
+                  const next = !reorderOpen;
+                  setReorderOpen(next);
+                  if (next && !pendingCheck && !reorderLoading) void loadReorderDetail();
+                }}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left"
+              >
+                <span className="font-body text-[12px] text-charcoal flex-1">
+                  This order drives <b>{formatMiles(roadCheck.savedMiles)}</b> further than the best one — worth a reshuffle next time.
+                </span>
+                <span className="shrink-0 font-body text-[11px] text-gold-dark uppercase tracking-widest">
+                  {reorderOpen ? "Hide ▲" : "What to change ▼"}
+                </span>
+              </button>
+              {reorderOpen && (
+                <div className="px-3.5 pb-3.5 border-t border-gold-primary/25 pt-3">
+                  {reorderLoading ? (
+                    <p className="font-body text-[12px] text-charcoal/45">Working it out…</p>
+                  ) : !pendingCheck || pendingRows.length < 3 ? (
+                    <p className="font-body text-[12px] text-charcoal/45">
+                      Not enough stops left to reorder — the remaining stops are already down to a couple.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="font-body text-[11px] text-charcoal/50 mb-2">
+                        Suggested order for the {pendingRows.length} stop{pendingRows.length === 1 ? "" : "s"} still ahead
+                        {pendingRows.length !== included.length ? ` (${included.length - pendingRows.length} already done, left in place)` : ""}:
+                      </p>
+                      <div className="space-y-1">
+                        {pendingCheck.order.map((origIdx, i) => {
+                          const r = pendingRows[origIdx];
+                          if (!r) return null;
+                          const currentPos = included.indexOf(r) + 1;
+                          const moved = origIdx !== i;
+                          return (
+                            <div key={r.key} className="flex items-center gap-2 text-[12px] font-body">
+                              <span className="shrink-0 w-5 h-5 rounded-full bg-cream text-charcoal/60 text-[10.5px] flex items-center justify-center">{i + 1}</span>
+                              <span className="flex-1 min-w-0 truncate text-charcoal">{r.customer_name}</span>
+                              {moved && <span className="shrink-0 text-charcoal/40">was #{currentPos}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {today?.id && (
+                        <Link
+                          href={`/dispatch/route/${today.id}`}
+                          className="inline-flex items-center gap-1 mt-3 text-[11px] font-body text-green-primary uppercase tracking-widest"
+                        >
+                          Open route to reorder →
+                        </Link>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
       <SignupBanner count={pendingSignups} />
