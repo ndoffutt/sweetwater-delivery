@@ -36,6 +36,7 @@ export default function RouteBuilder({
 }: RouteBuilderProps) {
   const [stops, setStops] = useState(initialStops);
   const [showAdd, setShowAdd] = useState(false);
+  const [addQuery, setAddQuery] = useState("");
   const [isPending, startTransition] = useTransition();
   // Tapping a delivery card opens its details here (a popup), instead of
   // navigating off to a separate delivery/customer screen.
@@ -61,8 +62,15 @@ export default function RouteBuilder({
       await addStopToRoute(routeId, customerId, true, false);
       router.refresh();
       setShowAdd(false);
+      setAddQuery("");
     });
   }
+
+  const addFiltered = availableCustomers.filter((c) => {
+    if (!addQuery.trim()) return true;
+    const q = addQuery.toLowerCase();
+    return c.name.toLowerCase().includes(q) || (c.address ?? "").toLowerCase().includes(q);
+  });
 
   function handleRemove(stop: RouteStop) {
     setStops((s) => s.filter((st) => st.id !== stop.id));
@@ -251,21 +259,41 @@ export default function RouteBuilder({
         })}
       </div>
 
-      {/* Add stop */}
-      {isDraft && (
+      {/* Add stop — available any time the route is still editable, including
+          after dispatch (a walk-in request, a missed stop, a same-day add).
+          New stops land at the END of the sequence so nothing already ahead of
+          the driver gets reshuffled; the driver picks it up on their next
+          refresh (DriverMap polls for route changes while out). */}
+      {editable && (
         <>
           {showAdd ? (
             <div className="bg-cream rounded-xl p-4 border border-green-primary">
-              <p className="font-body text-sm font-medium text-charcoal mb-3">
-                Select Customer
+              <p className="font-body text-sm font-medium text-charcoal mb-1">
+                Add a stop
               </p>
+              {!isDraft && (
+                <p className="text-xs text-charcoal/45 font-body mb-3">
+                  Route is already out — this adds to the end of the driver&apos;s list.
+                </p>
+              )}
+              {availableCustomers.length > 5 && (
+                <input
+                  autoFocus
+                  value={addQuery}
+                  onChange={(e) => setAddQuery(e.target.value)}
+                  placeholder="Search name or address…"
+                  className="w-full mb-3 p-2.5 rounded-lg border border-cream-dark bg-cream text-charcoal font-body text-sm focus:outline-none focus:border-green-primary"
+                />
+              )}
               {availableCustomers.length === 0 ? (
                 <p className="text-sm text-charcoal/40 font-body">
                   All customers are already on this route.
                 </p>
+              ) : addFiltered.length === 0 ? (
+                <p className="text-sm text-charcoal/40 font-body">No match.</p>
               ) : (
                 <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {availableCustomers.map((c) => (
+                  {addFiltered.map((c) => (
                     <button
                       key={c.id}
                       onClick={() => handleAddStop(c.id)}
@@ -283,7 +311,7 @@ export default function RouteBuilder({
                 </div>
               )}
               <button
-                onClick={() => setShowAdd(false)}
+                onClick={() => { setShowAdd(false); setAddQuery(""); }}
                 className="mt-3 text-xs text-charcoal/40 font-body uppercase tracking-widest"
               >
                 Cancel
