@@ -14,7 +14,7 @@
 //  - Hashed build assets (/_next/static): cache-first, they're immutable.
 //  - APIs, server actions, cross-origin (Mapbox/Supabase): untouched — the
 //    in-app queues (lib/offline.ts) own write resilience.
-const CACHE = "sw-shell-v4";
+const CACHE = "sw-shell-v5";
 const DRIVER_SHELL = "/driver";
 
 // A real page, not a plain-text 503. If the driver ever lands here it explains
@@ -108,8 +108,20 @@ self.addEventListener("notificationclick", (e) => {
   );
 });
 
-// Network-first with a cache fallback. `fallback` supplies the last-resort
-// response so navigations can end on the offline page rather than an error.
+// Network-first, but it MUST always resolve — quickly.
+//
+// A phone in a dead zone does not fail fast: fetch() can hang for a minute or
+// more before rejecting, because the radio is attached to a tower and the
+// request is simply going nowhere. An earlier version only resolved on timeout
+// if a cached copy happened to exist, so with nothing cached the driver stared
+// at a frozen app until the OS gave up. Two hard deadlines now guarantee an
+// answer:
+//   SOFT (2.5s) — hand over the cached copy if we have one. Online this rarely
+//                 fires, so a live network still wins and the page stays fresh.
+//   HARD (7s)   — give up on the network entirely and serve the last resort.
+const SOFT_MS = 2500;
+const HARD_MS = 7000;
+
 function networkFirst(req, fallback) {
   return new Promise((resolve) => {
     let settled = false;
@@ -120,28 +132,38 @@ function networkFirst(req, fallback) {
       }
     };
 
-    const timer = setTimeout(() => {
+    const lastResort = async () => {
+      const hit =
+        (await caches.match(req, { ignoreSearch: true })) ||
+        (await caches.match(DRIVER_SHELL));
+      done(hit || (fallback ? fallback() : offlineResponse()));
+    };
+
+    // Soft deadline: prefer a cached copy over making the driver wait.
+    const soft = setTimeout(() => {
       caches.match(req, { ignoreSearch: true }).then((hit) => {
         if (hit) done(hit);
+        else caches.match(DRIVER_SHELL).then((shell) => { if (shell) done(shell); });
       });
-    }, 4000);
+    }, SOFT_MS);
+
+    // Hard deadline: never leave the page hanging on a request going nowhere.
+    const hard = setTimeout(() => { if (!settled) void lastResort(); }, HARD_MS);
 
     fetch(req)
       .then((res) => {
-        clearTimeout(timer);
+        clearTimeout(soft);
+        clearTimeout(hard);
         if (res.ok) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
         }
         done(res);
       })
-      .catch(async () => {
-        clearTimeout(timer);
-        if (settled) return;
-        const hit =
-          (await caches.match(req, { ignoreSearch: true })) ||
-          (await caches.match(DRIVER_SHELL));
-        done(hit || (fallback ? fallback() : offlineResponse()));
+      .catch(() => {
+        clearTimeout(soft);
+        clearTimeout(hard);
+        if (!settled) void lastResort();
       });
   });
 }

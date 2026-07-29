@@ -182,22 +182,52 @@ export async function enqueuePhoto(stopId: string, blob: Blob, photoKind?: "drop
   return URL.createObjectURL(blob);
 }
 
+// A phone in a dead zone does not fail fast — the radio is attached to a tower
+// and the request just goes nowhere, so a server action can hang for a minute
+// before it rejects. Anything waiting on one needs its own deadline.
+const ACTION_TIMEOUT_MS = 8000;
+const PHOTO_TIMEOUT_MS = 45000; // a photo on a weak connection legitimately takes a while
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error("timeout")), ms);
+    p.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); }
+    );
+  });
+}
+
 /**
- * Run a stop mutation with offline fallback: fire the server action now; if it
- * fails (no signal, timeout), queue it for replay. The UI has already been
- * updated optimistically by the caller. Same-kind actions for the same stop are
- * compacted to last-wins so toggling offline doesn't pile up stale writes.
+ * Run a stop mutation, offline-first: QUEUE IT FIRST, then try to send.
+ *
+ * The old order — send, and queue only if the send threw — silently lost work
+ * in exactly the situation this exists for. In a dead zone the send neither
+ * succeeds nor rejects, it hangs; the catch never runs, so nothing was ever
+ * queued. The driver saw the optimistic tick and moved on, and if the app was
+ * closed before signal returned, the office never learned the stop was done.
+ *
+ * Writing to the queue first means the driver's intent survives no matter what
+ * happens to the request. A successful send removes it again; a slow one is
+ * left to flush() and replays later. Replays are harmless — marking a stop
+ * completed or confirming a drop-off twice lands on the same state.
  */
 export async function runStopAction(action: StopActionInput): Promise<void> {
+  const id = newId();
+  const queued = readActions().filter(
+    (a) => !(a.stopId === action.stopId && a.kind === action.kind)
+  );
+  queued.push({ ...action, id });
+  writeActions(queued);
+  void emit();
+
   try {
-    await dispatchAction({ ...action, id: "live" });
-  } catch {
-    const list = readActions().filter(
-      (a) => !(a.stopId === action.stopId && a.kind === action.kind)
-    );
-    list.push({ ...action, id: newId() });
-    writeActions(list);
+    await withTimeout(dispatchAction({ ...action, id: "live" }), ACTION_TIMEOUT_MS);
+    // Landed on the server — drop it from the queue so flush() has nothing to do.
+    writeActions(readActions().filter((a) => a.id !== id));
     void emit();
+  } catch {
+    // Hung, offline, or rejected: it stays queued and flush() will retry.
   }
 }
 
@@ -228,11 +258,13 @@ export async function flush(): Promise<void> {
   void emit();
 
   try {
-    // Replay queued actions first (cheap, ordered), then photos.
+    // Replay queued actions first (cheap, ordered), then photos. Each replay
+    // gets its own deadline — a request hanging in a dead zone would otherwise
+    // hold `syncing` true forever and silently block every later flush.
     let actions = readActions();
     for (const a of actions) {
       try {
-        await dispatchAction(a);
+        await withTimeout(dispatchAction(a), ACTION_TIMEOUT_MS);
         actions = actions.filter((x) => x.id !== a.id);
         writeActions(actions);
         void emit();
@@ -249,7 +281,9 @@ export async function flush(): Promise<void> {
         fd.append("photo", p.blob, "photo.jpg");
         fd.append("stopId", p.stopId);
         if (p.photoKind) fd.append("kind", p.photoKind);
-        res = await fetch("/api/photo", { method: "POST", body: fd });
+        // Photos are large, so they get a longer deadline than an action — but
+        // still a deadline, so a stalled upload can't hold the queue open.
+        res = await withTimeout(fetch("/api/photo", { method: "POST", body: fd }), PHOTO_TIMEOUT_MS);
       } catch {
         break; // no network reached the server at all; remaining photos wait for the next flush
       }
