@@ -42,14 +42,16 @@ export default async function DriverPage() {
         />
         <div className="flex items-center justify-center min-h-[60vh] p-6">
           <div className="text-center">
-            <div className="w-20 h-20 rounded-full bg-cream flex items-center justify-center mx-auto mb-4">
-              <span className="text-4xl">🚐</span>
+            <div className="w-20 h-20 rounded-full bg-cream flex items-center justify-center mx-auto mb-4 text-green-primary">
+              <svg viewBox="0 0 24 24" className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h10v9H3zM13 9h4l3 3v3h-7z" /><circle cx="7" cy="18" r="1.6" /><circle cx="17" cy="18" r="1.6" />
+              </svg>
             </div>
             <h2 className="font-serif text-2xl font-light text-charcoal mb-2">
-              No Route Today
+              No route yet
             </h2>
             <p className="font-body text-sm text-charcoal/50">
-              Check back once dispatch sends your route.
+              It&apos;ll appear here the moment dispatch sends it.
             </p>
           </div>
         </div>
