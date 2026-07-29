@@ -279,13 +279,56 @@ export default function DispatchConsole({
           ((data.route.route_stops ?? []) as { customer_id: string | null; status: string; arrived_at: string | null; completed_at: string | null }[])
             .map((s) => ({ customer_id: s.customer_id, status: s.status, arrived_at: s.arrived_at, completed_at: s.completed_at }))
         );
-        setLiveDriver(data.driver ? { lat: data.driver.lat, lng: data.driver.lng } : null);
+        // The van's own GPS is the real vehicle — prefer it over the phone ping.
+        setLiveDriver(
+          data.van ? { lat: data.van.lat, lng: data.van.lng }
+          : data.driver ? { lat: data.driver.lat, lng: data.driver.lng }
+          : null
+        );
       } catch { /* offline blip — keep last known state */ }
     }
     void poll();
     const t = setInterval(() => void poll(), 30_000);
     return () => { stop = true; clearInterval(t); };
   }, [phase]);
+
+  // Van status chip — the Bouncie device reports around the clock, so the
+  // office can always see where the van is, route out or not.
+  interface Van { lat: number; lng: number; speed: number | null; lastUpdated: string | null }
+  const [van, setVan] = useState<Van | null>(null);
+  useEffect(() => {
+    let stop = false;
+    const poll = () =>
+      fetch("/api/live", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (!stop && d) setVan(d.van ?? null); })
+        .catch(() => {});
+    void poll();
+    const t = setInterval(() => void poll(), 60_000);
+    return () => { stop = true; clearInterval(t); };
+  }, []);
+  const vanAge = (iso: string | null) => {
+    if (!iso) return null;
+    const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    return m < 1 ? "just now" : m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h ${m % 60}m ago`;
+  };
+  const VanChip = () =>
+    van ? (
+      <a
+        href={`https://maps.google.com/?q=${van.lat},${van.lng}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-2 mt-2 bg-cream border border-cream-dark rounded-full pl-2.5 pr-3.5 py-1.5"
+      >
+        <svg viewBox="0 0 24 24" className="w-4 h-4 text-green-primary" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 6h10v9H3zM13 9h4l3 3v3h-7z" /><circle cx="7" cy="18" r="1.6" /><circle cx="17" cy="18" r="1.6" />
+        </svg>
+        <span className="font-body text-[11.5px] text-charcoal/70">
+          Van · {van.speed != null && van.speed > 1 ? `moving ${Math.round(van.speed)} mph` : "parked"}
+          {vanAge(van.lastUpdated) ? ` · ${vanAge(van.lastUpdated)}` : ""}
+        </span>
+      </a>
+    ) : null;
   const liveByCustomer = new Map(liveStops.filter((s) => s.customer_id).map((s) => [s.customer_id as string, s]));
   const [rows, setRows] = useState<Row[]>(initialPhase === "empty" ? [] : rowsFromInitial());
   const [original, setOriginal] = useState<Row[]>([]);
@@ -656,6 +699,15 @@ export default function DispatchConsole({
         <input ref={fileRef} type="file" accept=".csv,.pdf,.jpg,.jpeg,.png,.webp,.heic,text/csv,application/csv,application/vnd.ms-excel,application/pdf,image/*" onChange={onPick} className="hidden" />
 
         <Header dateLabel={dateLabel} />
+        {(() => {
+          const rd = dispatchDow != null ? dayForDow(dispatchDow) : null;
+          return rd ? (
+            <p className="font-body text-[12px] text-green-primary mt-1">
+              {DAY_LABEL[rd]} — {rd === "wednesday" ? "west run (Sag Harbor / Bridgehampton / Sagaponack)" : rd === "thursday" ? "east run (East Hampton)" : "commercial run"}
+            </p>
+          ) : null;
+        })()}
+        <VanChip />
         <SignupBanner count={pendingSignups} />
         <div className="xl:grid xl:grid-cols-[1fr_340px] xl:gap-6 xl:items-start">
         <div className="min-w-0">
@@ -789,6 +841,7 @@ export default function DispatchConsole({
   return (
     <div className="p-4 md:p-8 md:max-w-5xl xl:max-w-[1400px] md:mx-auto pb-24 md:pb-8">
       <Header dateLabel={dateLabel} dispatched={dispatched} outSince={dispatched ? today?.startedAt : null} />
+      <VanChip />
       <SignupBanner count={pendingSignups} />
 
       {!dispatched && wrongDayCount > 0 && runDay && (
