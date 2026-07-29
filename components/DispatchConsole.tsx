@@ -468,10 +468,45 @@ export default function DispatchConsole({
   // sequence, which is tuned for the full customer list — for whoever happens to
   // be on today's list it can be well short of the best order. This compares the
   // two so a bad ordering is caught before the van leaves.
-  const routeCheck = useMemo(
+  const crowCheck = useMemo(
     () => (included.length >= 3 ? checkRoute(included, SHOP) : null),
     [included]
   );
+
+  // Straight-line answer shows instantly; the real-driving-distance answer
+  // replaces it a moment later. Road distances matter here — on the East Hampton
+  // run the crow-flies ordering captured only ~22% of the available saving — but
+  // they need a server round trip, so the fast estimate holds the space.
+  const [roadCheck, setRoadCheck] = useState<
+    { currentMiles: number; bestMiles: number; savedMiles: number; movedCount: number; order: number[]; alreadyGood: boolean } | null
+  >(null);
+  const checkKey = included.map((r) => r.key).join(",");
+  const alreadySent = phase === "dispatched";
+  useEffect(() => {
+    if (included.length < 3 || alreadySent) { setRoadCheck(null); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/route-check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stops: included.map((r) => ({ id: r.key, lat: r.lat, lng: r.lng })) }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setRoadCheck(data.check ?? null);
+      } catch { /* keep the straight-line estimate */ }
+    }, 400); // debounce while the office is still editing the list
+    return () => { cancelled = true; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkKey, alreadySent]);
+
+  const routeCheck = roadCheck
+    ? { ...roadCheck, alreadyOptimal: roadCheck.alreadyGood, savedMiles: roadCheck.savedMiles,
+        currentMiles: roadCheck.currentMiles, bestMiles: roadCheck.bestMiles,
+        movedCount: roadCheck.movedCount, order: roadCheck.order }
+    : crowCheck;
+  const checkIsRoad = Boolean(roadCheck);
 
   // Reorder the included stops into the optimised sequence, leaving excluded
   // rows after them. "Reset order" still restores the original list.
@@ -820,6 +855,7 @@ export default function DispatchConsole({
                     </p>
                     <p className="font-body text-[11px] text-charcoal/45">
                       {routeCheck.movedCount} stop{routeCheck.movedCount === 1 ? "" : "s"} would move
+                      {checkIsRoad ? " · real driving miles" : " · estimating…"}
                     </p>
                   </>
                 )}
