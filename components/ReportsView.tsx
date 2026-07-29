@@ -368,8 +368,24 @@ export default function ReportsView({
     </div>
   );
 
+  // This week, at a glance — the numbers the weekly update is built from.
+  // Revenue stays out on purpose: SPOT is the source of truth for dollars.
+  const thisWeek = useMemo(() => {
+    const now = new Date();
+    const wk = weekStartKey(ymd(now));
+    const wkStops = completed.filter((s) => weekStartKey(s.date) === wk);
+    const wkTouch = touchpoints.filter((t) => weekStartKey(t.createdAt.slice(0, 10)) === wk).length;
+    const wkLegs = legs.filter((l) => weekStartKey(l.day) === wk);
+    return {
+      stops: wkStops.length,
+      items: wkStops.reduce((n, s) => n + s.pieces, 0),
+      touch: wkTouch,
+      miles: Math.round(wkLegs.reduce((n, l) => n + (l.distance ?? 0), 0)),
+    };
+  }, [completed, touchpoints, legs]);
+
   return (
-    <div className="p-5 md:p-8 md:max-w-3xl md:mx-auto">
+    <div className="p-5 md:p-8 md:max-w-6xl md:mx-auto">
       <Link href="/dispatch" className="inline-flex items-center gap-1.5 text-charcoal/50 font-body text-xs uppercase tracking-widest mb-3">
         ← Dispatch
       </Link>
@@ -377,6 +393,15 @@ export default function ReportsView({
       <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-5">
         Click any bar to drill in
       </p>
+
+      {/* This week — feeds the weekly update without reassembling by hand */}
+      <div className="bg-green-primary/[0.06] border border-green-primary/20 rounded-xl px-4 py-3 mb-6 flex flex-wrap items-baseline gap-x-6 gap-y-1">
+        <span className="font-body text-[11px] uppercase tracking-widest text-green-primary">This week</span>
+        <span className="font-body text-[13px] text-charcoal"><b>{thisWeek.stops}</b> stops</span>
+        <span className="font-body text-[13px] text-charcoal"><b>{thisWeek.items}</b> items</span>
+        <span className="font-body text-[13px] text-charcoal"><b>{thisWeek.touch}</b> touchpoints</span>
+        {thisWeek.miles > 0 && <span className="font-body text-[13px] text-charcoal"><b>{thisWeek.miles}</b> van miles</span>}
+      </div>
 
       {/* Breadcrumb */}
       <div className="flex flex-wrap items-center gap-1.5 mb-4">
@@ -522,35 +547,39 @@ export default function ReportsView({
           </button>
         </>
       ) : (
-        <>
-          {/* Stops */}
-          <h3 className="font-body text-xs uppercase tracking-widest text-charcoal/30 mb-3">
-            Stops {levelTitle}
-          </h3>
-          <div className="mb-7">
-            <BarChart
-              buckets={buckets}
-              color={GREEN}
-              unit="stops"
-              onPick={(k) => (level === "months" ? setMonth(k) : level === "weeks" ? setWeek(k) : setDay(k))}
-            />
+        // Side by side on desktop — same buckets, same drill, half the scrolling.
+        <div className="lg:grid lg:grid-cols-2 lg:gap-6">
+          <div>
+            <h3 className="font-body text-xs uppercase tracking-widest text-charcoal/30 mb-3">
+              Stops {levelTitle}
+            </h3>
+            <div className="mb-7">
+              <BarChart
+                buckets={buckets}
+                color={GREEN}
+                unit="stops"
+                onPick={(k) => (level === "months" ? setMonth(k) : level === "weeks" ? setWeek(k) : setDay(k))}
+              />
+            </div>
           </div>
-
-          {/* Items */}
-          <h3 className="font-body text-xs uppercase tracking-widest text-charcoal/30 mb-3">
-            Items dropped off {levelTitle}
-          </h3>
-          <div className="mb-8">
-            <BarChart
-              buckets={buckets}
-              color={GOLD}
-              unit="items"
-              onPick={(k) => (level === "months" ? setMonth(k) : level === "weeks" ? setWeek(k) : setDay(k))}
-            />
+          <div>
+            <h3 className="font-body text-xs uppercase tracking-widest text-charcoal/30 mb-3">
+              Items dropped off {levelTitle}
+            </h3>
+            <div className="mb-8">
+              <BarChart
+                buckets={buckets}
+                color={GOLD}
+                unit="items"
+                onPick={(k) => (level === "months" ? setMonth(k) : level === "weeks" ? setWeek(k) : setDay(k))}
+              />
+            </div>
           </div>
-        </>
+        </div>
       )}
 
+      <div className="lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
+      <div>
       {/* Customers over time */}
       <div className="flex items-baseline justify-between mb-3">
         <h3 className="font-body text-xs uppercase tracking-widest text-charcoal/30">
@@ -561,13 +590,15 @@ export default function ReportsView({
       <div className="mb-8">
         <CustomerLine dates={customerDates} />
       </div>
+      </div>
 
+      <div>
       {/* Touchpoints */}
       <div className="flex items-baseline justify-between mb-3">
         <h3 className="font-body text-xs uppercase tracking-widest text-charcoal/30">Touchpoints</h3>
         <span className="font-body text-xs text-charcoal/40">{touchpoints.length} logged</span>
       </div>
-      <div className="bg-cream rounded-xl border border-cream-dark divide-y divide-cream-dark mb-10">
+      <div className="bg-cream rounded-xl border border-cream-dark divide-y divide-cream-dark mb-10 lg:max-h-[520px] lg:overflow-y-auto">
         {touchpoints.length === 0 ? (
           <p className="p-6 text-center text-sm text-charcoal/40 font-body">No touchpoints logged yet.</p>
         ) : (
@@ -595,6 +626,8 @@ export default function ReportsView({
             </Link>
           ))
         )}
+      </div>
+      </div>
       </div>
     </div>
   );
