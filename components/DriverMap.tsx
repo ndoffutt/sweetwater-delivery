@@ -632,12 +632,13 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
 
       {/* PHOTO-UPLOAD WARNING — proof photos upload separately from the (tiny)
           status updates and can lag on weak signal. Make it loud so the driver
-          keeps the app open on Wi-Fi and the proof isn't left stranded. */}
+          keeps the app open and the proof isn't left stranded. Uploads happen
+          over any connection (cellular included), not just Wi-Fi. */}
       {sync.pendingPhotos > 0 && (
         <div style={{ position: "absolute", top: 78, left: 16, right: 16, zIndex: 11, display: "flex", alignItems: "center", gap: 10, background: "rgba(213,154,41,0.96)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: 14, padding: "11px 14px", boxShadow: "0 8px 24px rgba(0,0,0,0.2)" }}>
           <Icon name="cloud" size={20} color="#fff" />
           <div style={{ flex: 1, fontFamily: C.body, fontSize: 13, fontWeight: 600, color: "#fff", lineHeight: 1.35 }}>
-            {sync.pendingPhotos} photo{sync.pendingPhotos === 1 ? "" : "s"} still uploading — keep this app open{online ? " on Wi-Fi" : " and get back on signal"} until it finishes.
+            {sync.pendingPhotos} photo{sync.pendingPhotos === 1 ? "" : "s"} still uploading — keep this app open{online ? "" : " and get back on signal"} until it finishes.
           </div>
         </div>
       )}
@@ -679,7 +680,7 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
               <div style={{ marginTop: 14, background: "rgba(213,154,41,0.14)", border: "1px solid rgba(213,154,41,0.5)", borderRadius: 13, padding: "12px 14px", textAlign: "left", display: "flex", gap: 10, alignItems: "flex-start" }}>
                 <Icon name="cloud" size={19} color={C.goldDark} />
                 <div style={{ fontFamily: C.body, fontSize: 13, color: C.charcoal, lineHeight: 1.4 }}>
-                  <b>{sync.pendingPhotos} photo{sync.pendingPhotos === 1 ? "" : "s"} haven&apos;t uploaded yet.</b> Keep the app open{online ? " on Wi-Fi" : " and get back on signal"} until this clears, or the proof may be lost.
+                  <b>{sync.pendingPhotos} photo{sync.pendingPhotos === 1 ? "" : "s"} haven&apos;t uploaded yet.</b> Keep the app open{online ? "" : " and get back on signal"} until this clears, or the proof may be lost.
                 </div>
               </div>
             )}
