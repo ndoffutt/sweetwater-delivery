@@ -141,6 +141,7 @@ export default function OwnerHome({
           {[
             { href: "/dispatch/messages", label: "💬 Messages", adminOnly: true },
             { href: "/dispatch/reports", label: "📊 Reports", adminOnly: true },
+            { href: "/dispatch/route-plan", label: "🧭 Route plan", adminOnly: true },
             { href: "/dispatch/signups", label: "📥 Signups", adminOnly: false },
           ]
             .filter((l) => !l.adminOnly || role === "admin")
