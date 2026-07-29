@@ -64,7 +64,7 @@ export default function HistoryView({
       <Link href="/dispatch" className="inline-flex items-center gap-1.5 text-charcoal/50 font-body text-xs uppercase tracking-widest mb-3">
         ← Today
       </Link>
-      <h2 className="font-serif text-2xl font-light text-charcoal mb-1">Record</h2>
+      <h2 className="font-serif text-2xl font-light text-charcoal mb-1">History</h2>
       <p className="text-xs text-charcoal/40 font-body uppercase tracking-widest mb-5">
         Was every delivery done properly?
       </p>
