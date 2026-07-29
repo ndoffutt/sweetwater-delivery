@@ -1,13 +1,67 @@
-// Offline app shell for the driver PWA. Strategy:
-//  - Page navigations: network-first (4s timeout), falling back to the last
-//    cached copy, so the app still opens in a dead zone after a restart.
+// Offline app shell for the driver PWA.
+//
+// The driver works in real dead zones — arriving at a stop with no bars is
+// normal, not an edge case. Nothing in the driver flow may depend on the
+// network being there at that moment.
+//
+// Strategy:
+//  - /driver navigations: network-first (4s), falling back to the cached copy,
+//    then the precached /driver shell, then a branded offline page. It must
+//    NEVER resolve to a dead error page — that stranded a driver mid-route.
+//  - /driver RSC payloads (?_rsc=, Next's client-side route data): cached and
+//    served stale on failure, so a failed refresh can't escalate into a hard
+//    navigation onto an offline page.
 //  - Hashed build assets (/_next/static): cache-first, they're immutable.
-//  - APIs, server actions, and cross-origin (Mapbox/Supabase): untouched -
-//    the in-app queues (lib/offline.ts) own write resilience.
-const CACHE = "sw-shell-v3";
+//  - APIs, server actions, cross-origin (Mapbox/Supabase): untouched — the
+//    in-app queues (lib/offline.ts) own write resilience.
+const CACHE = "sw-shell-v4";
+const DRIVER_SHELL = "/driver";
+
+// A real page, not a plain-text 503. If the driver ever lands here it explains
+// itself and retries on its own the moment signal returns, instead of looking
+// like the app died.
+const OFFLINE_HTML = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+<title>Sweetwater's — Offline</title></head>
+<body style="margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:24px;text-align:center;background:#eae4d3;color:#2b2b2b;font-family:system-ui,-apple-system,sans-serif">
+  <div>
+    <div style="font-size:30px;font-weight:300;color:#02733e;line-height:1">Sweetwater's</div>
+    <div style="font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#9a7b1f;margin-top:4px">Delivery</div>
+  </div>
+  <div style="max-width:340px">
+    <h1 style="font-size:22px;font-weight:300;margin:0">No signal right now</h1>
+    <p style="font-size:14px;opacity:.65;margin-top:8px;line-height:1.5">
+      Your route and everything you've marked are saved on this phone. This screen
+      reloads by itself as soon as signal comes back — nothing is lost.
+    </p>
+  </div>
+  <button onclick="location.reload()" style="min-height:48px;padding:0 26px;background:#02733e;color:#faf7ef;font-size:14px;text-transform:uppercase;letter-spacing:.15em;border:none;border-radius:12px">Try again</button>
+  <script>
+    // Retry when the OS reports signal, and poll as a backstop (navigator.onLine
+    // is unreliable on iOS — it can read "online" with no usable throughput).
+    addEventListener('online', function () { location.reload(); });
+    setInterval(function () {
+      fetch('/driver', { method: 'HEAD', cache: 'no-store' })
+        .then(function (r) { if (r.ok) location.reload(); })
+        .catch(function () {});
+    }, 5000);
+  </script>
+</body></html>`;
+
+const offlineResponse = () =>
+  new Response(OFFLINE_HTML, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
 
 self.addEventListener("install", (e) => {
-  self.skipWaiting();
+  // Precache the driver shell so the offline fallback always exists, even if
+  // the driver's first load of the day was some other page.
+  e.waitUntil(
+    caches
+      .open(CACHE)
+      .then((c) => c.add(DRIVER_SHELL))
+      .catch(() => {}) // offline at install: the runtime cache fills in later
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (e) => {
@@ -54,18 +108,22 @@ self.addEventListener("notificationclick", (e) => {
   );
 });
 
-function networkFirst(req) {
+// Network-first with a cache fallback. `fallback` supplies the last-resort
+// response so navigations can end on the offline page rather than an error.
+function networkFirst(req, fallback) {
   return new Promise((resolve) => {
     let settled = false;
-    const timer = setTimeout(() => {
+    const done = (res) => {
       if (!settled) {
-        caches.match(req, { ignoreSearch: true }).then((hit) => {
-          if (hit && !settled) {
-            settled = true;
-            resolve(hit);
-          }
-        });
+        settled = true;
+        resolve(res);
       }
+    };
+
+    const timer = setTimeout(() => {
+      caches.match(req, { ignoreSearch: true }).then((hit) => {
+        if (hit) done(hit);
+      });
     }, 4000);
 
     fetch(req)
@@ -73,29 +131,17 @@ function networkFirst(req) {
         clearTimeout(timer);
         if (res.ok) {
           const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy));
+          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
         }
-        if (!settled) {
-          settled = true;
-          resolve(res);
-        }
+        done(res);
       })
       .catch(async () => {
         clearTimeout(timer);
         if (settled) return;
         const hit =
           (await caches.match(req, { ignoreSearch: true })) ||
-          (new URL(req.url).pathname.startsWith("/driver")
-            ? await caches.match("/driver")
-            : undefined);
-        settled = true;
-        resolve(
-          hit ||
-            new Response("Offline - reconnect to load this page.", {
-              status: 503,
-              headers: { "Content-Type": "text/plain" },
-            })
-        );
+          (await caches.match(DRIVER_SHELL));
+        done(hit || (fallback ? fallback() : offlineResponse()));
       });
   });
 }
@@ -116,7 +162,7 @@ self.addEventListener("fetch", (e) => {
           fetch(req).then((res) => {
             if (res.ok) {
               const copy = res.clone();
-              caches.open(CACHE).then((c) => c.put(req, copy));
+              caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
             }
             return res;
           })
@@ -125,17 +171,29 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
+  // Next.js client-side route data for the driver flow. Serving these from
+  // cache keeps a refresh from failing hard and bouncing the driver to a full
+  // page load — which is how a dead zone turned into an offline error screen.
+  if (url.pathname.startsWith("/driver") && url.searchParams.has("_rsc")) {
+    e.respondWith(
+      networkFirst(
+        req,
+        // No cached payload: fail quietly. The optimistic UI + offline queue
+        // already hold the truth; a 504 here is swallowed by the app.
+        () => new Response("", { status: 504 })
+      )
+    );
+    return;
+  }
+
   // Page navigations:
-  //  - /driver: network-first with offline fallback (driver needs the route to
-  //    open in a dead zone).
-  //  - everything else (dispatch / sales / owner / settings): always go to the
-  //    network so a new deploy is picked up immediately and the page never gets
-  //    trapped on a stale cached shell. Online use only, so no offline fallback
-  //    needed here.
+  //  - /driver: network-first, and guaranteed to end on something usable.
+  //  - everything else (dispatch / sales / settings): straight to the network
+  //    so a new deploy is picked up immediately and no page gets trapped on a
+  //    stale shell. Office use is online-only.
   if (req.mode === "navigate") {
     if (url.pathname.startsWith("/driver")) {
-      e.respondWith(networkFirst(req));
+      e.respondWith(networkFirst(req, offlineResponse));
     }
-    // else: let the browser fetch it normally (no SW caching).
   }
 });

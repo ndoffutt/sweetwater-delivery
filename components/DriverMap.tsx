@@ -381,9 +381,24 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
   // Wrap router.refresh — when offline-but-think-online, the deferred RSC fetch
   // fails async and unmounts the tree. The optimistic patch + cache covers the
   // UI; refreshing is best-effort only.
-  function safeRefresh() {
+  // navigator.onLine is not proof of anything — on a phone it reads "online"
+  // while attached to a tower with no usable throughput, which is exactly the
+  // dead-zone case. Refresh only after a real request succeeds; otherwise skip
+  // it entirely. Refreshing is cosmetic (the optimistic patch + offline queue
+  // already hold the truth), and a refresh that fails can escalate into a hard
+  // navigation that lands the driver on the offline page mid-stop.
+  async function safeRefresh() {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
-    try { router.refresh(); } catch { /* offline / RSC fetch failed */ }
+    try {
+      const ctl = new AbortController();
+      const t = setTimeout(() => ctl.abort(), 2500);
+      const res = await fetch("/api/health", { method: "HEAD", cache: "no-store", signal: ctl.signal });
+      clearTimeout(t);
+      if (!res.ok) return;
+    } catch {
+      return; // no real connectivity — leave the local state alone
+    }
+    try { router.refresh(); } catch { /* refresh is best-effort */ }
   }
 
   // Pick up stops dispatch adds to this route AFTER the driver already loaded
