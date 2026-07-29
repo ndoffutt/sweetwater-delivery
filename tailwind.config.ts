@@ -25,8 +25,8 @@ const config: Config = {
         charcoal: "#1A1A1A",
       },
       fontFamily: {
-        serif: ["Cormorant Garamond", "Georgia", "serif"],
-        body: ["Jost", "sans-serif"],
+        serif: ["var(--font-lora)", "Georgia", "serif"],
+        body: ["var(--font-poppins)", "sans-serif"],
       },
       letterSpacing: {
         widest: "0.25em",

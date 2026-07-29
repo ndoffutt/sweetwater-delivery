@@ -201,13 +201,13 @@ function CustomerLine({ dates }: { dates: string[] }) {
               {(isHover || i === pts.length - 1) && (
                 <>
                   <circle cx={x(i)} cy={y(p.total)} r={4} fill="#fff" stroke={GREEN} strokeWidth={2} />
-                  <text x={x(i)} y={y(p.total) - 10} textAnchor="middle" fontSize="11" fontFamily="Jost, sans-serif" fill="rgba(26,26,26,0.65)">
+                  <text x={x(i)} y={y(p.total) - 10} textAnchor="middle" fontSize="11" fontFamily="var(--font-poppins), sans-serif" fill="rgba(26,26,26,0.65)">
                     {p.total}
                   </text>
                 </>
               )}
               {showTick && (
-                <text x={x(i)} y={H - 8} textAnchor="middle" fontSize="9" fontFamily="Jost, sans-serif" fill="rgba(26,26,26,0.4)">
+                <text x={x(i)} y={H - 8} textAnchor="middle" fontSize="9" fontFamily="var(--font-poppins), sans-serif" fill="rgba(26,26,26,0.4)">
                   {monthLabel(p.key)}
                 </text>
               )}

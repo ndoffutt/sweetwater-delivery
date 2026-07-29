@@ -46,7 +46,7 @@ export default function WelcomeBack({ name }: { name: string }) {
           color: "#FAF7F2",
           borderRadius: 999,
           padding: "10px 20px",
-          fontFamily: '"Jost", system-ui, sans-serif',
+          fontFamily: 'var(--font-poppins), system-ui, sans-serif',
           fontSize: 14,
           fontWeight: 500,
           letterSpacing: "0.01em",

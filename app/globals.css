@@ -2,12 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Jost:wght@300;400;500;600&display=swap");
+/* Brand fonts (Lora display / Poppins body) are self-hosted via next/font in
+   app/layout.tsx — no render-blocking Google Fonts request. */
 
 body {
   color: #1a1a1a;
   background: #faf7f2;
-  font-family: "Jost", sans-serif;
+  font-family: var(--font-poppins), sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
