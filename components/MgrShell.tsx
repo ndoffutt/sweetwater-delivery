@@ -13,27 +13,29 @@ const ITEMS: Record<NavId, NavItem> = {
   customers: { id: "customers", label: "Customers", href: "/dispatch/customers" },
   sales: { id: "sales", label: "Prospects", href: "/sales/prospects" },
   messages: { id: "messages", label: "Messages", href: "/dispatch/messages" },
-  history: { id: "history", label: "Record", href: "/dispatch/history" },
+  history: { id: "history", label: "History", href: "/dispatch/history" },
   live: { id: "live", label: "Live", href: "/dispatch/live" },
   reports: { id: "reports", label: "Reports", href: "/dispatch/reports" },
 };
 // One navigation for everything. Four primary tabs (Today / Customers /
-// Prospects / Record) plus a secondary "More" group — no bouncing through a
+// Prospects / History) plus a secondary "More" group — no bouncing through a
 // separate home screen to reach Reports or Settings.
 const NAV_BY_ROLE: Record<"dispatcher" | "admin", NavItem[]> = {
   admin: [ITEMS.dispatch, ITEMS.customers, ITEMS.sales, ITEMS.history],
   dispatcher: [ITEMS.dispatch, ITEMS.customers, ITEMS.sales, ITEMS.history],
 };
 
-// Secondary destinations. Messages stays owner-only for now; Reports is open to
-// the manager as well.
+// Secondary destinations. Messages and Settings stay owner-only (Settings'
+// own page redirects a manager away — adminOnly here must match that gate, or
+// the manager sees the link and then silently bounces back to Today).
+// Reports is open to the manager as well.
 type MoreItem = { href: string; label: string; adminOnly?: boolean };
 const MORE_ITEMS: MoreItem[] = [
   { href: "/dispatch/reports", label: "Reports" },
   { href: "/dispatch/signups", label: "Signups" },
   { href: "/dispatch/messages", label: "Messages", adminOnly: true },
   { href: "/dispatch/route-plan", label: "Route plan", adminOnly: true },
-  { href: "/settings", label: "Settings" },
+  { href: "/settings", label: "Settings", adminOnly: true },
 ];
 const moreFor = (role: "dispatcher" | "admin") =>
   MORE_ITEMS.filter((m) => !m.adminOnly || role === "admin");
