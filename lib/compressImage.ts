@@ -13,6 +13,20 @@
  * (and HEIC files) that createImageBitmap rejects, and we always fall back to
  * the original file rather than dropping the photo.
  */
+// Hard ceiling for anything we hand to fetch(). Vercel's serverless functions
+// reject request bodies over 4.5MB outright (before our route code even runs),
+// and the offline queue treats that failure as permanent for that photo — so a
+// file that slips past this cap gets stuck retrying forever and, worse, blocks
+// every photo queued behind it. Stay well under the platform limit.
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+
+// Passes to try, in order, until the result fits under MAX_UPLOAD_BYTES.
+const PASSES = [
+  { dim: 1280, quality: 0.78 },
+  { dim: 960, quality: 0.65 },
+  { dim: 720, quality: 0.5 },
+];
+
 export async function compressImage(
   file: File,
   maxDim = 1280,
@@ -21,6 +35,8 @@ export async function compressImage(
   // Skip non-images and files already small enough to not be worth re-encoding.
   if (!file.type.startsWith("image/")) return file;
   if (file.size < 300 * 1024) return file;
+
+  const passes = maxDim === 1280 && quality === 0.78 ? PASSES : [{ dim: maxDim, quality }, ...PASSES];
 
   // Preferred path: native decode + resample, no full-res ImageData in JS heap.
   if (typeof createImageBitmap === "function") {
@@ -32,33 +48,42 @@ export async function compressImage(
 
       if (Math.max(srcW, srcH) <= maxDim && file.size < 600 * 1024) return file;
 
-      const { width: w, height: h } = scaleToFit(srcW, srcH, maxDim);
+      let best: File | null = null;
+      for (const pass of passes) {
+        const { width: w, height: h } = scaleToFit(srcW, srcH, pass.dim);
 
-      const bmp = await createImageBitmap(file, {
-        resizeWidth: w,
-        resizeHeight: h,
-        resizeQuality: "high",
-      });
+        const bmp = await createImageBitmap(file, {
+          resizeWidth: w,
+          resizeHeight: h,
+          resizeQuality: "high",
+        });
 
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          bmp.close();
+          break;
+        }
+        ctx.drawImage(bmp, 0, 0);
         bmp.close();
-        return file;
+
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, "image/jpeg", pass.quality)
+        );
+        canvas.width = 0;
+        canvas.height = 0;
+        if (!blob) continue;
+
+        const candidate = toJpegFile(blob, file.name);
+        if (!best || candidate.size < best.size) best = candidate;
+        if (candidate.size <= MAX_UPLOAD_BYTES) return candidate;
       }
-      ctx.drawImage(bmp, 0, 0);
-      bmp.close();
-
-      const blob = await new Promise<Blob | null>((resolve) =>
-        canvas.toBlob(resolve, "image/jpeg", quality)
-      );
-      canvas.width = 0;
-      canvas.height = 0;
-      if (!blob || blob.size >= file.size) return file;
-
-      return toJpegFile(blob, file.name);
+      // Never hand back the raw file if it's over the upload cap — even our
+      // smallest pass beats a guaranteed-to-fail multi-MB original.
+      if (best && (best.size < file.size || file.size > MAX_UPLOAD_BYTES)) return best;
+      if (file.size <= MAX_UPLOAD_BYTES) return file;
     } catch {
       // Fall through to legacy path (e.g. HEIC that createImageBitmap rejects).
     }
@@ -71,19 +96,27 @@ export async function compressImage(
     if (Math.max(img.width, img.height) <= maxDim && file.size < 600 * 1024)
       return file;
 
-    const { width: w, height: h } = scaleToFit(img.width, img.height, maxDim);
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return file;
-    ctx.drawImage(img, 0, 0, w, h);
+    let best: File | null = null;
+    for (const pass of passes) {
+      const { width: w, height: h } = scaleToFit(img.width, img.height, pass.dim);
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) break;
+      ctx.drawImage(img, 0, 0, w, h);
 
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", quality)
-    );
-    if (!blob || blob.size >= file.size) return file;
-    return toJpegFile(blob, file.name);
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/jpeg", pass.quality)
+      );
+      if (!blob) continue;
+
+      const candidate = toJpegFile(blob, file.name);
+      if (!best || candidate.size < best.size) best = candidate;
+      if (candidate.size <= MAX_UPLOAD_BYTES) return candidate;
+    }
+    if (best && (best.size < file.size || file.size > MAX_UPLOAD_BYTES)) return best;
+    return file;
   } catch {
     return file;
   }

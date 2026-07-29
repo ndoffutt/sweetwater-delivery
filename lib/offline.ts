@@ -243,24 +243,25 @@ export async function flush(): Promise<void> {
 
     const photos = await idbAll().catch(() => [] as QueuedPhoto[]);
     for (const p of photos.sort((a, b) => a.createdAt - b.createdAt)) {
+      let res: Response;
       try {
         const fd = new FormData();
         fd.append("photo", p.blob, "photo.jpg");
         fd.append("stopId", p.stopId);
         if (p.photoKind) fd.append("kind", p.photoKind);
-        const res = await fetch("/api/photo", { method: "POST", body: fd });
-        if (res.status === 400) {
-          // Permanently invalid (e.g. stop no longer exists): drop it.
-          await idbDelete(p.id);
-          continue;
-        }
-        if (!res.ok) throw new Error(`upload ${res.status}`);
-        const data = (await res.json().catch(() => ({}))) as { url?: string };
-        await idbDelete(p.id);
-        void emit({ uploadedStopId: p.stopId, url: data.url, photoKind: p.photoKind });
+        res = await fetch("/api/photo", { method: "POST", body: fd });
       } catch {
-        break; // network gone again; remaining photos wait for the next flush
+        break; // no network reached the server at all; remaining photos wait for the next flush
       }
+      if (res.status === 400) {
+        // Permanently invalid (e.g. stop no longer exists, or photo rejected as too large): drop it.
+        await idbDelete(p.id);
+        continue;
+      }
+      if (!res.ok) continue; // server reached but this one failed (e.g. transient 5xx) — don't let it block the rest of the queue
+      const data = (await res.json().catch(() => ({}))) as { url?: string };
+      await idbDelete(p.id);
+      void emit({ uploadedStopId: p.stopId, url: data.url, photoKind: p.photoKind });
     }
   } finally {
     syncing = false;
