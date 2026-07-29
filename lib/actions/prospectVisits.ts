@@ -236,16 +236,25 @@ export async function addProspectVisit(routeId: string, prospectId: string) {
   return { success: true };
 }
 
-export async function removeProspectVisit(routeId: string, prospectId: string) {
+export async function removeProspectVisit(routeId: string, prospectId: string, reason?: string) {
   const session = await requireSession("dispatcher");
   const supabase = createAdminClient();
-  // Soft delete — captured by the audit trigger. Falls back to hard delete
-  // on a pre-migration environment so the action still succeeds.
+  // Soft delete — captured by the audit trigger, including the reason (set in
+  // this same update). Falls back to hard delete on a pre-migration
+  // environment so the action still succeeds.
+  const base = { deleted_at: new Date().toISOString(), deleted_by: session.id };
   let { error } = await supabase
     .from("route_prospect_visits")
-    .update({ deleted_at: new Date().toISOString(), deleted_by: session.id })
+    .update(reason ? { ...base, removal_reason: reason } : base)
     .eq("route_id", routeId)
     .eq("prospect_id", prospectId);
+  if (error && /removal_reason/i.test(error.message) && /(does not exist|schema cache|could not find)/i.test(error.message)) {
+    ({ error } = await supabase
+      .from("route_prospect_visits")
+      .update(base)
+      .eq("route_id", routeId)
+      .eq("prospect_id", prospectId));
+  }
   if (error && /deleted_at|deleted_by/i.test(error.message) && /(does not exist|schema cache|could not find)/i.test(error.message)) {
     ({ error } = await supabase
       .from("route_prospect_visits")

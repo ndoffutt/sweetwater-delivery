@@ -386,6 +386,31 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
     try { router.refresh(); } catch { /* offline / RSC fetch failed */ }
   }
 
+  // Pick up stops dispatch adds to this route AFTER the driver already loaded
+  // it (a walk-in, a missed pickup) — this page is server-rendered, so nothing
+  // else would surface a mid-route addition. Poll a lightweight id-list
+  // endpoint and refresh only when the set actually changed.
+  const stopsRef = useRef(stops);
+  useEffect(() => { stopsRef.current = stops; }, [stops]);
+  useEffect(() => {
+    let stopped = false;
+    async function poll() {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return;
+      try {
+        const res = await fetch(`/api/driver/route-stops?routeId=${routeId}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { ids: string[] | null };
+        if (stopped || !Array.isArray(data.ids)) return;
+        const known = new Set(stopsRef.current.map((s) => s.id));
+        const changed = data.ids.length !== known.size || data.ids.some((id) => !known.has(id));
+        if (changed) safeRefresh();
+      } catch { /* offline blip — next tick retries */ }
+    }
+    const t = setInterval(poll, 45_000);
+    return () => { stopped = true; clearInterval(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeId]);
+
   function flash(msg: string) { setToast(msg); if (tt.current) clearTimeout(tt.current); tt.current = setTimeout(() => setToast(null), 2600); }
   function patch(id: string, f: Partial<RouteStop>) { setStops((arr) => arr.map((s) => (s.id === id ? { ...s, ...f } : s))); }
 
