@@ -98,6 +98,54 @@ export function optimizeOrder<T extends Stoppable>(items: T[], anchor: LatLng): 
   return [...chosen, ...unlocated];
 }
 
+/**
+ * Same nearest-neighbour + 2-opt search, but driven by an arbitrary cost
+ * function so it can run on real road distances instead of straight lines.
+ * Index 0 is the anchor (the shop); stops are 1..n. Returns stop indices
+ * (0-based into the caller's list) in visiting order.
+ */
+export function optimizeWithCost(n: number, cost: (a: number, b: number) => number): number[] {
+  if (n < 2) return Array.from({ length: n }, (_, i) => i);
+
+  const remaining = Array.from({ length: n }, (_, i) => i + 1);
+  const tour: number[] = [];
+  let cursor = 0;
+  while (remaining.length) {
+    let best = 0;
+    let bestD = cost(cursor, remaining[0]);
+    for (let i = 1; i < remaining.length; i++) {
+      const d = cost(cursor, remaining[i]);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    cursor = remaining[best];
+    tour.push(remaining.splice(best, 1)[0]);
+  }
+
+  for (let pass = 0; pass < 60; pass++) {
+    let improved = false;
+    for (let i = 0; i < tour.length - 1; i++) {
+      for (let k = i + 1; k < tour.length; k++) {
+        const a = i === 0 ? 0 : tour[i - 1];
+        const b = tour[i];
+        const c = tour[k];
+        const d = k === tour.length - 1 ? 0 : tour[k + 1];
+        if (cost(a, c) + cost(b, d) - cost(a, b) - cost(c, d) < -1e-9) {
+          const seg = tour.slice(i, k + 1).reverse();
+          tour.splice(i, seg.length, ...seg);
+          improved = true;
+        }
+      }
+    }
+    if (!improved) break;
+  }
+
+  // Prefer whichever equivalent direction is closer to the existing order.
+  const fwd = tour.map((t) => t - 1);
+  const bwd = fwd.slice().reverse();
+  const churn = (o: number[]) => o.reduce((s, orig, ni) => s + Math.abs(orig - ni), 0);
+  return churn(bwd) < churn(fwd) ? bwd : fwd;
+}
+
 export interface RouteCheck {
   /** Miles for the order as it stands (shop → stops → shop). */
   currentMiles: number;
