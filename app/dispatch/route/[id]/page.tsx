@@ -3,9 +3,12 @@ import Link from "next/link";
 import { getSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import RouteBuilder from "@/components/RouteBuilder";
+import RouteCheckBanner from "@/components/RouteCheckBanner";
+import { checkRouteRoad } from "@/lib/routeCheck";
 import type { RouteStop } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // first check on a cold distance cache calls Mapbox
 
 export default async function RouteDetailPage({
   params,
@@ -121,6 +124,19 @@ export default async function RouteDetailPage({
     { weekday: "long", month: "long", day: "numeric" }
   );
 
+  // Score the delivery stops in the order they were actually sent out. Prospect
+  // visits are excluded — they're opportunistic and shouldn't count against how
+  // well the delivery run was planned.
+  const routeCheck = await checkRouteRoad(
+    mergedStops
+      .filter((s) => (s as unknown as { kind?: string }).kind !== "prospect_visit")
+      .map((s) => ({
+        id: s.id,
+        lat: s.customer?.lat ?? null,
+        lng: s.customer?.lng ?? null,
+      }))
+  ).catch(() => null);
+
   return (
     <>
       <div className="p-4 md:max-w-3xl md:mx-auto">
@@ -153,6 +169,13 @@ export default async function RouteDetailPage({
                 View Map
               </a>
             </div>
+          </div>
+        )}
+
+        {/* How well this route was ordered, in real driving miles. */}
+        {routeCheck && (
+          <div className="mb-4">
+            <RouteCheckBanner check={routeCheck} dispatched={route.status !== "draft"} />
           </div>
         )}
 
