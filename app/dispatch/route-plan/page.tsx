@@ -20,19 +20,33 @@ export default async function RoutePlanPage() {
   if (session.role !== "admin") redirect("/dispatch");
 
   const supabase = createAdminClient();
-  const { data } = await supabase
-    .from("customers")
-    .select("id,name,address,lat,lng,route_seq,delivery_days,out_of_range")
-    .eq("active", true)
-    .is("deleted_at", null)
-    .not("lat", "is", null);
 
   type Row = {
     id: string; name: string; address: string | null;
     lat: number; lng: number; route_seq: number | null;
     delivery_days: string[] | null; out_of_range?: boolean | null;
   };
-  const all = ((data ?? []) as Row[]).filter((c) => !c.out_of_range);
+
+  // out_of_range hasn't been migrated everywhere yet; selecting a missing column
+  // fails the whole query, so fall back to the columns that definitely exist.
+  const base = "id,name,address,lat,lng,route_seq,delivery_days";
+  const query = (cols: string) =>
+    supabase
+      .from("customers")
+      .select(cols)
+      .eq("active", true)
+      .is("deleted_at", null)
+      .not("lat", "is", null);
+
+  let rows: Row[] = [];
+  const withFlag = await query(`${base},out_of_range`);
+  if (withFlag.error) {
+    const plain = await query(base);
+    rows = ((plain.data ?? []) as unknown as Row[]);
+  } else {
+    rows = ((withFlag.data ?? []) as unknown as Row[]);
+  }
+  const all = rows.filter((c) => !c.out_of_range);
 
   const shop = shopPoint();
   const plans: RunPlan[] = [];
