@@ -525,6 +525,17 @@ export default function DispatchConsole({
   >(null);
   const checkKey = included.map((r) => r.key).join(",");
   const alreadySent = phase === "dispatched";
+  // Refs for the auto-order pass — effect callbacks need current values without
+  // re-running on every keystroke.
+  const autoOrderedRef = useRef(false);
+  const includedRef = useRef<Row[]>([]);
+  includedRef.current = included;
+  const originalKeysRef = useRef<string[]>([]);
+  useEffect(() => {
+    originalKeysRef.current = original.filter((r) => r.included).map((r) => r.key);
+    autoOrderedRef.current = false; // a rebuilt list may auto-order again
+  }, [original]);
+  const [autoOrderedMiles, setAutoOrderedMiles] = useState<number | null>(null);
   useEffect(() => {
     // Runs pre-dispatch (to fix the order in time) AND post-dispatch (so the
     // verdict is visible right on Today, not only on the route detail page).
@@ -539,7 +550,28 @@ export default function DispatchConsole({
         });
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled) setRoadCheck(data.check ?? null);
+        if (cancelled) return;
+        setRoadCheck(data.check ?? null);
+        // Start from the good order: on a freshly built list the office hasn't
+        // touched, apply the optimal order once instead of asking. Undo is one
+        // tap ("Reset order"), and any manual reordering stops this happening.
+        const check = data.check as { alreadyGood: boolean; savedMiles: number; order: number[] } | null;
+        if (
+          check && !check.alreadyGood && check.savedMiles >= 1 &&
+          !autoOrderedRef.current && !alreadySent
+        ) {
+          const inc = includedRef.current;
+          const untouched = inc.every((r, i) => originalKeysRef.current[i] === r.key);
+          if (untouched && inc.length === check.order.length) {
+            autoOrderedRef.current = true;
+            setRows((cur) => {
+              const incNow = cur.filter((r) => r.included);
+              const exc = cur.filter((r) => !r.included);
+              return [...check.order.map((i) => incNow[i]).filter(Boolean), ...exc];
+            });
+            setAutoOrderedMiles(check.savedMiles);
+          }
+        }
       } catch { /* keep the straight-line estimate */ }
     }, 400); // debounce while the office is still editing the list
     return () => { cancelled = true; clearTimeout(t); };
@@ -913,7 +945,9 @@ export default function DispatchConsole({
               <div className="flex-1 min-w-0">
                 {routeCheck.alreadyOptimal ? (
                   <p className="font-body text-[12.5px] text-green-primary">
-                    Route order looks good — about {formatMiles(routeCheck.currentMiles)} of driving.
+                    {autoOrderedMiles != null
+                      ? <>Ordered for the shortest drive — saves {formatMiles(autoOrderedMiles)} vs the sheet order. &ldquo;Reset order&rdquo; restores it.</>
+                      : <>Route order looks good — about {formatMiles(routeCheck.currentMiles)} of driving.</>}
                   </p>
                 ) : (
                   <>
