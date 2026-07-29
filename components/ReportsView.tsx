@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { TIMING_START_LABEL } from "@/lib/timing";
 import { MAX_STOP_MIN, type TripLeg } from "@/lib/vanTrips";
+import Glyph, { type GlyphName } from "@/components/Glyph";
 
 export interface StopRow {
   id: string;
@@ -225,8 +226,8 @@ function CustomerLine({ dates }: { dates: string[] }) {
   );
 }
 
-const TP_ICON: Record<string, string> = {
-  call: "📞", email: "✉️", text: "💬", visit: "🚶", delivery: "🚐", note: "📝",
+const TP_GLYPH: Record<string, GlyphName> = {
+  call: "phone", email: "mail", text: "chat", visit: "walk", delivery: "van", note: "note",
 };
 
 export default function ReportsView({
@@ -608,7 +609,9 @@ export default function ReportsView({
               href={`/sales/prospects?id=${t.prospectId}`}
               className="flex gap-3 p-3.5 hover:bg-cream-dark/40 transition-colors"
             >
-              <span className="shrink-0 text-base leading-none mt-0.5">{TP_ICON[t.type] ?? "•"}</span>
+              <span className="shrink-0 mt-0.5 text-charcoal/45">
+                <Glyph name={TP_GLYPH[t.type] ?? "note"} className="w-4 h-4" />
+              </span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-body text-sm text-charcoal">{t.prospectName}</span>
