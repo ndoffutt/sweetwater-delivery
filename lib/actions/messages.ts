@@ -5,8 +5,9 @@ import { requireSession } from "@/lib/session";
 import { recordAndSend, placeBridgeCall, phoneDigits, callConfigured, canTransmitSms } from "@/lib/messaging";
 
 /** Send a text from the office number. During Twilio rollout only the Owner
- *  (Nate) actually transmits; other logins record the message as pending. */
-export async function sendThreadMessage(phone: string, body: string) {
+ *  (Nate) actually transmits; other logins record the message as pending.
+ *  `replyToId` quotes an earlier message, iMessage style. */
+export async function sendThreadMessage(phone: string, body: string, replyToId?: string | null) {
   const session = await requireSession();
   const text = body.trim();
   if (!text) return { error: "Empty message" };
@@ -31,7 +32,14 @@ export async function sendThreadMessage(phone: string, body: string) {
     transmit: canTransmitSms(session.role),
   });
   if (res.status === "failed") return { error: res.error || "Couldn't send" };
-  return { success: true, status: res.status };
+
+  // Link the reply after the fact so a pre-migration database (no reply_to_id
+  // column) still sends the message rather than failing the whole send.
+  if (replyToId && res.id) {
+    await supabase.from("messages").update({ reply_to_id: replyToId }).eq("id", res.id);
+  }
+
+  return { success: true, status: res.status, id: res.id ?? null };
 }
 
 /** Mark a conversation's inbound messages as read. */
@@ -51,6 +59,80 @@ export async function markThreadRead(phone: string) {
   if (ids.length) {
     await supabase.from("messages").update({ read_at: new Date().toISOString() }).in("id", ids);
   }
+  return { success: true };
+}
+
+/** Flip a conversation back to unread (newest inbound message only). */
+export async function markThreadUnread(phone: string) {
+  await requireSession();
+  const supabase = createAdminClient();
+  const d = phoneDigits(phone);
+  const { data } = await supabase
+    .from("messages")
+    .select("id, phone, created_at")
+    .eq("direction", "inbound")
+    .order("created_at", { ascending: false });
+  const newest = ((data ?? []) as { id: string; phone: string }[]).find(
+    (m) => phoneDigits(m.phone) === d
+  );
+  if (newest) await supabase.from("messages").update({ read_at: null }).eq("id", newest.id);
+  return { success: true };
+}
+
+/** Tapback on a message. Pass null to clear it. */
+export async function reactToMessage(messageId: string, reaction: string | null) {
+  await requireSession();
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("messages").update({ reaction }).eq("id", messageId);
+  if (error) return { error: "Reactions need the messaging_v2 migration" };
+  return { success: true };
+}
+
+/** Name a number that isn't in the customer list (vendor, referral, wrong number). */
+export async function saveContact(phone: string, name: string, company?: string, notes?: string) {
+  await requireSession();
+  const d = phoneDigits(phone);
+  if (d.length !== 10) return { error: "Invalid phone number" };
+  const clean = name.trim();
+  if (!clean) return { error: "Name required" };
+
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("message_contacts").upsert(
+    {
+      phone_digits: d,
+      name: clean,
+      company: company?.trim() || null,
+      notes: notes?.trim() || null,
+    },
+    { onConflict: "phone_digits" }
+  );
+  if (error) return { error: "Contacts need the messaging_v2 migration" };
+  return { success: true };
+}
+
+/** Pin a conversation to the top of the list, or unpin it. */
+export async function setThreadPinned(phone: string, pinned: boolean) {
+  await requireSession();
+  const d = phoneDigits(phone);
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("conversation_meta").upsert(
+    { phone_digits: d, pinned_at: pinned ? new Date().toISOString() : null },
+    { onConflict: "phone_digits" }
+  );
+  if (error) return { error: "Pinning needs the messaging_v2 migration" };
+  return { success: true };
+}
+
+/** Archive a conversation out of the main list, or bring it back. */
+export async function setThreadArchived(phone: string, archived: boolean) {
+  await requireSession();
+  const d = phoneDigits(phone);
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("conversation_meta").upsert(
+    { phone_digits: d, archived_at: archived ? new Date().toISOString() : null },
+    { onConflict: "phone_digits" }
+  );
+  if (error) return { error: "Archiving needs the messaging_v2 migration" };
   return { success: true };
 }
 
