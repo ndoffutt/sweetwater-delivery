@@ -495,6 +495,21 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
     });
   }
 
+  // Reopen a finished stop to correct it. Goes back to "arrived" so every
+  // normal control returns; the server keeps arrived_at/completed_at so the
+  // customer isn't re-texted and the delivery isn't logged twice.
+  function reopen(s: RouteStop) {
+    patch(s.id, { status: "arrived" });
+    setTargetId(s.id);
+    setSheet("full");
+    setOverview(false);
+    flash("Stop reopened - fix it, then complete it again");
+    startTransition(async () => {
+      await runStopAction({ kind: "reopen", stopId: s.id });
+      safeRefresh();
+    });
+  }
+
   function toggleDrop(s: RouteStop) {
     const v = !s.dropoff_confirmed;
     // Confirming a drop-off cancels "nothing to drop off" — they can't both be true.
@@ -912,6 +927,23 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
           <div style={{ marginTop: 14 }}>
             {target.status === "pending" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* What this stop is for, before arriving rather than after.
+                    The same banner shows on arrival, but by then the van is
+                    parked and the bag is already picked out of the back. */}
+                {(() => {
+                  const d = target.has_dropoff || target.dropoff_confirmed;
+                  const p = target.has_pickup || target.pickup_confirmed;
+                  const label = d && p ? "Drop-off AND pick-up" : d ? "Drop-off only" : p ? "Pick-up only" : "Check with the customer";
+                  return (
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", background: d && p ? "rgba(2,115,62,0.07)" : "rgba(255,255,255,0.75)", border: `1.5px solid ${d && p ? "rgba(2,115,62,0.3)" : C.creamDark}`, borderRadius: 13, padding: "11px 14px" }}>
+                      <Icon name={d ? "arrowDown" : "arrowUp"} size={18} color={d ? C.green : C.goldDark} />
+                      <span style={{ fontFamily: C.body, fontSize: 14, fontWeight: 600, color: C.charcoal }}>{label}</span>
+                      <span style={{ marginLeft: "auto", fontFamily: C.body, fontSize: 12, color: "rgba(26,26,26,0.45)" }}>
+                        {d && p ? "bring the order" : d ? "bring the order" : p ? "nothing to bring" : ""}
+                      </span>
+                    </div>
+                  );
+                })()}
                 {/* Tapping Navigate hands the foreground to Google Maps, and iOS
                     suspends this app the moment that happens - which kills any
                     upload still in flight. Photos are compressed small enough to
@@ -951,6 +983,39 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
                     {completeHint}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* A finished stop is not final. Realising at the next house that
+                you confirmed the wrong service, or forgot a photo, has to be
+                fixable without calling the office. */}
+            {(target.status === "completed" || target.status === "skipped") && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", background: target.status === "completed" ? "rgba(2,115,62,0.07)" : "rgba(213,154,41,0.12)", border: `1.5px solid ${target.status === "completed" ? "rgba(2,115,62,0.3)" : "rgba(213,154,41,0.45)"}`, borderRadius: 14, padding: "13px 15px" }}>
+                  <Icon name={target.status === "completed" ? "check" : "alert"} size={20} color={target.status === "completed" ? C.green : C.goldDark} />
+                  <div style={{ flex: 1, fontFamily: C.body, fontSize: 13.5, color: C.charcoal, lineHeight: 1.4 }}>
+                    <b>{target.status === "completed" ? "Completed" : "Flagged"}</b>
+                    {(() => {
+                      const bits: string[] = [];
+                      if (target.dropoff_confirmed) bits.push("drop-off");
+                      if (target.dropoff_none) bits.push("nothing to drop off");
+                      if (target.pickup_confirmed) bits.push("pick-up");
+                      if (target.pickup_none) bits.push("nothing was out");
+                      const n = photoCount(target);
+                      if (n > 0) bits.push(`${n} photo${n > 1 ? "s" : ""}`);
+                      return bits.length ? ` · ${bits.join(" · ")}` : "";
+                    })()}
+                  </div>
+                </div>
+                <button
+                  onClick={() => reopen(target)}
+                  style={{ minHeight: 54, borderRadius: 15, background: "#fff", border: `1.5px solid ${C.creamDark}`, color: C.charcoal, cursor: "pointer", fontSize: 14, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase", display: "flex", alignItems: "center", justifyContent: "center", gap: 9 }}
+                >
+                  <Icon name="alert" size={18} color={C.goldDark} /> Fix this stop
+                </button>
+                <div style={{ textAlign: "center", fontSize: 12, color: "rgba(26,26,26,0.4)" }}>
+                  The customer won&apos;t be texted again.
+                </div>
               </div>
             )}
           </div>

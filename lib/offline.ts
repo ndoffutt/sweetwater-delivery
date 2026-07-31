@@ -21,6 +21,7 @@ import {
   setPickupNone,
   setDropoffNone,
   flagStop,
+  reopenStop,
 } from "@/lib/actions/stops";
 import { completeProspectVisit, skipProspectVisit } from "@/lib/actions/prospectVisits";
 import { compressImage } from "@/lib/compressImage";
@@ -53,6 +54,9 @@ export type StopActionInput =
   | { kind: "pickupNone"; stopId: string; none: boolean }
   | { kind: "dropoffNone"; stopId: string; none: boolean }
   | { kind: "flag"; stopId: string; reason: string }
+  // Reopening a finished stop so the driver can correct it. Separate from
+  // "status" because it must not re-trigger the first-arrival side effects.
+  | { kind: "reopen"; stopId: string }
   // Prospect-visit stops carry the route_prospect_visits id + prospect id so the
   // server action can run on replay. stopId is the synthetic `pv-…` id, used only
   // as the compaction key.
@@ -291,6 +295,7 @@ async function dispatchAction(a: QueuedAction): Promise<void> {
   else if (a.kind === "pickupNone") result = await setPickupNone(a.stopId, a.none);
   else if (a.kind === "dropoffNone") result = await setDropoffNone(a.stopId, a.none);
   else if (a.kind === "flag") result = await flagStop(a.stopId, a.reason);
+  else if (a.kind === "reopen") result = await reopenStop(a.stopId);
   else if (a.kind === "prospectVisit") result = await completeProspectVisit(a.visitId, a.prospectId, a.notes, a.touchType);
   else if (a.kind === "prospectSkip") result = await skipProspectVisit(a.visitId, a.reason);
   // A server-side rejection (e.g. stop deleted because the route was cleared,

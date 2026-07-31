@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const updateStopStatus = vi.fn(async () => ({}) as { error?: string });
 const confirmDropoff = vi.fn(async () => ({}) as { error?: string });
+const reopenStop = vi.fn(async () => ({}) as { error?: string });
 
 vi.mock("@/lib/actions/stops", () => ({
   updateStopStatus: (...a: unknown[]) => updateStopStatus(...(a as [])),
@@ -17,6 +18,7 @@ vi.mock("@/lib/actions/stops", () => ({
   setPickupNone: vi.fn(async () => ({})),
   setDropoffNone: vi.fn(async () => ({})),
   flagStop: vi.fn(async () => ({})),
+  reopenStop: (...a: unknown[]) => reopenStop(...(a as [])),
 }));
 vi.mock("@/lib/actions/prospectVisits", () => ({
   completeProspectVisit: vi.fn(async () => ({})),
@@ -35,6 +37,7 @@ describe("stop action queue", () => {
     localStorage.clear();
     updateStopStatus.mockReset().mockResolvedValue({});
     confirmDropoff.mockReset().mockResolvedValue({});
+    reopenStop.mockReset().mockResolvedValue({});
     (navigator as unknown as { onLine: boolean }).onLine = true;
   });
 
@@ -99,6 +102,23 @@ describe("stop action queue", () => {
     await settle();
 
     expect(queue()).toHaveLength(0);
+  });
+
+  // Reopening a finished stop must go through its own action. Routing it via
+  // updateStopStatus("arrived") would re-run the first-arrival side effects and
+  // text the customer "on the way" a second time.
+  it("reopening a stop uses reopenStop, never a status change", async () => {
+    await runStopAction({ kind: "reopen", stopId: "s1" });
+    expect(reopenStop).toHaveBeenCalledWith("s1");
+    expect(updateStopStatus).not.toHaveBeenCalled();
+    expect(queue()).toHaveLength(0);
+  });
+
+  it("keeps a reopen queued when the driver is offline", async () => {
+    reopenStop.mockRejectedValue(new Error("offline"));
+    await runStopAction({ kind: "reopen", stopId: "s1" });
+    expect(queue()).toHaveLength(1);
+    expect(queue()[0].kind).toBe("reopen");
   });
 
   // A stop deleted by dispatch is permanently gone: retrying forever is wrong.
