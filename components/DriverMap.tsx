@@ -381,9 +381,24 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
   // Wrap router.refresh — when offline-but-think-online, the deferred RSC fetch
   // fails async and unmounts the tree. The optimistic patch + cache covers the
   // UI; refreshing is best-effort only.
-  function safeRefresh() {
+  // navigator.onLine is not proof of anything — on a phone it reads "online"
+  // while attached to a tower with no usable throughput, which is exactly the
+  // dead-zone case. Refresh only after a real request succeeds; otherwise skip
+  // it entirely. Refreshing is cosmetic (the optimistic patch + offline queue
+  // already hold the truth), and a refresh that fails can escalate into a hard
+  // navigation that lands the driver on the offline page mid-stop.
+  async function safeRefresh() {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
-    try { router.refresh(); } catch { /* offline / RSC fetch failed */ }
+    try {
+      const ctl = new AbortController();
+      const t = setTimeout(() => ctl.abort(), 2500);
+      const res = await fetch("/api/health", { method: "HEAD", cache: "no-store", signal: ctl.signal });
+      clearTimeout(t);
+      if (!res.ok) return;
+    } catch {
+      return; // no real connectivity — leave the local state alone
+    }
+    try { router.refresh(); } catch { /* refresh is best-effort */ }
   }
 
   // Pick up stops dispatch adds to this route AFTER the driver already loaded
@@ -768,6 +783,34 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
 
               {target.status === "arrived" && (
                 <>
+                  {/* What this stop is actually for, stated plainly the moment
+                      the driver arrives. The task chips higher up are easy to
+                      skim past, and doing the wrong service at the door is a
+                      real error — the customer's bag gets left behind. */}
+                  {(() => {
+                    const d = target.has_dropoff || target.dropoff_confirmed;
+                    const p = target.has_pickup || target.pickup_confirmed;
+                    const label = d && p ? "Drop-off AND pick-up" : d ? "Drop-off" : p ? "Pick-up" : "Check with the customer";
+                    const detail = d && p
+                      ? "Both are scheduled here — leave the order and collect what's out."
+                      : d ? "Leave the order. Still check for a bag before you go."
+                      : p ? "Collect what's out. Nothing to leave here."
+                      : "Nothing scheduled — confirm what they need.";
+                    return (
+                      <div style={{ display: "flex", gap: 11, alignItems: "flex-start", background: "rgba(2,115,62,0.07)", border: "1.5px solid rgba(2,115,62,0.3)", borderRadius: 14, padding: "13px 15px", marginBottom: 14 }}>
+                        <div style={{ display: "flex", gap: 3, flexShrink: 0, marginTop: 1 }}>
+                          {d && <Icon name="arrowDown" size={18} color={C.green} strokeWidth={2.4} />}
+                          {p && <Icon name="arrowUp" size={18} color={C.goldDark} strokeWidth={2.4} />}
+                          {!d && !p && <Icon name="alert" size={18} color={C.goldDark} strokeWidth={2.4} />}
+                        </div>
+                        <div>
+                          <div style={{ fontFamily: C.body, fontSize: 16, fontWeight: 600, color: C.charcoal, lineHeight: 1.2 }}>{label}</div>
+                          <div style={{ fontFamily: C.body, fontSize: 12.5, color: "rgba(26,26,26,0.55)", marginTop: 2, lineHeight: 1.4 }}>{detail}</div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* ── Drop-off: confirm + photo, or "nothing to drop off"
                       (pickup-only visit at a drop-off stop). ── */}
                   {(target.has_dropoff || target.dropoff_confirmed || target.dropoff_none) ? (
