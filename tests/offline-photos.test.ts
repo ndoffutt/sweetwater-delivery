@@ -28,6 +28,18 @@ import { enqueuePhoto, flush } from "@/lib/offline";
 
 const photo = (bytes = 1000) => new Blob([new Uint8Array(bytes)], { type: "image/jpeg" });
 
+/** Route fetch by URL. Unmatched paths 503 so the direct upload falls back to
+ *  the legacy multipart endpoint, which is what most cases here exercise. */
+function routeFetch(handlers: Record<string, (init?: RequestInit) => Response | Promise<Response>>) {
+  return vi.fn(async (url: unknown, init?: RequestInit) => {
+    const u = String(url);
+    for (const [frag, fn] of Object.entries(handlers)) {
+      if (u.includes(frag)) return fn(init);
+    }
+    return new Response("no handler", { status: 503 });
+  });
+}
+
 interface StoredPhoto {
   id: string;
   stopId: string;
@@ -216,6 +228,98 @@ describe("photo upload queue", () => {
     const rows = await readQueue();
     expect(live(rows)).toHaveLength(1);
     expect(dead(rows)).toHaveLength(0);
+  });
+
+  // The direct path exists because posting multipart through a serverless
+  // function failed 13,268 times: the body arrived empty when iOS suspended the
+  // app mid-request. Bytes now go straight to Storage.
+  describe("direct-to-Storage upload", () => {
+    it("signs, PUTs the bytes to storage, then records the row", async () => {
+      const calls: string[] = [];
+      const fetchMock = routeFetch({
+        "/api/photo/sign": () => {
+          calls.push("sign");
+          return new Response(JSON.stringify({ path: "stop-1/1.jpg", signedUrl: "https://sb.test/upload/x" }), { status: 200 });
+        },
+        "sb.test/upload": (init) => {
+          calls.push(`put:${init?.method}`);
+          return new Response("", { status: 200 });
+        },
+        "/api/photo/record": (init) => {
+          calls.push("record");
+          const body = JSON.parse(String(init?.body));
+          if (body.path !== "stop-1/1.jpg") throw new Error("wrong path recorded");
+          return new Response(JSON.stringify({ url: "https://cdn/x.jpg" }), { status: 200 });
+        },
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      await seed("stop-1", photo());
+      await flush();
+      await settle();
+
+      expect(calls).toEqual(["sign", "put:PUT", "record"]);
+      expect(await readQueue()).toHaveLength(0);
+      // The image never went through our own API.
+      expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith("/api/photo"))).toBe(false);
+    });
+
+    it("records with keepalive so it survives the app being backgrounded", async () => {
+      let recordInit: RequestInit | undefined;
+      vi.stubGlobal("fetch", routeFetch({
+        "/api/photo/sign": () => new Response(JSON.stringify({ path: "stop-1/1.jpg", signedUrl: "https://sb.test/upload/x" }), { status: 200 }),
+        "sb.test/upload": () => new Response("", { status: 200 }),
+        "/api/photo/record": (init) => { recordInit = init; return new Response("{}", { status: 200 }); },
+      }));
+
+      await seed("stop-1", photo());
+      await flush();
+      await settle();
+
+      expect(recordInit?.keepalive).toBe(true);
+    });
+
+    it("falls back to the multipart endpoint when signing is unavailable", async () => {
+      const hit: string[] = [];
+      vi.stubGlobal("fetch", routeFetch({
+        "/api/photo/sign": () => { hit.push("sign"); return new Response("down", { status: 503 }); },
+        "/api/photo": () => { hit.push("legacy"); return new Response(JSON.stringify({ url: "u" }), { status: 200 }); },
+      }));
+
+      await seed("stop-1", photo());
+      await flush();
+      await settle();
+
+      expect(hit).toContain("legacy");
+      expect(await readQueue()).toHaveLength(0); // still uploaded
+    });
+
+    it("drops the photo when signing says the stop is gone", async () => {
+      vi.stubGlobal("fetch", routeFetch({
+        "/api/photo/sign": () => new Response(JSON.stringify({ error: "Stop not found" }), { status: 400 }),
+      }));
+
+      await seed("stop-gone", photo());
+      await flush();
+      await settle();
+
+      expect(await readQueue()).toHaveLength(0);
+    });
+
+    it("keeps the photo queued when the storage PUT fails", async () => {
+      vi.stubGlobal("fetch", routeFetch({
+        "/api/photo/sign": () => new Response(JSON.stringify({ path: "stop-1/1.jpg", signedUrl: "https://sb.test/upload/x" }), { status: 200 }),
+        "sb.test/upload": () => new Response("nope", { status: 500 }),
+      }));
+
+      await seed("stop-1", photo());
+      await flush();
+      await settle();
+
+      const rows = await readQueue();
+      expect(live(rows)).toHaveLength(1);
+      expect(rows[0].attempts).toBe(1); // backed off, not abandoned
+    });
   });
 
   it("does not attempt uploads while offline", async () => {

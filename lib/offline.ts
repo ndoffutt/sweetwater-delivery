@@ -199,21 +199,25 @@ function wireGlobalTriggers() {
 }
 
 /**
- * Flush now and wait briefly for queued photos to land.
+ * Push the queue hard, right now.
  *
- * Bounded on purpose: a driver in a dead zone must never be blocked from
- * navigating, so this always resolves by `ms` whether or not the queue drained.
- * Returns true if everything landed.
+ * Called as the driver leaves for Google Maps. iOS suspends this app the
+ * instant the foreground goes, so anything not already in flight waits until
+ * they come back - and the whole reason photos went missing is that they often
+ * don't come back for another stop. Clearing the backoff gives every queued
+ * photo one more attempt in the seconds before the app is frozen.
+ *
+ * Deliberately does NOT block the caller: a driver with no signal must still
+ * be able to navigate immediately.
  */
-export async function waitForPhotos(ms = 2500): Promise<boolean> {
+export async function flushBeforeLeaving(): Promise<void> {
+  const photos = await idbAll().catch(() => [] as QueuedPhoto[]);
+  await Promise.all(
+    photos
+      .filter((p) => !p.dead && p.nextAttemptAt)
+      .map((p) => idbPut({ ...p, nextAttemptAt: undefined }))
+  );
   void flush();
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline) {
-    const photos = await idbAll().catch(() => [] as QueuedPhoto[]);
-    if (!photos.some((p) => !p.dead)) return true;
-    await new Promise((r) => setTimeout(r, 200));
-  }
-  return false;
 }
 
 export function subscribeSync(l: Listener): () => void {
@@ -340,6 +344,67 @@ async function backOff(p: QueuedPhoto, reason: string) {
   void emit();
 }
 
+/**
+ * Upload straight into Supabase Storage, then record the row.
+ *
+ * Three small steps instead of one big multipart POST through a serverless
+ * function. The image bytes go to Storage directly, so nothing large crosses
+ * our own API, and the record call is small enough for keepalive - meaning it
+ * can still land after the app loses the foreground to Google Maps.
+ *
+ * Returns the HTTP status to treat this attempt as, or null if the direct path
+ * isn't usable and the caller should fall back to the multipart endpoint.
+ */
+async function uploadDirect(p: QueuedPhoto): Promise<{ status: number; url?: string } | null> {
+  // 1. Ask for a one-time upload URL.
+  let signRes: Response;
+  try {
+    signRes = await withTimeout(
+      fetch("/api/photo/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stopId: p.stopId, type: p.type }),
+      }),
+      ACTION_TIMEOUT_MS
+    );
+  } catch {
+    return null; // no signal: let the caller handle it as a network failure
+  }
+  // The stop is gone. Permanent, and the caller drops the photo.
+  if (signRes.status === 400) return { status: 400 };
+  if (!signRes.ok) return null; // signing unavailable: try the old endpoint
+  const signed = (await signRes.json().catch(() => null)) as
+    | { path?: string; signedUrl?: string }
+    | null;
+  if (!signed?.path || !signed?.signedUrl) return null;
+
+  // 2. Send the bytes to Storage. The signed URL carries its own auth.
+  const put = await withTimeout(
+    fetch(signed.signedUrl, {
+      method: "PUT",
+      headers: { "Content-Type": p.type || "image/jpeg" },
+      body: p.blob,
+    }),
+    PHOTO_TIMEOUT_MS
+  );
+  if (!put.ok) return { status: put.status };
+
+  // 3. Record it. Small enough that keepalive keeps it alive across a
+  //    backgrounding, which is the whole point of splitting the upload up.
+  const rec = await withTimeout(
+    fetch("/api/photo/record", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stopId: p.stopId, path: signed.path, kind: p.photoKind }),
+      keepalive: true,
+    }),
+    ACTION_TIMEOUT_MS
+  );
+  if (!rec.ok) return { status: rec.status };
+  const data = (await rec.json().catch(() => ({}))) as { url?: string };
+  return { status: 200, url: data.url };
+}
+
 export async function flush(): Promise<void> {
   if (syncing || typeof window === "undefined") return;
   if (!navigator.onLine) return;
@@ -378,15 +443,15 @@ export async function flush(): Promise<void> {
         continue;
       }
 
-      let res: Response;
+      // Preferred path: straight to Storage, no multipart through our API.
+      let status: number | null = null;
+      let url: string | undefined;
       try {
-        const fd = new FormData();
-        fd.append("photo", p.blob, "photo.jpg");
-        fd.append("stopId", p.stopId);
-        if (p.photoKind) fd.append("kind", p.photoKind);
-        // Photos are large, so they get a longer deadline than an action — but
-        // still a deadline, so a stalled upload can't hold the queue open.
-        res = await withTimeout(fetch("/api/photo", { method: "POST", body: fd }), PHOTO_TIMEOUT_MS);
+        const direct = await uploadDirect(p);
+        if (direct) {
+          status = direct.status;
+          url = direct.url;
+        }
       } catch {
         // The request never reached the server: no signal, or the app lost the
         // foreground mid-upload and iOS tore the request down. Back this photo
@@ -394,6 +459,28 @@ export async function flush(): Promise<void> {
         await backOff(p, "upload interrupted");
         break;
       }
+
+      // Fallback for anything the direct path can't handle (an older deploy, a
+      // storage-signing outage). Same multipart endpoint as before.
+      if (status === null) {
+        let res: Response;
+        try {
+          const fd = new FormData();
+          fd.append("photo", p.blob, "photo.jpg");
+          fd.append("stopId", p.stopId);
+          if (p.photoKind) fd.append("kind", p.photoKind);
+          // Photos are large, so they get a longer deadline than an action — but
+          // still a deadline, so a stalled upload can't hold the queue open.
+          res = await withTimeout(fetch("/api/photo", { method: "POST", body: fd }), PHOTO_TIMEOUT_MS);
+        } catch {
+          await backOff(p, "upload interrupted");
+          break;
+        }
+        status = res.status;
+        if (res.ok) url = ((await res.json().catch(() => ({}))) as { url?: string }).url;
+      }
+
+      const res = { status, ok: status >= 200 && status < 300 };
       // Too big for the platform's request-body limit (413 from us, or Vercel's
       // own rejection before the handler runs). The blob was queued raw because
       // compression failed at capture time, so shrink it NOW and retry on the
@@ -414,9 +501,8 @@ export async function flush(): Promise<void> {
         await backOff(p, `upload ${res.status}`);
         continue;
       }
-      const data = (await res.json().catch(() => ({}))) as { url?: string };
       await idbDelete(p.id);
-      void emit({ uploadedStopId: p.stopId, url: data.url, photoKind: p.photoKind });
+      void emit({ uploadedStopId: p.stopId, url, photoKind: p.photoKind });
     }
   } finally {
     syncing = false;

@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { logout } from "@/lib/actions/auth";
-import { runStopAction, subscribeSync, type SyncState } from "@/lib/offline";
+import { runStopAction, subscribeSync, flushBeforeLeaving, type SyncState } from "@/lib/offline";
 import PhotoCapture from "@/components/PhotoCapture";
 import RouteMap from "@/components/RouteMap";
 import type { RouteStop } from "@/lib/types";
@@ -958,7 +958,7 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
                   </div>
                 )}
                 <div style={{ display: "flex", gap: 10 }}>
-                  <button onClick={() => window.open(mapsHref(cust), "_blank")} style={{ flex: 1, minHeight: 54, borderRadius: 15, background: C.gold, color: C.charcoal, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                  <button onClick={() => { void flushBeforeLeaving(); window.open(mapsHref(cust), "_blank"); }} style={{ flex: 1, minHeight: 54, borderRadius: 15, background: C.gold, color: C.charcoal, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                     <Icon name="nav" size={18} color={C.charcoal} /> Navigate
                   </button>
                   <button onClick={() => setProblemFor(target)} style={{ width: 54, minHeight: 54, borderRadius: 15, background: "#fff", border: `1px solid ${C.creamDark}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
