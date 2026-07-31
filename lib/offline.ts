@@ -36,6 +36,15 @@ export interface QueuedPhoto {
   createdAt: number;
   // Which service the photo proves ('dropoff' | 'pickup'); undefined = legacy.
   photoKind?: string;
+  // Retry bookkeeping. Without a backoff a permanently-failing photo retries
+  // every 20s forever: one bad batch produced 13,268 requests over two days.
+  attempts?: number;
+  nextAttemptAt?: number;
+  // Set when the blob's bytes are gone (iOS can purge the data backing an
+  // IndexedDB Blob). Retrying can't bring them back, so stop trying and make
+  // it visible instead of silently spinning.
+  dead?: boolean;
+  lastError?: string;
 }
 
 export type StopActionInput =
@@ -56,6 +65,9 @@ export interface SyncState {
   pendingPhotos: number;
   pendingActions: number;
   syncing: boolean;
+  // Photos whose bytes are unrecoverable. Counted separately so the UI can say
+  // so plainly instead of showing them as "still uploading" forever.
+  failedPhotos: number;
 }
 
 // ── IndexedDB (photo blobs) ────────────────────────────────────
@@ -137,14 +149,16 @@ let wired = false;
 async function emit(event?: { uploadedStopId?: string; url?: string; photoKind?: string }) {
   const photos = await idbAll().catch(() => []);
   const actions = readActions();
+  const live = photos.filter((p) => !p.dead);
   const state: SyncState = {
-    pendingPhotos: photos.length,
+    pendingPhotos: live.length,
     pendingActions: actions.length,
     syncing,
+    failedPhotos: photos.length - live.length,
   };
   listeners.forEach((l) => l(state, event));
-  // Keep a periodic flush running only while there is work to do.
-  if (photos.length + actions.length > 0) {
+  // Keep a periodic flush running only while there is work that can still land.
+  if (live.length + actions.length > 0) {
     if (!flushTimer) flushTimer = setInterval(() => void flush(), 20_000);
   } else if (flushTimer) {
     clearInterval(flushTimer);
@@ -152,13 +166,50 @@ async function emit(event?: { uploadedStopId?: string; url?: string; photoKind?:
   }
 }
 
+/**
+ * Ask the browser to stop treating our storage as disposable.
+ *
+ * Without this, Safari may evict IndexedDB under storage pressure or after a
+ * stretch of disuse - which means the browser is allowed to delete proof
+ * photos that haven't uploaded yet. Installed (home-screen) PWAs are far more
+ * likely to be granted this than a plain Safari tab.
+ */
+async function requestPersistentStorage() {
+  try {
+    if (!navigator.storage?.persist) return;
+    if (await navigator.storage.persisted()) return;
+    await navigator.storage.persist();
+  } catch {
+    /* not supported, or the user declined: nothing else to do */
+  }
+}
+
 function wireGlobalTriggers() {
   if (wired || typeof window === "undefined") return;
   wired = true;
+  void requestPersistentStorage();
   window.addEventListener("online", () => void flush());
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") void flush();
   });
+}
+
+/**
+ * Flush now and wait briefly for queued photos to land.
+ *
+ * Bounded on purpose: a driver in a dead zone must never be blocked from
+ * navigating, so this always resolves by `ms` whether or not the queue drained.
+ * Returns true if everything landed.
+ */
+export async function waitForPhotos(ms = 2500): Promise<boolean> {
+  void flush();
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    const photos = await idbAll().catch(() => [] as QueuedPhoto[]);
+    if (!photos.some((p) => !p.dead)) return true;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  return false;
 }
 
 export function subscribeSync(l: Listener): () => void {
@@ -269,6 +320,21 @@ async function shrinkQueued(p: QueuedPhoto): Promise<Blob | null> {
   }
 }
 
+/**
+ * Record a failed upload attempt and schedule the next one further out.
+ *
+ * Exponential, capped at 10 minutes, and it never gives up - a photo that
+ * failed because the server was broken must still go up once it's fixed. The
+ * point is only to stop a permanently-failing batch from retrying every 20
+ * seconds forever.
+ */
+async function backOff(p: QueuedPhoto, reason: string) {
+  const attempts = (p.attempts ?? 0) + 1;
+  const delay = Math.min(5_000 * 2 ** Math.min(attempts - 1, 7), 600_000);
+  await idbPut({ ...p, attempts, nextAttemptAt: Date.now() + delay, lastError: reason });
+  void emit();
+}
+
 export async function flush(): Promise<void> {
   if (syncing || typeof window === "undefined") return;
   if (!navigator.onLine) return;
@@ -291,8 +357,22 @@ export async function flush(): Promise<void> {
       }
     }
 
+    const now = Date.now();
     const photos = await idbAll().catch(() => [] as QueuedPhoto[]);
     for (const p of photos.sort((a, b) => a.createdAt - b.createdAt)) {
+      // Unrecoverable or backing off: skip without touching the network.
+      if (p.dead) continue;
+      if (p.nextAttemptAt && p.nextAttemptAt > now) continue;
+
+      // An empty blob means iOS purged the bytes behind this IndexedDB entry.
+      // No amount of retrying brings them back, and sending it produces the
+      // "no boundary found in multipart body" failure on the server.
+      if (!p.blob || p.blob.size === 0) {
+        await idbPut({ ...p, dead: true, lastError: "photo data was cleared by the browser" });
+        void emit();
+        continue;
+      }
+
       let res: Response;
       try {
         const fd = new FormData();
@@ -303,7 +383,11 @@ export async function flush(): Promise<void> {
         // still a deadline, so a stalled upload can't hold the queue open.
         res = await withTimeout(fetch("/api/photo", { method: "POST", body: fd }), PHOTO_TIMEOUT_MS);
       } catch {
-        break; // no network reached the server at all; remaining photos wait for the next flush
+        // The request never reached the server: no signal, or the app lost the
+        // foreground mid-upload and iOS tore the request down. Back this photo
+        // off so a doomed batch can't hammer the API, then stop for now.
+        await backOff(p, "upload interrupted");
+        break;
       }
       // Too big for the platform's request-body limit (413 from us, or Vercel's
       // own rejection before the handler runs). The blob was queued raw because
@@ -319,7 +403,12 @@ export async function flush(): Promise<void> {
         await idbDelete(p.id);
         continue;
       }
-      if (!res.ok) continue; // server reached but this one failed (e.g. transient 5xx) — don't let it block the rest of the queue
+      if (!res.ok) {
+        // Server reached but this one failed. Back off rather than retrying
+        // every 20s: that loop produced 13,268 requests over two days.
+        await backOff(p, `upload ${res.status}`);
+        continue;
+      }
       const data = (await res.json().catch(() => ({}))) as { url?: string };
       await idbDelete(p.id);
       void emit({ uploadedStopId: p.stopId, url: data.url, photoKind: p.photoKind });
