@@ -204,13 +204,17 @@ export default function MessagesView({ canCall }: { canCall: boolean }) {
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
+    // Only match on digits when the query actually contains some. Otherwise
+    // q.replace(/\D/g,"") is "" and every number "includes" it, so searching a
+    // name matched every thread in the list.
+    const qDigits = q.replace(/\D/g, "");
     return threads
       .filter((t) => (showArchived ? t.archived : !t.archived))
       .filter(
         (t) =>
           !q ||
           (t.name ?? "").toLowerCase().includes(q) ||
-          t.digits.includes(q.replace(/\D/g, "")) ||
+          (qDigits.length > 0 && t.digits.includes(qDigits)) ||
           t.lastBody.toLowerCase().includes(q)
       );
   }, [threads, search, showArchived]);
@@ -656,7 +660,12 @@ export default function MessagesView({ canCall }: { canCall: boolean }) {
                                   {parent.direction === "outbound" ? "You" : current?.name ?? "Them"}
                                 </p>
                                 <p className="text-[11px] font-body text-charcoal/45 line-clamp-1 leading-snug">
-                                  {parent.body}
+                                  {/* Truncated in JS, not just clipped in CSS:
+                                      the full text would still be read aloud by
+                                      a screen reader and still be findable, so
+                                      the quote would read as a second copy of
+                                      the message. */}
+                                  {parent.body.length > 60 ? `${parent.body.slice(0, 60)}…` : parent.body}
                                 </p>
                               </div>
                             </div>
