@@ -204,13 +204,17 @@ export default function MessagesView({ canCall }: { canCall: boolean }) {
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
+    // Only match on digits when the query actually contains some. Otherwise
+    // q.replace(/\D/g,"") is "" and every number "includes" it, so searching a
+    // name matched every thread in the list.
+    const qDigits = q.replace(/\D/g, "");
     return threads
       .filter((t) => (showArchived ? t.archived : !t.archived))
       .filter(
         (t) =>
           !q ||
           (t.name ?? "").toLowerCase().includes(q) ||
-          t.digits.includes(q.replace(/\D/g, "")) ||
+          (qDigits.length > 0 && t.digits.includes(qDigits)) ||
           t.lastBody.toLowerCase().includes(q)
       );
   }, [threads, search, showArchived]);
@@ -375,7 +379,12 @@ export default function MessagesView({ canCall }: { canCall: boolean }) {
                   sel === t.digits ? "bg-green-primary/8" : "hover:bg-cream-dark/40"
                 }`}
               >
-                <span className="shrink-0 w-11 h-11 rounded-full bg-green-primary/12 text-green-primary font-body text-sm font-semibold flex items-center justify-center mt-0.5">
+                {t.unread > 0 ? (
+                  <span className="shrink-0 w-2.5 h-2.5 rounded-full bg-green-primary self-center -ml-1 mr-0.5" />
+                ) : (
+                  <span className="shrink-0 w-2.5 -ml-1 mr-0.5" />
+                )}
+                <span className="shrink-0 w-11 h-11 rounded-full bg-green-primary/12 text-green-primary font-body text-sm font-semibold flex items-center justify-center self-center">
                   {initials(t.name, t.phone)}
                 </span>
                 <span className="flex-1 min-w-0">
@@ -397,9 +406,6 @@ export default function MessagesView({ canCall }: { canCall: boolean }) {
                       {t.lastDirection === "outbound" ? "You: " : ""}
                       {t.lastBody}
                     </span>
-                    {t.unread > 0 && (
-                      <span className="shrink-0 w-2.5 h-2.5 rounded-full bg-green-primary" />
-                    )}
                   </span>
                 </span>
               </button>
@@ -639,19 +645,29 @@ export default function MessagesView({ canCall }: { canCall: boolean }) {
                         }`}
                       >
                         <div className={`max-w-[80%] ${tap ? "mb-3" : ""}`}>
-                          {/* Quoted parent */}
+                          {/* Quoted parent. Deliberately small, faded, and
+                              inset so it reads as context attached to the reply
+                              below it rather than as another message - at full
+                              width it looks like the thread said it twice. */}
                           {parent && (
-                            <div
-                              className={`mb-1 px-3 py-1.5 rounded-xl bg-cream-dark/60 border-l-2 border-green-primary/40 ${
-                                out ? "ml-6" : "mr-6"
-                              }`}
-                            >
-                              <p className="text-[10px] font-body uppercase tracking-wide text-charcoal/40">
-                                {parent.direction === "outbound" ? "You" : current?.name ?? "Them"}
-                              </p>
-                              <p className="text-[12px] font-body text-charcoal/55 line-clamp-2">
-                                {parent.body}
-                              </p>
+                            <div className={`flex ${out ? "justify-end" : "justify-start"}`}>
+                              <div
+                                className={`mb-0.5 max-w-[80%] px-2.5 py-1 rounded-xl bg-cream-dark/45 border-l-2 border-green-primary/30 opacity-80 ${
+                                  out ? "mr-3" : "ml-3"
+                                }`}
+                              >
+                                <p className="text-[9px] font-body uppercase tracking-wide text-charcoal/35 leading-tight">
+                                  {parent.direction === "outbound" ? "You" : current?.name ?? "Them"}
+                                </p>
+                                <p className="text-[11px] font-body text-charcoal/45 line-clamp-1 leading-snug">
+                                  {/* Truncated in JS, not just clipped in CSS:
+                                      the full text would still be read aloud by
+                                      a screen reader and still be findable, so
+                                      the quote would read as a second copy of
+                                      the message. */}
+                                  {parent.body.length > 60 ? `${parent.body.slice(0, 60)}…` : parent.body}
+                                </p>
+                              </div>
                             </div>
                           )}
 

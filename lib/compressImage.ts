@@ -21,22 +21,27 @@
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 
 // Passes to try, in order, until the result fits under MAX_UPLOAD_BYTES.
+//
+// Deliberately aggressive. These are proof-of-delivery shots, not portfolio
+// work, and the driver taps Navigate within a second or two of taking one -
+// which backgrounds the app and kills any upload still in flight. A ~100KB
+// photo finishes before his thumb gets there; a 300KB one often doesn't.
 const PASSES = [
-  { dim: 1280, quality: 0.78 },
-  { dim: 960, quality: 0.65 },
-  { dim: 720, quality: 0.5 },
+  { dim: 900, quality: 0.55 },
+  { dim: 720, quality: 0.45 },
+  { dim: 600, quality: 0.4 },
 ];
 
 export async function compressImage(
   file: File,
-  maxDim = 1280,
-  quality = 0.78
+  maxDim = 900,
+  quality = 0.55
 ): Promise<File> {
   // Skip non-images and files already small enough to not be worth re-encoding.
   if (!file.type.startsWith("image/")) return file;
-  if (file.size < 300 * 1024) return file;
+  if (file.size < 120 * 1024) return file;
 
-  const passes = maxDim === 1280 && quality === 0.78 ? PASSES : [{ dim: maxDim, quality }, ...PASSES];
+  const passes = maxDim === 900 && quality === 0.55 ? PASSES : [{ dim: maxDim, quality }, ...PASSES];
 
   // Preferred path: native decode + resample, no full-res ImageData in JS heap.
   if (typeof createImageBitmap === "function") {
@@ -46,7 +51,7 @@ export async function compressImage(
       const srcH = probe.height;
       probe.close();
 
-      if (Math.max(srcW, srcH) <= maxDim && file.size < 600 * 1024) return file;
+      if (Math.max(srcW, srcH) <= maxDim && file.size < 200 * 1024) return file;
 
       let best: File | null = null;
       for (const pass of passes) {
@@ -93,7 +98,7 @@ export async function compressImage(
   try {
     const dataUrl = await fileToDataUrl(file);
     const img = await loadImage(dataUrl);
-    if (Math.max(img.width, img.height) <= maxDim && file.size < 600 * 1024)
+    if (Math.max(img.width, img.height) <= maxDim && file.size < 200 * 1024)
       return file;
 
     let best: File | null = null;

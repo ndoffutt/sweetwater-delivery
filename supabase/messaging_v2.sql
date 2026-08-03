@@ -38,6 +38,9 @@ create table if not exists message_contacts (
   updated_at timestamptz not null default now()
 );
 
+-- Postgres has no "create trigger if not exists", so drop first to keep this
+-- script re-runnable.
+drop trigger if exists message_contacts_updated_at on message_contacts;
 create trigger message_contacts_updated_at
   before update on message_contacts
   for each row execute function set_updated_at();
@@ -51,6 +54,7 @@ create table if not exists conversation_meta (
   updated_at timestamptz not null default now()
 );
 
+drop trigger if exists conversation_meta_updated_at on conversation_meta;
 create trigger conversation_meta_updated_at
   before update on conversation_meta
   for each row execute function set_updated_at();
