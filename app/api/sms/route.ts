@@ -45,7 +45,15 @@ export async function POST(request: NextRequest) {
   // Incoming text: store it and match the sender to a customer by phone.
   const from = params.From ?? "";
   const body = (params.Body ?? "").trim();
-  if (from && body) {
+
+  // MMS arrives as MediaUrl0, MediaUrl1, ... alongside NumMedia. A photo with
+  // no caption has an empty Body, so media alone still counts as a message.
+  const mediaCount = parseInt(params.NumMedia ?? "0", 10) || 0;
+  const mediaUrls = Array.from({ length: mediaCount }, (_, i) => params[`MediaUrl${i}`]).filter(
+    (u): u is string => Boolean(u)
+  );
+
+  if (from && (body || mediaUrls.length > 0)) {
     const d = phoneDigits(from);
     const { data: customers } = await supabase
       .from("customers")
@@ -55,14 +63,23 @@ export async function POST(request: NextRequest) {
       .not("phone", "is", null);
     const match = (customers ?? []).find((c) => phoneDigits(c.phone) === d);
 
-    await supabase.from("messages").insert({
+    const row: Record<string, unknown> = {
       direction: "inbound",
       phone: from,
-      body,
+      body: body || (mediaUrls.length > 1 ? `${mediaUrls.length} photos` : "Photo"),
       customer_id: match?.id ?? null,
       status: "received",
       twilio_sid: params.MessageSid ?? null,
-    });
+    };
+
+    // media_urls only exists after messaging_v2.sql; retry without it so an
+    // un-migrated database still records the message rather than dropping it.
+    if (mediaUrls.length) {
+      const { error } = await supabase.from("messages").insert({ ...row, media_urls: mediaUrls });
+      if (error) await supabase.from("messages").insert(row);
+    } else {
+      await supabase.from("messages").insert(row);
+    }
   }
 
   // Empty TwiML: no auto-reply.
