@@ -8,23 +8,37 @@ ops hub (modeled on the MCG app).
 ## Deploys
 - **This app is in production.** Never `git push origin main` or trigger a
   Vercel prod deploy unless the user explicitly says "push", "deploy", "ship",
-  etc. Pushing to the `staging` branch is fine — staging is for testing.
+  etc.
 - Local commits are always fine (reversible).
+- **One build per change.** Vercel bills build minutes and every branch used to
+  build. `vercel.json` now disables builds for `claude/*` and `staging`, so only
+  `main` deploys. Do NOT push the same commit through feature branch, then
+  staging, then main - that was four builds for one change. Commit on the
+  working branch, then fast-forward `main` once, when the user says ship.
 
-## Environments — staging is the default for ALL testing
+## Environments — STAGING IS PAUSED (2026-07)
 
 | | Production | Staging |
 |---|---|---|
-| URL | https://sweetwater-delivery.vercel.app | https://sweetwater-delivery-staging.vercel.app |
-| Git branch | `main` | `staging` |
-| Vercel project | `sweetwater-delivery` | `sweetwater-delivery-staging` |
+| URL | https://sweetwater-delivery.vercel.app | (paused) |
+| Git branch | `main` | `staging` (builds disabled) |
+| Vercel project | `sweetwater-delivery` | `sweetwater-delivery-staging` (paused) |
 | Supabase project | `zcykmptrwehecuiipmgk` | `mpqggqnocmobwsmmputd` |
-| Use for | real customers + drivers | **all Claude-driven testing** |
+| Use for | everything, including testing | nothing, for now |
 
-**Always test against staging first.** The staging Supabase is a clone of prod,
-disposable, and refreshable via `node staging/seed-staging.mjs --apply`. The
-user has explicitly said they don't care about staging data being updated —
-write whatever you need to verify a change. The only rule: **don't touch prod**.
+Staging was turned off to cut Vercel build minutes. **Testing now happens in
+production**, which means the safety net described below is gone:
+
+- Prod HAS live `TWILIO_*` credentials. A test send reaches a **real customer**.
+  Always send test messages to a phone number you control, never to a row picked
+  out of the `customers` table.
+- Prod has live email, push, and crons for the same reason.
+- Prod data is real. No bulk inserts, no mass deletes, no scripted writes
+  against `customers`, `routes`, or `route_stops` without explicit approval.
+
+To bring staging back: re-enable the `staging` branch in `vercel.json`
+(`git.deploymentEnabled`), un-pause the `sweetwater-delivery-staging` Vercel
+project, and the sections below apply again as written.
 
 ### Staging is isolated from prod side effects
 

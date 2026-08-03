@@ -165,16 +165,67 @@ async function maybeCompleteRoute(
     .eq("id", routeId);
 }
 
+/**
+ * Reopen a finished stop so the driver can correct it.
+ *
+ * Deliberately not updateStopStatus("arrived"): that path is the *first*
+ * arrival, and firing it again would start the route over. This only moves the
+ * status back, leaving arrived_at and completed_at in place so the customer is
+ * never re-texted and the delivery is never logged twice when the stop is
+ * completed again.
+ *
+ * Also reopens the route itself, since finishing the last stop may already
+ * have flipped it to completed - and a completed route stops loading in the
+ * driver app entirely.
+ */
+export async function reopenStop(stopId: string) {
+  await requireSession();
+  const supabase = createAdminClient();
+
+  const { data: stop, error } = await supabase
+    .from("route_stops")
+    .update({ status: "arrived" })
+    .eq("id", stopId)
+    .select("route_id")
+    .single();
+
+  if (error) return { error: error.message };
+
+  await supabase
+    .from("routes")
+    .update({ status: "in_progress", completed_at: null })
+    .eq("id", stop.route_id)
+    .eq("status", "completed");
+
+  revalidatePath("/driver");
+  revalidatePath(`/driver/stop/${stopId}`);
+  revalidatePath(`/dispatch/route/${stop.route_id}`);
+  return { success: true };
+}
+
 export async function updateStopStatus(stopId: string, status: StopStatus) {
   const session = await requireSession();
   const supabase = createAdminClient();
 
+  // What has already happened at this stop. Two things replay a status change:
+  // the offline queue (which retries until the server confirms) and a driver
+  // reopening a finished stop to correct it. Neither should text the customer
+  // a second time or log a second delivery visit, so the side effects below
+  // fire only on the first arrive and the first completion.
+  const { data: prior } = await supabase
+    .from("route_stops")
+    .select("arrived_at, completed_at")
+    .eq("id", stopId)
+    .maybeSingle();
+  const firstArrival = !prior?.arrived_at;
+  const firstCompletion = !prior?.completed_at;
+
   const updates: Record<string, unknown> = { status };
 
-  if (status === "arrived") {
+  if (status === "arrived" && firstArrival) {
     updates.arrived_at = new Date().toISOString();
   }
-  if (status === "completed") {
+  if (status === "completed" && firstCompletion) {
     updates.completed_at = new Date().toISOString();
   }
 
@@ -190,7 +241,7 @@ export async function updateStopStatus(stopId: string, status: StopStatus) {
   // If first stop arrived, start the route. The .eq("status","dispatched")
   // guard + .select() makes this fire exactly once per route: only the call
   // that flips dispatched -> in_progress gets rows back.
-  if (status === "arrived") {
+  if (status === "arrived" && firstArrival) {
     const { data: started } = await supabase
       .from("routes")
       .update({ status: "in_progress", started_at: new Date().toISOString() })
@@ -210,10 +261,10 @@ export async function updateStopStatus(stopId: string, status: StopStatus) {
   // Auto-text the customer on arrive / complete (per the map-first flow) — only
   // when automated texting is switched on. Manual sends are unaffected.
   const transmit = canTransmitSms(session.role);
-  if (autoTextsOn() && status === "arrived") {
+  if (autoTextsOn() && status === "arrived" && firstArrival) {
     await autoText(supabase, stopId, "Hi! Your Sweetwater's delivery is on the way.", transmit);
   }
-  if (status === "completed") {
+  if (status === "completed" && firstCompletion) {
     if (autoTextsOn()) {
       await autoText(supabase, stopId, "Your Sweetwater's delivery is complete.", transmit);
     }

@@ -21,6 +21,7 @@ import {
   setPickupNone,
   setDropoffNone,
   flagStop,
+  reopenStop,
 } from "@/lib/actions/stops";
 import { completeProspectVisit, skipProspectVisit } from "@/lib/actions/prospectVisits";
 import { compressImage } from "@/lib/compressImage";
@@ -36,6 +37,15 @@ export interface QueuedPhoto {
   createdAt: number;
   // Which service the photo proves ('dropoff' | 'pickup'); undefined = legacy.
   photoKind?: string;
+  // Retry bookkeeping. Without a backoff a permanently-failing photo retries
+  // every 20s forever: one bad batch produced 13,268 requests over two days.
+  attempts?: number;
+  nextAttemptAt?: number;
+  // Set when the blob's bytes are gone (iOS can purge the data backing an
+  // IndexedDB Blob). Retrying can't bring them back, so stop trying and make
+  // it visible instead of silently spinning.
+  dead?: boolean;
+  lastError?: string;
 }
 
 export type StopActionInput =
@@ -44,6 +54,9 @@ export type StopActionInput =
   | { kind: "pickupNone"; stopId: string; none: boolean }
   | { kind: "dropoffNone"; stopId: string; none: boolean }
   | { kind: "flag"; stopId: string; reason: string }
+  // Reopening a finished stop so the driver can correct it. Separate from
+  // "status" because it must not re-trigger the first-arrival side effects.
+  | { kind: "reopen"; stopId: string }
   // Prospect-visit stops carry the route_prospect_visits id + prospect id so the
   // server action can run on replay. stopId is the synthetic `pv-…` id, used only
   // as the compaction key.
@@ -56,6 +69,9 @@ export interface SyncState {
   pendingPhotos: number;
   pendingActions: number;
   syncing: boolean;
+  // Photos whose bytes are unrecoverable. Counted separately so the UI can say
+  // so plainly instead of showing them as "still uploading" forever.
+  failedPhotos: number;
 }
 
 // ── IndexedDB (photo blobs) ────────────────────────────────────
@@ -137,14 +153,16 @@ let wired = false;
 async function emit(event?: { uploadedStopId?: string; url?: string; photoKind?: string }) {
   const photos = await idbAll().catch(() => []);
   const actions = readActions();
+  const live = photos.filter((p) => !p.dead);
   const state: SyncState = {
-    pendingPhotos: photos.length,
+    pendingPhotos: live.length,
     pendingActions: actions.length,
     syncing,
+    failedPhotos: photos.length - live.length,
   };
   listeners.forEach((l) => l(state, event));
-  // Keep a periodic flush running only while there is work to do.
-  if (photos.length + actions.length > 0) {
+  // Keep a periodic flush running only while there is work that can still land.
+  if (live.length + actions.length > 0) {
     if (!flushTimer) flushTimer = setInterval(() => void flush(), 20_000);
   } else if (flushTimer) {
     clearInterval(flushTimer);
@@ -152,13 +170,54 @@ async function emit(event?: { uploadedStopId?: string; url?: string; photoKind?:
   }
 }
 
+/**
+ * Ask the browser to stop treating our storage as disposable.
+ *
+ * Without this, Safari may evict IndexedDB under storage pressure or after a
+ * stretch of disuse - which means the browser is allowed to delete proof
+ * photos that haven't uploaded yet. Installed (home-screen) PWAs are far more
+ * likely to be granted this than a plain Safari tab.
+ */
+async function requestPersistentStorage() {
+  try {
+    if (!navigator.storage?.persist) return;
+    if (await navigator.storage.persisted()) return;
+    await navigator.storage.persist();
+  } catch {
+    /* not supported, or the user declined: nothing else to do */
+  }
+}
+
 function wireGlobalTriggers() {
   if (wired || typeof window === "undefined") return;
   wired = true;
+  void requestPersistentStorage();
   window.addEventListener("online", () => void flush());
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") void flush();
   });
+}
+
+/**
+ * Push the queue hard, right now.
+ *
+ * Called as the driver leaves for Google Maps. iOS suspends this app the
+ * instant the foreground goes, so anything not already in flight waits until
+ * they come back - and the whole reason photos went missing is that they often
+ * don't come back for another stop. Clearing the backoff gives every queued
+ * photo one more attempt in the seconds before the app is frozen.
+ *
+ * Deliberately does NOT block the caller: a driver with no signal must still
+ * be able to navigate immediately.
+ */
+export async function flushBeforeLeaving(): Promise<void> {
+  const photos = await idbAll().catch(() => [] as QueuedPhoto[]);
+  await Promise.all(
+    photos
+      .filter((p) => !p.dead && p.nextAttemptAt)
+      .map((p) => idbPut({ ...p, nextAttemptAt: undefined }))
+  );
+  void flush();
 }
 
 export function subscribeSync(l: Listener): () => void {
@@ -240,6 +299,7 @@ async function dispatchAction(a: QueuedAction): Promise<void> {
   else if (a.kind === "pickupNone") result = await setPickupNone(a.stopId, a.none);
   else if (a.kind === "dropoffNone") result = await setDropoffNone(a.stopId, a.none);
   else if (a.kind === "flag") result = await flagStop(a.stopId, a.reason);
+  else if (a.kind === "reopen") result = await reopenStop(a.stopId);
   else if (a.kind === "prospectVisit") result = await completeProspectVisit(a.visitId, a.prospectId, a.notes, a.touchType);
   else if (a.kind === "prospectSkip") result = await skipProspectVisit(a.visitId, a.reason);
   // A server-side rejection (e.g. stop deleted because the route was cleared,
@@ -269,6 +329,82 @@ async function shrinkQueued(p: QueuedPhoto): Promise<Blob | null> {
   }
 }
 
+/**
+ * Record a failed upload attempt and schedule the next one further out.
+ *
+ * Exponential, capped at 10 minutes, and it never gives up - a photo that
+ * failed because the server was broken must still go up once it's fixed. The
+ * point is only to stop a permanently-failing batch from retrying every 20
+ * seconds forever.
+ */
+async function backOff(p: QueuedPhoto, reason: string) {
+  const attempts = (p.attempts ?? 0) + 1;
+  const delay = Math.min(5_000 * 2 ** Math.min(attempts - 1, 7), 600_000);
+  await idbPut({ ...p, attempts, nextAttemptAt: Date.now() + delay, lastError: reason });
+  void emit();
+}
+
+/**
+ * Upload straight into Supabase Storage, then record the row.
+ *
+ * Three small steps instead of one big multipart POST through a serverless
+ * function. The image bytes go to Storage directly, so nothing large crosses
+ * our own API, and the record call is small enough for keepalive - meaning it
+ * can still land after the app loses the foreground to Google Maps.
+ *
+ * Returns the HTTP status to treat this attempt as, or null if the direct path
+ * isn't usable and the caller should fall back to the multipart endpoint.
+ */
+async function uploadDirect(p: QueuedPhoto): Promise<{ status: number; url?: string } | null> {
+  // 1. Ask for a one-time upload URL.
+  let signRes: Response;
+  try {
+    signRes = await withTimeout(
+      fetch("/api/photo/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stopId: p.stopId, type: p.type }),
+      }),
+      ACTION_TIMEOUT_MS
+    );
+  } catch {
+    return null; // no signal: let the caller handle it as a network failure
+  }
+  // The stop is gone. Permanent, and the caller drops the photo.
+  if (signRes.status === 400) return { status: 400 };
+  if (!signRes.ok) return null; // signing unavailable: try the old endpoint
+  const signed = (await signRes.json().catch(() => null)) as
+    | { path?: string; signedUrl?: string }
+    | null;
+  if (!signed?.path || !signed?.signedUrl) return null;
+
+  // 2. Send the bytes to Storage. The signed URL carries its own auth.
+  const put = await withTimeout(
+    fetch(signed.signedUrl, {
+      method: "PUT",
+      headers: { "Content-Type": p.type || "image/jpeg" },
+      body: p.blob,
+    }),
+    PHOTO_TIMEOUT_MS
+  );
+  if (!put.ok) return { status: put.status };
+
+  // 3. Record it. Small enough that keepalive keeps it alive across a
+  //    backgrounding, which is the whole point of splitting the upload up.
+  const rec = await withTimeout(
+    fetch("/api/photo/record", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stopId: p.stopId, path: signed.path, kind: p.photoKind }),
+      keepalive: true,
+    }),
+    ACTION_TIMEOUT_MS
+  );
+  if (!rec.ok) return { status: rec.status };
+  const data = (await rec.json().catch(() => ({}))) as { url?: string };
+  return { status: 200, url: data.url };
+}
+
 export async function flush(): Promise<void> {
   if (syncing || typeof window === "undefined") return;
   if (!navigator.onLine) return;
@@ -291,20 +427,60 @@ export async function flush(): Promise<void> {
       }
     }
 
+    const now = Date.now();
     const photos = await idbAll().catch(() => [] as QueuedPhoto[]);
     for (const p of photos.sort((a, b) => a.createdAt - b.createdAt)) {
-      let res: Response;
-      try {
-        const fd = new FormData();
-        fd.append("photo", p.blob, "photo.jpg");
-        fd.append("stopId", p.stopId);
-        if (p.photoKind) fd.append("kind", p.photoKind);
-        // Photos are large, so they get a longer deadline than an action — but
-        // still a deadline, so a stalled upload can't hold the queue open.
-        res = await withTimeout(fetch("/api/photo", { method: "POST", body: fd }), PHOTO_TIMEOUT_MS);
-      } catch {
-        break; // no network reached the server at all; remaining photos wait for the next flush
+      // Unrecoverable or backing off: skip without touching the network.
+      if (p.dead) continue;
+      if (p.nextAttemptAt && p.nextAttemptAt > now) continue;
+
+      // An empty blob means iOS purged the bytes behind this IndexedDB entry.
+      // No amount of retrying brings them back, and sending it produces the
+      // "no boundary found in multipart body" failure on the server.
+      if (!p.blob || p.blob.size === 0) {
+        await idbPut({ ...p, dead: true, lastError: "photo data was cleared by the browser" });
+        void emit();
+        continue;
       }
+
+      // Preferred path: straight to Storage, no multipart through our API.
+      let status: number | null = null;
+      let url: string | undefined;
+      try {
+        const direct = await uploadDirect(p);
+        if (direct) {
+          status = direct.status;
+          url = direct.url;
+        }
+      } catch {
+        // The request never reached the server: no signal, or the app lost the
+        // foreground mid-upload and iOS tore the request down. Back this photo
+        // off so a doomed batch can't hammer the API, then stop for now.
+        await backOff(p, "upload interrupted");
+        break;
+      }
+
+      // Fallback for anything the direct path can't handle (an older deploy, a
+      // storage-signing outage). Same multipart endpoint as before.
+      if (status === null) {
+        let res: Response;
+        try {
+          const fd = new FormData();
+          fd.append("photo", p.blob, "photo.jpg");
+          fd.append("stopId", p.stopId);
+          if (p.photoKind) fd.append("kind", p.photoKind);
+          // Photos are large, so they get a longer deadline than an action — but
+          // still a deadline, so a stalled upload can't hold the queue open.
+          res = await withTimeout(fetch("/api/photo", { method: "POST", body: fd }), PHOTO_TIMEOUT_MS);
+        } catch {
+          await backOff(p, "upload interrupted");
+          break;
+        }
+        status = res.status;
+        if (res.ok) url = ((await res.json().catch(() => ({}))) as { url?: string }).url;
+      }
+
+      const res = { status, ok: status >= 200 && status < 300 };
       // Too big for the platform's request-body limit (413 from us, or Vercel's
       // own rejection before the handler runs). The blob was queued raw because
       // compression failed at capture time, so shrink it NOW and retry on the
@@ -319,10 +495,14 @@ export async function flush(): Promise<void> {
         await idbDelete(p.id);
         continue;
       }
-      if (!res.ok) continue; // server reached but this one failed (e.g. transient 5xx) — don't let it block the rest of the queue
-      const data = (await res.json().catch(() => ({}))) as { url?: string };
+      if (!res.ok) {
+        // Server reached but this one failed. Back off rather than retrying
+        // every 20s: that loop produced 13,268 requests over two days.
+        await backOff(p, `upload ${res.status}`);
+        continue;
+      }
       await idbDelete(p.id);
-      void emit({ uploadedStopId: p.stopId, url: data.url, photoKind: p.photoKind });
+      void emit({ uploadedStopId: p.stopId, url, photoKind: p.photoKind });
     }
   } finally {
     syncing = false;

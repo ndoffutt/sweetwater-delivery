@@ -6,8 +6,10 @@
 // counts open work. As of 2026-08-03 there were six of them, the oldest 32 days
 // old.
 //
-// This sweep closes any route still in_progress or dispatched 48 hours after it
-// started. It deliberately does NOT touch stop statuses: a stop left on
+// This sweep closes any route still in_progress or dispatched 24 hours after it
+// started. Routes run Wednesday and Thursday, so 24h guarantees a stalled route
+// is closed before the next one starts rather than sitting in dispatch beside
+// it. It deliberately does NOT touch stop statuses: a stop left on
 // "arrived" is an honest record that nobody confirmed the delivery, and
 // rewriting it to completed or skipped would invent history. The open stops are
 // the audit trail for why the route needed sweeping.
@@ -17,7 +19,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export const STALE_AFTER_HOURS = 48;
+export const STALE_AFTER_HOURS = 24;
 
 export interface SweptRoute {
   id: string;

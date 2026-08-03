@@ -1,4 +1,10 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "claude/*": false,
+      "staging": false
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/weekly-report",

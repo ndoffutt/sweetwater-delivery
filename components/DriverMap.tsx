@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { logout } from "@/lib/actions/auth";
-import { runStopAction, subscribeSync, type SyncState } from "@/lib/offline";
+import { runStopAction, subscribeSync, flushBeforeLeaving, type SyncState } from "@/lib/offline";
 import PhotoCapture from "@/components/PhotoCapture";
 import RouteMap from "@/components/RouteMap";
 import type { RouteStop } from "@/lib/types";
@@ -323,7 +323,11 @@ const firstName = (n: string | null | undefined) =>
 
 function mapsHref(c: { address: string; lat: number | null; lng: number | null }) {
   const dest = c.lat != null && c.lng != null ? `${c.lat},${c.lng}` : encodeURIComponent(c.address);
-  return `https://www.google.com/maps/dir/?api=1&destination=${dest}`;
+  // No `origin`: omitting it makes Google Maps route from wherever the driver
+  // actually is. `dir_action=navigate` starts turn-by-turn immediately instead
+  // of showing a route preview, which is where a stale starting point used to
+  // show up - the preview would open from the last place Maps had a fix.
+  return `https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=driving&dir_action=navigate`;
 }
 
 // ── Main ───────────────────────────────────────────────────────
@@ -343,7 +347,7 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
   const [online, setOnline] = useState(true);
   // Optimistic per-kind photo counts (a shot counts the moment it's taken).
   const [photoBump, setPhotoBump] = useState<Record<string, { dropoff: number; pickup: number }>>({});
-  const [sync, setSync] = useState<SyncState>({ pendingPhotos: 0, pendingActions: 0, syncing: false });
+  const [sync, setSync] = useState<SyncState>({ pendingPhotos: 0, pendingActions: 0, syncing: false, failedPhotos: 0 });
   const [, startTransition] = useTransition();
   const tt = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
@@ -487,6 +491,21 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
     flash(online ? `✓ Delivered, ${firstName(s.customer?.name)} notified` : "Saved on phone, will sync when signal returns");
     startTransition(async () => {
       await runStopAction({ kind: "status", stopId: s.id, status: "completed" });
+      safeRefresh();
+    });
+  }
+
+  // Reopen a finished stop to correct it. Goes back to "arrived" so every
+  // normal control returns; the server keeps arrived_at/completed_at so the
+  // customer isn't re-texted and the delivery isn't logged twice.
+  function reopen(s: RouteStop) {
+    patch(s.id, { status: "arrived" });
+    setTargetId(s.id);
+    setSheet("full");
+    setOverview(false);
+    flash("Stop reopened - fix it, then complete it again");
+    startTransition(async () => {
+      await runStopAction({ kind: "reopen", stopId: s.id });
       safeRefresh();
     });
   }
@@ -652,6 +671,17 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
           );
         })()}
       </div>
+
+      {/* Photos whose bytes the browser cleared. They will never upload, so say
+          so plainly rather than counting them as "still uploading" forever. */}
+      {sync.failedPhotos > 0 && (
+        <div style={{ position: "absolute", top: sync.pendingPhotos > 0 ? 136 : 78, left: 16, right: 16, zIndex: 11, display: "flex", alignItems: "center", gap: 10, background: "rgba(176,58,46,0.96)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: 14, padding: "11px 14px", boxShadow: "0 8px 24px rgba(0,0,0,0.2)" }}>
+          <Icon name="alert" size={20} color="#fff" />
+          <div style={{ flex: 1, fontFamily: C.body, fontSize: 13, fontWeight: 600, color: "#fff", lineHeight: 1.35 }}>
+            {sync.failedPhotos} photo{sync.failedPhotos === 1 ? "" : "s"} couldn&apos;t be saved and need retaking. Tell dispatch which stops.
+          </div>
+        </div>
+      )}
 
       {/* PHOTO-UPLOAD WARNING — proof photos upload separately from the (tiny)
           status updates and can lag on weak signal. Make it loud so the driver
@@ -897,8 +927,38 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
           <div style={{ marginTop: 14 }}>
             {target.status === "pending" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* What this stop is for, before arriving rather than after.
+                    The same banner shows on arrival, but by then the van is
+                    parked and the bag is already picked out of the back. */}
+                {(() => {
+                  const d = target.has_dropoff || target.dropoff_confirmed;
+                  const p = target.has_pickup || target.pickup_confirmed;
+                  const label = d && p ? "Drop-off AND pick-up" : d ? "Drop-off only" : p ? "Pick-up only" : "Check with the customer";
+                  return (
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", background: d && p ? "rgba(2,115,62,0.07)" : "rgba(255,255,255,0.75)", border: `1.5px solid ${d && p ? "rgba(2,115,62,0.3)" : C.creamDark}`, borderRadius: 13, padding: "11px 14px" }}>
+                      <Icon name={d ? "arrowDown" : "arrowUp"} size={18} color={d ? C.green : C.goldDark} />
+                      <span style={{ fontFamily: C.body, fontSize: 14, fontWeight: 600, color: C.charcoal }}>{label}</span>
+                      <span style={{ marginLeft: "auto", fontFamily: C.body, fontSize: 12, color: "rgba(26,26,26,0.45)" }}>
+                        {d && p ? "bring the order" : d ? "bring the order" : p ? "nothing to bring" : ""}
+                      </span>
+                    </div>
+                  );
+                })()}
+                {/* Tapping Navigate hands the foreground to Google Maps, and iOS
+                    suspends this app the moment that happens - which kills any
+                    upload still in flight. Photos are compressed small enough to
+                    land in about a second, so a brief pause here is the
+                    difference between proof saved and proof lost. */}
+                {sync.pendingPhotos > 0 && (
+                  <div style={{ display: "flex", gap: 9, alignItems: "center", background: "rgba(213,154,41,0.14)", border: "1px solid rgba(213,154,41,0.5)", borderRadius: 12, padding: "9px 12px" }}>
+                    <Icon name="cloud" size={17} color={C.goldDark} />
+                    <span style={{ fontFamily: C.body, fontSize: 12.5, color: C.charcoal, lineHeight: 1.35 }}>
+                      <b>{sync.pendingPhotos} photo{sync.pendingPhotos === 1 ? "" : "s"} still uploading.</b> Wait a second before you navigate away.
+                    </span>
+                  </div>
+                )}
                 <div style={{ display: "flex", gap: 10 }}>
-                  <button onClick={() => window.open(mapsHref(cust), "_blank")} style={{ flex: 1, minHeight: 54, borderRadius: 15, background: C.gold, color: C.charcoal, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                  <button onClick={() => { void flushBeforeLeaving(); window.open(mapsHref(cust), "_blank"); }} style={{ flex: 1, minHeight: 54, borderRadius: 15, background: C.gold, color: C.charcoal, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                     <Icon name="nav" size={18} color={C.charcoal} /> Navigate
                   </button>
                   <button onClick={() => setProblemFor(target)} style={{ width: 54, minHeight: 54, borderRadius: 15, background: "#fff", border: `1px solid ${C.creamDark}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -923,6 +983,39 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
                     {completeHint}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* A finished stop is not final. Realising at the next house that
+                you confirmed the wrong service, or forgot a photo, has to be
+                fixable without calling the office. */}
+            {(target.status === "completed" || target.status === "skipped") && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", background: target.status === "completed" ? "rgba(2,115,62,0.07)" : "rgba(213,154,41,0.12)", border: `1.5px solid ${target.status === "completed" ? "rgba(2,115,62,0.3)" : "rgba(213,154,41,0.45)"}`, borderRadius: 14, padding: "13px 15px" }}>
+                  <Icon name={target.status === "completed" ? "check" : "alert"} size={20} color={target.status === "completed" ? C.green : C.goldDark} />
+                  <div style={{ flex: 1, fontFamily: C.body, fontSize: 13.5, color: C.charcoal, lineHeight: 1.4 }}>
+                    <b>{target.status === "completed" ? "Completed" : "Flagged"}</b>
+                    {(() => {
+                      const bits: string[] = [];
+                      if (target.dropoff_confirmed) bits.push("drop-off");
+                      if (target.dropoff_none) bits.push("nothing to drop off");
+                      if (target.pickup_confirmed) bits.push("pick-up");
+                      if (target.pickup_none) bits.push("nothing was out");
+                      const n = photoCount(target);
+                      if (n > 0) bits.push(`${n} photo${n > 1 ? "s" : ""}`);
+                      return bits.length ? ` · ${bits.join(" · ")}` : "";
+                    })()}
+                  </div>
+                </div>
+                <button
+                  onClick={() => reopen(target)}
+                  style={{ minHeight: 54, borderRadius: 15, background: "#fff", border: `1.5px solid ${C.creamDark}`, color: C.charcoal, cursor: "pointer", fontSize: 14, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase", display: "flex", alignItems: "center", justifyContent: "center", gap: 9 }}
+                >
+                  <Icon name="alert" size={18} color={C.goldDark} /> Fix this stop
+                </button>
+                <div style={{ textAlign: "center", fontSize: 12, color: "rgba(26,26,26,0.4)" }}>
+                  The customer won&apos;t be texted again.
+                </div>
               </div>
             )}
           </div>
