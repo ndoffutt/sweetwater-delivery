@@ -133,10 +133,15 @@ async function maybeCompleteRoute(
   supabase: ReturnType<typeof createAdminClient>,
   routeId: string
 ) {
+  // deleted_at matters: a stop that was removed from the route while it was
+  // still pending or arrived would otherwise block completion forever, because
+  // nothing ever moves a deleted row to a terminal status. Cost us the
+  // 2026-07-29 route, which sat in_progress with no live work left on it.
   const { data: openStops } = await supabase
     .from("route_stops")
     .select("id")
     .eq("route_id", routeId)
+    .is("deleted_at", null)
     .in("status", ["pending", "arrived"]);
   if ((openStops?.length ?? 0) > 0) return;
 
@@ -147,6 +152,7 @@ async function maybeCompleteRoute(
       .from("route_prospect_visits")
       .select("id")
       .eq("route_id", routeId)
+      .is("deleted_at", null)
       .eq("status", "planned");
     if ((openVisits?.length ?? 0) > 0) return;
   } catch {
