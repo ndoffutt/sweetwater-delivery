@@ -31,6 +31,7 @@ const NAV_BY_ROLE: Record<"dispatcher" | "admin", NavItem[]> = {
 // Reports is open to the manager as well.
 type MoreItem = { href: string; label: string; adminOnly?: boolean };
 const MORE_ITEMS: MoreItem[] = [
+  { href: "/dispatch/weekly", label: "Weekly update" },
   { href: "/dispatch/reports", label: "Reports" },
   { href: "/dispatch/signups", label: "Signups" },
   { href: "/dispatch/messages", label: "Messages", adminOnly: true },
