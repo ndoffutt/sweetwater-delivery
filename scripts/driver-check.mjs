@@ -9,7 +9,7 @@
 //
 // SHOTS=1 also writes screenshots to /tmp.
 
-import { chromium } from "playwright";
+import { chromium } from "playwright-core";
 import crypto from "node:crypto";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";

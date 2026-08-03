@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { chromium } from "playwright-core";
 import crypto from "node:crypto";
 
 // Same scheme as lib/auth.ts: base64(payload) + "." + hex(HMAC-SHA256(payload))

@@ -12,7 +12,10 @@ import { useEffect, useState } from "react";
 import { notFound } from "next/navigation";
 import MessagesView from "@/components/MessagesView";
 
-const NOW = Date.parse("2026-07-31T17:40:00Z");
+// Relative to now, not a fixed date: a hardcoded day made the thread's
+// separators read "Yesterday" once the clock rolled past midnight, which broke
+// the check for them.
+const NOW = Date.now();
 const ago = (min: number) => new Date(NOW - min * 60_000).toISOString();
 
 const THREADS = [

@@ -9,7 +9,7 @@
 //
 // Set SHOTS=1 to also write screenshots to /tmp.
 
-import { chromium } from "playwright";
+import { chromium } from "playwright-core";
 import crypto from "node:crypto";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
@@ -92,7 +92,13 @@ await check("a quoted reply does not duplicate the message body", async () => {
 });
 
 await check("a day separator is shown", async () => {
-  must((await page.getByText(/Today \d/).count()) > 0, "no day/time separator");
+  // Any of the formats the thread can use, so this can't fail purely because
+  // of what time the suite happens to run.
+  const body = await page.locator("body").innerText();
+  must(
+    /(Today|Yesterday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|[A-Z][a-z]{2} \d+)\s+\d{1,2}:\d{2}/.test(body),
+    "no day/time separator"
+  );
 });
 
 await check("delivery status appears under the newest outbound message", async () => {
