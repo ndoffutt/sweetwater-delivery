@@ -37,8 +37,10 @@ export async function GET(request: NextRequest) {
     const r = await fetch(url, { headers: { Authorization: `Basic ${creds}` }, cache: "no-store" });
     return { status: r.status, body: await r.json().catch(() => ({})) };
   };
-  // Compare on digits only — the pool reports E.164, env vars may not.
-  const digits = (s: string) => (s || "").replace(/\D/g, "");
+  // Compare on the last 10 digits. The pool reports E.164 ("+16315375120")
+  // while TWILIO_NUMBER is stored formatted ("631-537-5120"), so a plain
+  // digits-only compare fails on the country code alone.
+  const digits = (s: string) => (s || "").replace(/\D/g, "").slice(-10);
 
   try {
     // Numbers actually owned by the account (a hosted number appears here only
