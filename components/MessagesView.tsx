@@ -96,6 +96,79 @@ const daySeparator = (iso: string) => {
   return `${d.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
 };
 
+/** Swipe-left-to-archive, iMessage style: drags the row left over a red
+ *  "Archive" backdrop; releasing past the threshold commits the archive,
+ *  otherwise it snaps back. Touch only — desktop keeps the hover button. */
+function SwipeToArchive({
+  label,
+  onArchive,
+  children,
+}: {
+  label: string;
+  onArchive: () => void;
+  children: React.ReactNode;
+}) {
+  const [dx, setDx] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const startX = useRef<number | null>(null);
+  const startY = useRef<number | null>(null);
+  const horizontal = useRef<boolean | null>(null);
+  const THRESHOLD = -76;
+  const MAX = -110;
+
+  function onTouchStart(e: React.TouchEvent) {
+    startX.current = e.touches[0].clientX;
+    startY.current = e.touches[0].clientY;
+    horizontal.current = null;
+    setDragging(true);
+  }
+  function onTouchMove(e: React.TouchEvent) {
+    if (startX.current == null || startY.current == null) return;
+    const dxRaw = e.touches[0].clientX - startX.current;
+    const dyRaw = e.touches[0].clientY - startY.current;
+    // Decide once, on the first meaningful move, whether this is a horizontal
+    // swipe (ours) or a vertical scroll (the list's) — don't fight scrolling.
+    if (horizontal.current === null && (Math.abs(dxRaw) > 6 || Math.abs(dyRaw) > 6)) {
+      horizontal.current = Math.abs(dxRaw) > Math.abs(dyRaw);
+    }
+    if (!horizontal.current) return;
+    e.preventDefault();
+    setDx(Math.max(Math.min(dxRaw, 0), MAX));
+  }
+  function onTouchEnd() {
+    setDragging(false);
+    if (dx <= THRESHOLD) onArchive();
+    setDx(0);
+    startX.current = null;
+    startY.current = null;
+    horizontal.current = null;
+  }
+
+  return (
+    <div className="relative overflow-hidden md:overflow-visible">
+      <div
+        aria-hidden="true"
+        className="md:hidden absolute inset-0 bg-red-500 flex items-center justify-end pr-6 text-cream text-[12px] font-body uppercase tracking-widest"
+        style={{ opacity: dx < 0 ? 1 : 0 }}
+      >
+        {label}
+      </div>
+      <div
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          transform: `translateX(${dx}px)`,
+          transition: dragging ? "none" : "transform 200ms ease-out",
+        }}
+        className="relative bg-cream"
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 const initials = (name: string | null, phone: string) => {
   if (!name) return fmtPhone(phone).slice(1, 4);
   return name
@@ -319,11 +392,16 @@ export default function MessagesView({ canCall, embedded = false }: { canCall: b
   }
 
   const showConvo = sel !== null || composing;
+  // Same digit-guard as the thread search below: stripping digits from a
+  // pure-name query like "Alex" gives "", and every number "includes" "", so
+  // without the length check every one of the 6,000+ imported contacts
+  // matched any name typed here.
+  const pickerQDigits = newTo.replace(/\D/g, "");
   const picker = newTo.trim()
     ? contacts.filter(
         (c) =>
           c.name.toLowerCase().includes(newTo.toLowerCase()) ||
-          c.digits.includes(newTo.replace(/\D/g, ""))
+          (pickerQDigits.length > 0 && c.digits.includes(pickerQDigits))
       )
     : contacts;
 
@@ -375,7 +453,12 @@ export default function MessagesView({ canCall, embedded = false }: { canCall: b
 
         <div className="md:flex-1 md:overflow-auto px-2 pb-4">
           {visible.map((t) => (
-            <div key={t.digits} className="group relative">
+            <SwipeToArchive
+              key={t.digits}
+              label={t.archived ? "Restore" : "Archive"}
+              onArchive={() => toggleArchive(t)}
+            >
+            <div className="group relative">
               <button
                 onClick={() => openThread(t)}
                 className={`w-full text-left flex items-start gap-3 px-2.5 py-2.5 rounded-xl transition-colors ${
@@ -431,6 +514,7 @@ export default function MessagesView({ canCall, embedded = false }: { canCall: b
                 </button>
               </div>
             </div>
+            </SwipeToArchive>
           ))}
 
           {visible.length === 0 && !setup && (
@@ -511,6 +595,16 @@ export default function MessagesView({ canCall, embedded = false }: { canCall: b
                       </svg>
                     </button>
                   )}
+                  <button
+                    onClick={() => { toggleArchive(current!); setSel(null); }}
+                    aria-label={current!.archived ? "Restore" : "Archive"}
+                    title={current!.archived ? "Restore" : "Archive"}
+                    className="min-h-tap min-w-tap w-9 h-9 flex items-center justify-center rounded-full text-charcoal/50"
+                  >
+                    <svg className="w-[19px] h-[19px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m3 0-.867 12.142A2 2 0 0115.138 21H8.862a2 2 0 01-1.995-1.858L6 6m4 4.5v6m4-6v6" />
+                    </svg>
+                  </button>
                 </>
               )}
             </div>
