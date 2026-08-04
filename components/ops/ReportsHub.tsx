@@ -23,6 +23,8 @@ import { renderWeeklyUpdate, GOAL_MULTIPLIER, DELIVERY_GOAL_PCT } from "@/lib/we
 
 export interface ReportsData {
   weekStart: string;
+  /** The real current week — differs from weekStart when viewing a past update. */
+  currentWeekStart: string;
   userName: string;
   weekly: WeeklyRow | null;
   items: OpenActionItem[];
@@ -220,9 +222,9 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
       <SubNav
         items={[
           { label: "Weekly update", href: "/reports", active: true },
-          { label: "Action items", href: "/reports#items", count: items.filter((i) => !i.completed_week).length },
-          { label: "Analytics", href: "/reports/analytics" },
-                    { label: "Route efficiency", href: "/delivery/route-plan" },
+          { label: "Revenue", href: "/reports/revenue" },
+          { label: "Signups", href: "/delivery/signups" },
+          { label: "Delivery volume", href: "/reports/analytics" },
         ]}
       />
       <div className="mx-auto max-w-[1440px] px-5 md:px-12">
@@ -254,6 +256,12 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
           </div>
         </div>
         {err && <p className="mt-2 text-[13px] text-ops-danger">{err}</p>}
+        {data.weekStart !== data.currentWeekStart && (
+          <p className="mt-3 text-[13.5px] bg-ops-gold-100 border border-ops-divider inline-block px-3 py-1.5">
+            Viewing a past week.{" "}
+            <Link href="/reports" className="text-ops-accent underline">Back to this week</Link>
+          </p>
+        )}
 
         <div className="lg:grid lg:grid-cols-[1fr_420px] lg:gap-14 mt-2">
           {/* ── The update ── */}
@@ -510,7 +518,7 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
               ) : (
                 data.pastUpdates.map((u) => (
                   <div key={u.week_start} className="border-b border-ops-hairline py-2.5 flex items-center justify-between">
-                    <Link href="/reports" className="text-[15px] text-ops-accent">
+                    <Link href={`/reports?week=${u.week_start}`} className="text-[15px] text-ops-accent">
                       Week of {new Date(u.week_start + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </Link>
                     <span className="text-[12.5px] text-[rgba(26,26,26,.62)]">{u.submitted_at ? "Closed" : "Never submitted"}</span>

@@ -41,7 +41,7 @@ function adminOpsPath(pathname: string): string | null {
   if (pathname === "/dispatch/reports") return "/reports/analytics";
   if (pathname === "/dispatch/weekly") return "/reports";
   if (pathname === "/dispatch/messages") return "/messages/threads";
-  if (pathname === "/sales" || pathname === "/sales/prospects") return "/prospects/directory";
+  if (pathname === "/sales" || pathname === "/sales/prospects") return "/prospects/list";
   if (pathname === "/settings") return "/team";
   if (pathname === "/owner") return "/today";
   return null;

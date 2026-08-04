@@ -7,10 +7,20 @@ import ReportsHub, { type ReportsData } from "@/components/ops/ReportsHub";
 
 export const dynamic = "force-dynamic";
 
-export default async function ReportsPage() {
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams?: { week?: string };
+}) {
   const session = await getSession();
   const supabase = createAdminClient();
-  const week = currentWeekStart();
+  const thisWeek = currentWeekStart();
+  // ?week=YYYY-MM-DD opens a past update read/edit; anything else is ignored.
+  const requested = searchParams?.week;
+  const week =
+    requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) && requested <= thisWeek
+      ? requested
+      : thisWeek;
   const weekStartMs = new Date(week + "T00:00:00").getTime();
 
   const [weekly, items, open, resolved] = await Promise.all([
@@ -59,14 +69,16 @@ export default async function ReportsPage() {
     const { data, error } = await supabase
       .from("weekly_updates")
       .select("week_start, submitted_at")
-      .lt("week_start", week)
+      .lt("week_start", thisWeek)
+      .neq("week_start", week)
       .order("week_start", { ascending: false })
-      .limit(6);
+      .limit(30);
     if (!error) pastUpdates = (data ?? []) as typeof pastUpdates;
   } catch { /* none */ }
 
   const data: ReportsData = {
     weekStart: week,
+    currentWeekStart: thisWeek,
     userName: session?.name ?? "",
     weekly,
     items,

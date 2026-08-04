@@ -315,9 +315,10 @@ export default function DispatchConsole({
   const VanChip = () =>
     van ? (
       <a
-        href={`https://maps.google.com/?q=${van.lat},${van.lng}`}
+        href="https://app.bouncie.com"
         target="_blank"
         rel="noopener noreferrer"
+        title="Open Bouncie for trip history and details"
         className="inline-flex items-center gap-2 mt-2 bg-cream border border-cream-dark rounded-full pl-2.5 pr-3.5 py-1.5"
       >
         <svg viewBox="0 0 24 24" className="w-4 h-4 text-green-primary" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">

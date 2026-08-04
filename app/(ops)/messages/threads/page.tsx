@@ -5,8 +5,9 @@ import { SubNav } from "@/components/ops/Bits";
 export const dynamic = "force-dynamic";
 
 // Threads — the full conversation view (reply, compose, tapbacks, contacts),
-// embedded in the Ops Hub shell. Same component the office number has always
-// used, so nothing about sending changes.
+// embedded in the Ops Hub shell. The wrapper subtracts the 68px header and
+// 48px sub-nav so the composer stays on screen (without it, md:h-screen pushed
+// the message box below the fold — compose looked broken).
 export default function ThreadsPage() {
   return (
     <>
@@ -16,7 +17,9 @@ export default function ThreadsPage() {
           { label: "Threads", href: "/messages/threads", active: true },
         ]}
       />
-      <MessagesView canCall={callConfigured()} />
+      <div className="md:h-[calc(100vh-116px)] md:overflow-hidden">
+        <MessagesView canCall={callConfigured()} embedded />
+      </div>
     </>
   );
 }

@@ -11,8 +11,9 @@ export default function OpsAnalyticsPage() {
       <SubNav
         items={[
           { label: "Weekly update", href: "/reports" },
-          { label: "Analytics", href: "/reports/analytics", active: true },
-          { label: "Route efficiency", href: "/delivery/route-plan" },
+          { label: "Revenue", href: "/reports/revenue" },
+          { label: "Signups", href: "/delivery/signups" },
+          { label: "Delivery volume", href: "/reports/analytics", active: true },
         ]}
       />
       <DispatchReportsPage />

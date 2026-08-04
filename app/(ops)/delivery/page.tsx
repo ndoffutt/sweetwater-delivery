@@ -1,5 +1,5 @@
 import DispatchPage from "../../dispatch/page";
-import { SubNav } from "@/components/ops/Bits";
+import DeliveryNav from "@/components/ops/DeliveryNav";
 
 export const dynamic = "force-dynamic";
 
@@ -13,15 +13,7 @@ export const dynamic = "force-dynamic";
 export default function DeliveryPage() {
   return (
     <>
-      <SubNav
-        items={[
-          { label: "Today's run", href: "/delivery", active: true },
-          { label: "Route plan", href: "/delivery/route-plan" },
-          { label: "History", href: "/delivery/history" },
-          { label: "Customers", href: "/delivery/customers" },
-          { label: "Signups", href: "/delivery/signups" },
-        ]}
-      />
+      <DeliveryNav active="Today's run" />
       <div className="[&_.font-serif]:font-barlowc">
         <DispatchPage />
       </div>

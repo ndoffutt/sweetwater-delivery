@@ -114,7 +114,7 @@ const needsSeparator = (cur: Msg, prev: Msg | undefined) => {
   return a.toDateString() !== b.toDateString() || b.getTime() - a.getTime() > 36e5;
 };
 
-export default function MessagesView({ canCall }: { canCall: boolean }) {
+export default function MessagesView({ canCall, embedded = false }: { canCall: boolean; embedded?: boolean }) {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [setup, setSetup] = useState(false);
@@ -325,10 +325,10 @@ export default function MessagesView({ canCall }: { canCall: boolean }) {
     : contacts;
 
   return (
-    <div className="md:flex md:h-screen bg-cream">
+    <div className={`md:flex ${embedded ? "md:h-full" : "md:h-screen"} bg-cream`}>
       {/* ── Conversation list ─────────────────────────────────── */}
       <div
-        className={`${showConvo ? "hidden md:flex" : "flex"} md:w-[360px] md:border-r md:border-cream-dark flex-col min-h-screen md:min-h-0`}
+        className={`${showConvo ? "hidden md:flex" : "flex"} md:w-[360px] md:border-r md:border-cream-dark flex-col ${embedded ? "min-h-[60vh]" : "min-h-screen"} md:min-h-0`}
       >
         <div className="px-4 pt-4 pb-2">
           <div className="flex items-center justify-between mb-3">
@@ -450,7 +450,7 @@ export default function MessagesView({ canCall }: { canCall: boolean }) {
       </div>
 
       {/* ── Conversation ──────────────────────────────────────── */}
-      <div className={`${showConvo ? "flex" : "hidden md:flex"} flex-1 flex-col md:h-screen min-h-screen md:min-h-0`}>
+      <div className={`${showConvo ? "flex" : "hidden md:flex"} flex-1 flex-col ${embedded ? "md:h-full min-h-[80vh]" : "md:h-screen min-h-screen"} md:min-h-0`}>
         {current || composing ? (
           <>
             {/* Header */}
