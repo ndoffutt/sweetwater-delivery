@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Lora, Poppins } from "next/font/google";
+import { Lora, Poppins, Barlow, Barlow_Condensed } from "next/font/google";
 import SwRegister from "@/components/SwRegister";
 import ErrorCatcher from "@/components/ErrorCatcher";
 import "./globals.css";
@@ -17,6 +17,19 @@ const poppins = Poppins({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600"],
   variable: "--font-poppins",
+  display: "swap",
+});
+// Ops Hub (owner console) type: condensed headings over a normal body face.
+const barlow = Barlow({
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+  variable: "--font-barlow",
+  display: "swap",
+});
+const barlowCondensed = Barlow_Condensed({
+  subsets: ["latin"],
+  weight: ["400", "600"],
+  variable: "--font-barlow-condensed",
   display: "swap",
 });
 
@@ -45,7 +58,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${lora.variable} ${poppins.variable}`}>
+    <html lang="en" className={`${lora.variable} ${poppins.variable} ${barlow.variable} ${barlowCondensed.variable}`}>
       <body className="font-body text-charcoal bg-cream antialiased">
         <SwRegister />
         <ErrorCatcher />
