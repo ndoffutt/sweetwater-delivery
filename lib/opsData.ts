@@ -33,21 +33,14 @@ export async function getThreadTable(supabase: Admin): Promise<ThreadRow[]> {
   type M = { phone: string; direction: "inbound" | "outbound"; body: string | null; created_at: string };
   let msgs: M[] = [];
   try {
-    let { data, error } = await supabase
-      .from("text_messages")
+    // The live inbox is the v2 `messages` table (messaging_v2.sql). The old
+    // text_messages table is only a legacy queue — reading it here left this
+    // page empty while real conversations sat in `messages`.
+    const { data, error } = await supabase
+      .from("messages")
       .select("phone, direction, body, created_at")
-      .is("deleted_at", null)
       .order("created_at", { ascending: true })
       .limit(4000);
-    // Older environments have no deleted_at on text_messages — retry unfiltered
-    // rather than presenting an empty inbox.
-    if (error && /deleted_at/i.test(error.message)) {
-      ({ data, error } = await supabase
-        .from("text_messages")
-        .select("phone, direction, body, created_at")
-        .order("created_at", { ascending: true })
-        .limit(4000));
-    }
     if (error) return [];
     msgs = (data ?? []) as M[];
   } catch {

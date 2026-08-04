@@ -33,6 +33,13 @@ export async function sendThreadMessage(phone: string, body: string, replyToId?:
   });
   if (res.status === "failed") return { error: res.error || "Couldn't send" };
 
+  // Sending to a thread un-archives it — otherwise the new conversation is
+  // invisible in the inbox and the send looks like it did nothing.
+  await supabase
+    .from("conversation_meta")
+    .upsert({ phone_digits: d, archived_at: null }, { onConflict: "phone_digits" })
+    .then(() => {}, () => {});
+
   // Link the reply after the fact so a pre-migration database (no reply_to_id
   // column) still sends the message rather than failing the whole send.
   if (replyToId && res.id) {

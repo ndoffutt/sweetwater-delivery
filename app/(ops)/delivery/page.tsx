@@ -16,10 +16,10 @@ export default function DeliveryPage() {
       <SubNav
         items={[
           { label: "Today's run", href: "/delivery", active: true },
-          { label: "Route plan", href: "/dispatch/route-plan" },
-          { label: "History", href: "/dispatch/history" },
-          { label: "Customers", href: "/dispatch/customers" },
-          { label: "Signups", href: "/dispatch/signups" },
+          { label: "Route plan", href: "/delivery/route-plan" },
+          { label: "History", href: "/delivery/history" },
+          { label: "Customers", href: "/delivery/customers" },
+          { label: "Signups", href: "/delivery/signups" },
         ]}
       />
       <div className="[&_.font-serif]:font-barlowc">

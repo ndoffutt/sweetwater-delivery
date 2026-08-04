@@ -221,9 +221,8 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
         items={[
           { label: "Weekly update", href: "/reports", active: true },
           { label: "Action items", href: "/reports#items", count: items.filter((i) => !i.completed_week).length },
-          { label: "Revenue", href: "/dispatch/reports" },
-          { label: "Delivery volume", href: "/dispatch/reports" },
-          { label: "Route efficiency", href: "/dispatch/route-plan" },
+          { label: "Analytics", href: "/reports/analytics" },
+                    { label: "Route efficiency", href: "/delivery/route-plan" },
         ]}
       />
       <div className="mx-auto max-w-[1440px] px-5 md:px-12">
@@ -511,7 +510,7 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
               ) : (
                 data.pastUpdates.map((u) => (
                   <div key={u.week_start} className="border-b border-ops-hairline py-2.5 flex items-center justify-between">
-                    <Link href="/dispatch/weekly" className="text-[15px] text-ops-accent">
+                    <Link href="/reports" className="text-[15px] text-ops-accent">
                       Week of {new Date(u.week_start + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </Link>
                     <span className="text-[12.5px] text-[rgba(26,26,26,.62)]">{u.submitted_at ? "Closed" : "Never submitted"}</span>

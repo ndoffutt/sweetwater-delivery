@@ -61,3 +61,19 @@ body {
 /* Sub-nav row: horizontally scrollable on mobile without a scrollbar. */
 .ops-subnav::-webkit-scrollbar { display: none; }
 .ops-subnav { scrollbar-width: none; }
+
+/* ── Ops reskin for embedded legacy surfaces ──────────────────
+   The dispatch console, directories, charts, prospect CRM and
+   messenger are shared with the manager and keep their own markup.
+   Inside the owner's .ops shell they adopt the blueprint system:
+   Barlow type, square corners, flat (no shadows). Colors already
+   match — both palettes use the same green/gold/cream/charcoal. */
+.ops .font-serif {
+  font-family: var(--font-barlow-condensed), system-ui, sans-serif;
+  font-weight: 600;
+}
+.ops .font-body {
+  font-family: var(--font-barlow), system-ui, sans-serif;
+}
+.ops [class*="rounded"]:not([class*="rounded-full"]) { border-radius: 0 !important; }
+.ops [class*="shadow"]:not([class*="shadow-none"]) { box-shadow: none !important; }

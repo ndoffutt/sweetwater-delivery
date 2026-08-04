@@ -59,7 +59,7 @@ const COLUMNS = [
 function Card({ c }: { c: BoardCard }) {
   return (
     <Link
-      href={`/sales/prospects?id=${c.id}`}
+      href={`/prospects/directory?id=${c.id}`}
       className={`block border-b border-ops-hairline py-3.5 hover:bg-[rgba(26,26,26,.035)] ${c.status === "on_hold" ? "opacity-[.72]" : ""}`}
     >
       <div className="font-barlow font-medium text-[15.5px] leading-tight">{c.name}</div>
@@ -100,10 +100,10 @@ export default function ProspectsBoard({ data }: { data: BoardData }) {
         items={[
           { label: "Pipeline", href: "/prospects", active: true },
           { label: "Check-ins due", href: "/prospects", count: overdueCount },
-          { label: "Touchpoints", href: "/dispatch/reports" },
-          { label: "Map", href: "/sales/prospects" },
+          { label: "Touchpoints", href: "/reports/analytics" },
+          { label: "Directory & map", href: "/prospects/directory" },
         ]}
-        action={<Link href="/sales/prospects" className={btnSecondary}>Add prospect</Link>}
+        action={<Link href="/prospects/directory" className={btnSecondary}>Add prospect</Link>}
       />
       <div className="mx-auto max-w-[1440px] px-5 md:px-12">
         <div className="pt-8 flex flex-wrap items-end justify-between gap-4">

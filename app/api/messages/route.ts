@@ -181,7 +181,10 @@ export async function GET(request: NextRequest) {
         lastDirection: m.direction,
         unread: 0,
         pinned: Boolean(mt?.pinned_at),
-        archived: Boolean(mt?.archived_at),
+        // A message newer than the archive timestamp resurfaces the thread —
+        // otherwise a bulk archive hides new texts forever and the inbox
+        // looks dead (exactly what happened on 2026-08-03).
+        archived: Boolean(mt?.archived_at && mt.archived_at! > m.created_at),
       };
       threads.set(d, t);
     }

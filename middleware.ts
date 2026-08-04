@@ -28,6 +28,25 @@ async function withSlidingSession(
   return res;
 }
 
+/** Ops-shell equivalent for a legacy path, or null to pass through. */
+function adminOpsPath(pathname: string): string | null {
+  if (pathname === "/dispatch") return "/delivery";
+  if (pathname === "/dispatch/route-plan") return "/delivery/route-plan";
+  if (pathname === "/dispatch/history") return "/delivery/history";
+  if (pathname === "/dispatch/customers") return "/delivery/customers";
+  if (pathname === "/dispatch/signups") return "/delivery/signups";
+  if (pathname === "/dispatch/live" || pathname === "/dispatch/scan") return "/delivery";
+  if (pathname.startsWith("/dispatch/route/")) return "/delivery/route/" + pathname.slice("/dispatch/route/".length);
+  if (pathname.startsWith("/dispatch/delivery/")) return "/delivery/detail/" + pathname.slice("/dispatch/delivery/".length);
+  if (pathname === "/dispatch/reports") return "/reports/analytics";
+  if (pathname === "/dispatch/weekly") return "/reports";
+  if (pathname === "/dispatch/messages") return "/messages/threads";
+  if (pathname === "/sales" || pathname === "/sales/prospects") return "/prospects/directory";
+  if (pathname === "/settings") return "/team";
+  if (pathname === "/owner") return "/today";
+  return null;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -68,6 +87,20 @@ export async function middleware(request: NextRequest) {
 
   if (pathname.startsWith("/driver") && (user.role === "dispatcher" || user.role === "admin")) {
     return withSlidingSession(NextResponse.next(), user, pathname);
+  }
+
+  // The owner never sees the old shell: every legacy path has an ops-shell
+  // equivalent, so redirect there (links inside the shared console components
+  // still point at /dispatch/*). The manager keeps the old paths untouched.
+  // /dispatch/bouncie-setup is deliberately NOT redirected — it receives the
+  // Bouncie OAuth ?code= and must not lose it.
+  if (user.role === "admin" && !pathname.startsWith("/api")) {
+    const opsPath = adminOpsPath(pathname);
+    if (opsPath) {
+      const url = new URL(opsPath, request.url);
+      url.search = request.nextUrl.search;
+      return withSlidingSession(NextResponse.redirect(url), user, pathname);
+    }
   }
   if (
     (pathname.startsWith("/dispatch") ||
