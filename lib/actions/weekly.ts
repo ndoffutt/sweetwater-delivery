@@ -50,6 +50,57 @@ export async function saveWeeklyUpdate(row: WeeklyUpdateRow) {
   return { success: true };
 }
 
+export async function submitWeeklyUpdate(weekStart: string) {
+  await requireSession("dispatcher");
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("weekly_updates")
+    .update({ submitted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("week_start", weekStart);
+  if (error) return { error: missing(error.message) ? "Run supabase/weekly_updates.sql first." : error.message };
+  revalidatePath("/reports");
+  revalidatePath("/dispatch/weekly");
+  return { success: true };
+}
+
+export interface ReportCommentRow {
+  id: string;
+  week_start: string;
+  section: string; // 'issues' | 'operations' | 'growth'
+  author: string;
+  body: string;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+/** Comments attach to a section of the weekly update — the owner↔manager
+ *  back-and-forth that used to happen over text, kept next to the numbers. */
+export async function addReportComment(weekStart: string, section: string, body: string) {
+  const session = await requireSession("dispatcher");
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("report_comments").insert({
+    week_start: weekStart,
+    section,
+    author: session.name,
+    body: body.trim(),
+  });
+  if (error) return { error: missing(error.message) ? "Run supabase/ops_hub.sql first." : error.message };
+  revalidatePath("/reports");
+  return { success: true };
+}
+
+export async function resolveReportComment(id: string) {
+  await requireSession("dispatcher");
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("report_comments")
+    .update({ resolved_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/reports");
+  return { success: true };
+}
+
 export async function addActionItem(input: {
   owner: string;
   action: string;
