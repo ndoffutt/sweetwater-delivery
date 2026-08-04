@@ -96,12 +96,6 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
   const [comments, setComments] = useState(data.comments);
 
   // Revenue derivations — the four labelled values per line.
-  const growthRow = (ytdS: string, priorS: string) => {
-    const ytd = num(ytdS);
-    const prior = num(priorS);
-    if (ytd == null || prior == null || prior === 0) return null;
-    return { vsPrior: ((ytd - prior) / prior) * 100 };
-  };
   const rows = useMemo(() => {
     const build = (label: string, weekS: string, ytdS: string, priorS: string, mult: number) => {
       const ytd = num(ytdS), prior = num(priorS);

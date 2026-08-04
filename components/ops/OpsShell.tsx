@@ -10,7 +10,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { logout } from "@/lib/actions/auth";
 
 type SectionId = "today" | "delivery" | "messages" | "reports" | "prospects";
 
@@ -49,6 +50,7 @@ export default function OpsShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [counts, setCounts] = useState<OpsCounts>(initialCounts);
   const [clock, setClock] = useState<string>("");
 
@@ -121,7 +123,17 @@ export default function OpsShell({
           </nav>
           <div className="ml-auto flex items-center gap-4 shrink-0">
             <span className="hidden lg:block text-[13px] text-[rgba(26,26,26,.62)]">{clock}</span>
-            <span className="bg-ops-accent-100 text-ops-accent-700 text-[12px] px-2.5 py-1 font-barlow">{userName}</span>
+            <button
+              title="Sign out"
+              onClick={async () => {
+                if (!window.confirm("Sign out?")) return;
+                await logout();
+                router.push("/");
+              }}
+              className="bg-ops-accent-100 text-ops-accent-700 text-[12px] px-2.5 py-1 font-barlow hover:bg-ops-accent hover:text-ops-bg"
+            >
+              {userName}
+            </button>
           </div>
         </div>
       </header>
