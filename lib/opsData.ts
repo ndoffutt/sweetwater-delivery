@@ -26,6 +26,7 @@ export interface ThreadRow {
   about: string;
   deliveryRelated: boolean;
   kind: "customer" | "prospect" | "contact" | "unknown";
+  archived: boolean;
 }
 
 /** The unified message table: one row per phone thread, newest first. */
@@ -48,9 +49,13 @@ export async function getThreadTable(supabase: Admin): Promise<ThreadRow[]> {
   }
 
   // Name sources.
-  const [customers, prospects, contacts, route] = await Promise.all([
+  const [customers, prospects, meta, contacts, route] = await Promise.all([
     supabase.from("customers").select("id, name, phone").is("deleted_at", null).then((r) => r.data ?? []),
     supabase.from("prospects").select("id, name, phone, priority").is("deleted_at", null).then((r) => r.data ?? []),
+    supabase
+      .from("conversation_meta")
+      .select("phone_digits, archived_at")
+      .then((r) => r.data ?? [], () => []),
     (async () => {
       // Paged: the SPOT import put 6k+ rows here and PostgREST caps at 1000.
       const out: { phone_digits: string; name: string }[] = [];
@@ -97,6 +102,10 @@ export async function getThreadTable(supabase: Admin): Promise<ThreadRow[]> {
       if (s.customer_id) stopByCustomer.set(s.customer_id, s.stop_order);
     }
   }
+  const archivedAtByDigits = new Map<string, string>();
+  for (const m of meta as { phone_digits: string; archived_at: string | null }[]) {
+    if (m.archived_at) archivedAtByDigits.set(m.phone_digits, m.archived_at);
+  }
 
   // Fold messages into threads.
   interface Acc { phone: string; lastBody: string; lastAt: string; lastDirection: "inbound" | "outbound"; waitingSince: string | null }
@@ -130,6 +139,11 @@ export async function getThreadTable(supabase: Admin): Promise<ThreadRow[]> {
       : contact ? "Contact"
       : "Unknown number";
 
+    // A message newer than the archive timestamp resurfaces the thread — same
+    // rule as the Messages inbox, so archiving here and there agree.
+    const archivedAt = archivedAtByDigits.get(digits);
+    const archived = !!archivedAt && archivedAt > t.lastAt;
+
     rows.push({
       digits,
       phone: t.phone,
@@ -142,6 +156,7 @@ export async function getThreadTable(supabase: Admin): Promise<ThreadRow[]> {
       about,
       deliveryRelated: stop != null,
       kind,
+      archived,
     });
   });
 

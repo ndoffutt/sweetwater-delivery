@@ -40,13 +40,15 @@ export default async function TodayPage() {
     .sort((a, b) => a.stop_order - b.stop_order);
 
   // ── The other three bands ──
-  const [exceptions, threads, overdueProspects, items, weekly] = await Promise.all([
+  const [exceptions, allThreads, overdueProspects, items, weekly] = await Promise.all([
     getOpenExceptions(14).catch(() => []),
     getThreadTable(supabase),
     getOverdueProspectCount(supabase),
     getActionItems(supabase, week),
     getWeeklyRow(supabase, week),
   ]);
+  // Archived conversations are handled — don't resurface them on Today.
+  const threads = allThreads.filter((t) => !t.archived);
 
   // Most urgent prospect facts for the one-line summary.
   let prospectLine = "";

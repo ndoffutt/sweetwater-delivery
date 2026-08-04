@@ -124,12 +124,30 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
 
   if (searchParams.get("unread")) {
-    const { count, error } = await supabase
+    const { data, error } = await supabase
       .from("messages")
-      .select("id", { count: "exact", head: true })
+      .select("phone, created_at")
       .eq("direction", "inbound")
       .is("read_at", null);
-    return NextResponse.json({ unread: error ? 0 : count ?? 0 });
+    if (error) return NextResponse.json({ unread: 0 });
+    const rows = (data ?? []) as { phone: string; created_at: string }[];
+    if (rows.length === 0) return NextResponse.json({ unread: 0 });
+
+    // Don't count messages sitting in an archived thread toward the nav badge
+    // — a message newer than the archive still counts (it resurfaced the
+    // thread), same rule the thread list uses.
+    const { data: metaRows } = await supabase
+      .from("conversation_meta")
+      .select("phone_digits, archived_at");
+    const archivedAt = new Map<string, string>();
+    for (const m of (metaRows ?? []) as { phone_digits: string; archived_at: string | null }[]) {
+      if (m.archived_at) archivedAt.set(m.phone_digits, m.archived_at);
+    }
+    const unread = rows.filter((m) => {
+      const at = archivedAt.get(phoneDigits(m.phone));
+      return !at || m.created_at > at;
+    }).length;
+    return NextResponse.json({ unread });
   }
 
   // Address book for the "To:" picker on a new message.

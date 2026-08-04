@@ -27,7 +27,7 @@ export default async function OpsLayout({ children }: { children: React.ReactNod
     <OpsShell
       userName={session.name}
       initialCounts={{
-        messages: threads.filter((t) => t.waitingSince).length,
+        messages: threads.filter((t) => t.waitingSince && !t.archived).length,
         reports: items.filter((i) => !i.completed_week).length,
         prospects,
       }}

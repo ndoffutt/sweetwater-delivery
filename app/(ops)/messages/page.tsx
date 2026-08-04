@@ -25,7 +25,9 @@ export default async function MessagesPage({
   searchParams?: { f?: string };
 }) {
   const supabase = createAdminClient();
-  const rows = await getThreadTable(supabase);
+  // Archived conversations are handled — they don't belong on the needs-reply
+  // list. (They still resurface here the moment new activity comes in.)
+  const rows = (await getThreadTable(supabase)).filter((r) => !r.archived);
   const filter = searchParams?.f === "delivery" ? "delivery" : searchParams?.f === "not" ? "not" : "all";
 
   const filtered = rows.filter((r) =>
