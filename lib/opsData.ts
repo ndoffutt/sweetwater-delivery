@@ -51,10 +51,23 @@ export async function getThreadTable(supabase: Admin): Promise<ThreadRow[]> {
   const [customers, prospects, contacts, route] = await Promise.all([
     supabase.from("customers").select("id, name, phone").is("deleted_at", null).then((r) => r.data ?? []),
     supabase.from("prospects").select("id, name, phone, priority").is("deleted_at", null).then((r) => r.data ?? []),
-    supabase
-      .from("message_contacts")
-      .select("phone_digits, name")
-      .then((r) => r.data ?? [], () => []),
+    (async () => {
+      // Paged: the SPOT import put 6k+ rows here and PostgREST caps at 1000.
+      const out: { phone_digits: string; name: string }[] = [];
+      try {
+        for (let from = 0; ; from += 1000) {
+          const { data, error } = await supabase
+            .from("message_contacts")
+            .select("phone_digits, name")
+            .order("phone_digits")
+            .range(from, from + 999);
+          if (error || !data) break;
+          out.push(...(data as { phone_digits: string; name: string }[]));
+          if (data.length < 1000) break;
+        }
+      } catch { /* partial is fine */ }
+      return out;
+    })(),
     supabase
       .from("routes")
       .select("id, route_stops(stop_order, customer_id)")

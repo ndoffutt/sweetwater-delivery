@@ -66,6 +66,22 @@ async function fetchMessages(
 /** Look up display names for phone numbers: customer, then prospect, then a
  *  manually saved contact. Returns a digits -> {name, source, customerId} map. */
 async function buildNameMap(supabase: ReturnType<typeof createAdminClient>) {
+  // message_contacts holds the full SPOT import (6k+); PostgREST caps a single
+  // select at 1000 rows, so page through it.
+  const fetchAllContacts = async () => {
+    const out: { phone_digits: string; name: string }[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase
+        .from("message_contacts")
+        .select("phone_digits, name")
+        .order("phone_digits")
+        .range(from, from + 999);
+      if (error || !data) break;
+      out.push(...(data as { phone_digits: string; name: string }[]));
+      if (data.length < 1000) break;
+    }
+    return { data: out };
+  };
   const [customers, prospects, contacts] = await Promise.all([
     supabase
       .from("customers")
@@ -74,7 +90,7 @@ async function buildNameMap(supabase: ReturnType<typeof createAdminClient>) {
       .is("deleted_at", null)
       .not("phone", "is", null),
     supabase.from("prospects").select("name, phone").is("deleted_at", null).not("phone", "is", null),
-    supabase.from("message_contacts").select("phone_digits, name"),
+    fetchAllContacts(),
   ]);
 
   const map = new Map<

@@ -4,6 +4,8 @@ import { getOpenExceptions, getResolvedExceptions } from "@/lib/actions/exceptio
 import { getActionItems, getWeeklyRow, currentWeekStart } from "@/lib/opsData";
 import type { ReportCommentRow } from "@/lib/actions/weekly";
 import ReportsHub, { type ReportsData } from "@/components/ops/ReportsHub";
+import PrintedUpdate from "@/components/ops/PrintedUpdate";
+import weeklyHistory from "@/lib/weeklyHistoryData.json";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,14 @@ export default async function ReportsPage({
     requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) && requested <= thisWeek
       ? requested
       : thisWeek;
+
+  // Pre-app weeks render as the printed copy of the original email, not the
+  // editable form.
+  const printed = (weeklyHistory as Record<string, { date: string; text: string }>)[week];
+  if (printed && week !== thisWeek) {
+    return <PrintedUpdate date={printed.date} text={printed.text} />;
+  }
+
   const weekStartMs = new Date(week + "T00:00:00").getTime();
 
   const [weekly, items, open, resolved] = await Promise.all([

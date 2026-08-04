@@ -2,7 +2,6 @@ import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getThreadTable } from "@/lib/opsData";
 import { SubNav, SegLinks, Tag, btnPrimary, btnSecondary } from "@/components/ops/Bits";
-import ImportContactsButton from "@/components/ops/ImportContactsButton";
 import { easternToday } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
@@ -58,7 +57,7 @@ export default async function MessagesPage({
           { label: "Needs reply", href: "/messages", active: true, count: waiting },
           { label: "Threads", href: "/messages/threads" },
         ]}
-        action={<span className="flex items-center gap-2"><ImportContactsButton /><Link href="/messages/threads" className={btnSecondary}>Compose</Link></span>}
+        action={<Link href="/messages/threads" className={btnSecondary}>New message</Link>}
       />
       <div className="mx-auto max-w-[1440px] px-5 md:px-12">
         <div className="pt-8 flex flex-wrap items-end justify-between gap-4">

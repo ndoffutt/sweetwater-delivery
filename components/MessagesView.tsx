@@ -125,6 +125,7 @@ export default function MessagesView({ canCall, embedded = false }: { canCall: b
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [newTo, setNewTo] = useState("");
+  const [newToName, setNewToName] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
@@ -264,6 +265,8 @@ export default function MessagesView({ canCall, embedded = false }: { canCall: b
     }
     if (composing) {
       setComposing(false);
+      setNewToName(null);
+      setNewTo("");
       await loadThreads();
       setSel(to.replace(/\D/g, "").slice(-10));
     }
@@ -466,17 +469,15 @@ export default function MessagesView({ canCall, embedded = false }: { canCall: b
               </button>
 
               {composing ? (
-                <div className="flex-1 flex items-center gap-2">
-                  <span className="text-sm font-body text-charcoal/45">To:</span>
-                  <input
-                    value={newTo}
-                    onChange={(e) => setNewTo(e.target.value)}
-                    placeholder="Name or number"
-                    inputMode="tel"
-                    autoFocus
-                    className="flex-1 py-1.5 bg-transparent text-charcoal font-body text-sm focus:outline-none"
-                  />
-                </div>
+                <>
+                  <span className="flex-1 text-center font-body text-[15px] font-semibold text-charcoal">New Message</span>
+                  <button
+                    onClick={() => { setComposing(false); setNewTo(""); setNewToName(null); setDraft(""); }}
+                    className="min-h-tap px-2 text-sm font-body text-green-primary"
+                  >
+                    Cancel
+                  </button>
+                </>
               ) : (
                 <>
                   <button
@@ -586,13 +587,53 @@ export default function MessagesView({ canCall, embedded = false }: { canCall: b
               </div>
             )}
 
-            {/* Contact picker while composing */}
+            {/* To: row while composing (chip once a recipient is picked) */}
             {composing && (
+              <div className="px-4 py-2.5 border-b border-cream-dark flex items-center gap-2 bg-cream">
+                <span className="text-sm font-body text-charcoal/45">To:</span>
+                {newToName ? (
+                  <button
+                    onClick={() => { setNewTo(""); setNewToName(null); }}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-green-primary/12 text-green-primary font-body text-sm px-3 py-1"
+                    title="Remove recipient"
+                  >
+                    {newToName}
+                    <span aria-hidden="true" className="text-green-primary/70">&times;</span>
+                  </button>
+                ) : (
+                  <input
+                    value={newTo}
+                    onChange={(e) => setNewTo(e.target.value)}
+                    placeholder="Name or number"
+                    inputMode="tel"
+                    autoFocus
+                    className="flex-1 py-1.5 bg-transparent text-charcoal font-body text-sm focus:outline-none"
+                  />
+                )}
+              </div>
+            )}
+
+            {/* Contact picker while composing */}
+            {composing && !newToName && (
               <div className="flex-1 overflow-auto">
+                {newTo.replace(/\D/g, "").length === 10 && (
+                  <button
+                    onClick={() => {
+                      const d = newTo.replace(/\D/g, "");
+                      setNewTo(d);
+                      setNewToName(fmtPhone(d));
+                      taRef.current?.focus();
+                    }}
+                    className="w-full text-left flex items-center gap-3 px-4 py-2.5 border-b border-cream-dark/60 hover:bg-cream-dark/30"
+                  >
+                    <span className="w-9 h-9 rounded-full bg-green-primary text-cream font-body text-xs font-semibold flex items-center justify-center shrink-0">#</span>
+                    <span className="font-body text-sm text-green-primary">Text {fmtPhone(newTo.replace(/\D/g, ""))}</span>
+                  </button>
+                )}
                 {picker.slice(0, 60).map((c) => (
                   <button
                     key={c.digits}
-                    onClick={() => setNewTo(c.digits)}
+                    onClick={() => { setNewTo(c.digits); setNewToName(c.name); taRef.current?.focus(); }}
                     className="w-full text-left flex items-center gap-3 px-4 py-2.5 border-b border-cream-dark/60 hover:bg-cream-dark/30"
                   >
                     <span className="w-9 h-9 rounded-full bg-green-primary/12 text-green-primary font-body text-xs font-semibold flex items-center justify-center shrink-0">
@@ -613,6 +654,9 @@ export default function MessagesView({ canCall, embedded = false }: { canCall: b
                 )}
               </div>
             )}
+
+            {/* Blank conversation while composing with a recipient picked */}
+            {composing && newToName && <div className="flex-1 bg-cream" />}
 
             {/* Messages */}
             {!composing && (
