@@ -33,12 +33,21 @@ export async function getThreadTable(supabase: Admin): Promise<ThreadRow[]> {
   type M = { phone: string; direction: "inbound" | "outbound"; body: string | null; created_at: string };
   let msgs: M[] = [];
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("text_messages")
       .select("phone, direction, body, created_at")
       .is("deleted_at", null)
       .order("created_at", { ascending: true })
       .limit(4000);
+    // Older environments have no deleted_at on text_messages — retry unfiltered
+    // rather than presenting an empty inbox.
+    if (error && /deleted_at/i.test(error.message)) {
+      ({ data, error } = await supabase
+        .from("text_messages")
+        .select("phone, direction, body, created_at")
+        .order("created_at", { ascending: true })
+        .limit(4000));
+    }
     if (error) return [];
     msgs = (data ?? []) as M[];
   } catch {
@@ -49,7 +58,10 @@ export async function getThreadTable(supabase: Admin): Promise<ThreadRow[]> {
   const [customers, prospects, contacts, route] = await Promise.all([
     supabase.from("customers").select("id, name, phone").is("deleted_at", null).then((r) => r.data ?? []),
     supabase.from("prospects").select("id, name, phone, priority").is("deleted_at", null).then((r) => r.data ?? []),
-    supabase.from("message_contacts").select("phone_digits, name").then((r) => r.data ?? []).catch(() => []),
+    supabase
+      .from("message_contacts")
+      .select("phone_digits, name")
+      .then((r) => r.data ?? [], () => []),
     supabase
       .from("routes")
       .select("id, route_stops(stop_order, customer_id)")
@@ -103,9 +115,9 @@ export async function getThreadTable(supabase: Admin): Promise<ThreadRow[]> {
     const contact = contactByDigits.get(digits);
     const stop = cust ? stopByCustomer.get(cust.id) : undefined;
 
-    let name = cust?.name ?? pros?.name ?? contact ?? t.phone;
-    let kind: ThreadRow["kind"] = cust ? "customer" : pros ? "prospect" : contact ? "contact" : "unknown";
-    let about =
+    const name = cust?.name ?? pros?.name ?? contact ?? t.phone;
+    const kind: ThreadRow["kind"] = cust ? "customer" : pros ? "prospect" : contact ? "contact" : "unknown";
+    const about =
       stop != null ? `Delivery · stop ${stop}`
       : cust ? "Customer"
       : pros ? `Prospect${pros.priority ? ` · ${pros.priority}` : ""}`
