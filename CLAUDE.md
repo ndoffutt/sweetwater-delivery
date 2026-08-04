@@ -5,18 +5,20 @@ delivery dispatch + driver app, customer directory, two-way SMS from the office
 number, and sales/prospects. Expanding beyond delivery into the company-wide
 ops hub (modeled on the MCG app).
 
-## Deploys
-- **This app is in production.** Never `git push origin main` or trigger a
-  Vercel prod deploy unless the user explicitly says "push", "deploy", "ship",
-  etc.
-- Local commits are always fine (reversible).
-- **One build per change.** Vercel bills build minutes and every branch used to
-  build. `vercel.json` now disables builds for `claude/*` and `staging`, so only
-  `main` deploys. Do NOT push the same commit through feature branch, then
-  staging, then main - that was four builds for one change. Commit on the
-  working branch, then fast-forward `main` once, when the user says ship.
+## Deploys — MAIN ONLY (per Nate, 2026-08-04)
+- **Work directly on `main` and push to `main`.** The staging branch is retired
+  ("we aren't doing anything on staging anymore... always push purely to main").
+  Pushing `main` auto-deploys prod. The owner login (PIN 2968) IS the testing
+  environment — build features gated to the owner, verify live, then widen.
+- Standing approval to push exists for work Nate asked for; still say what
+  shipped. For anything risky or destructive, confirm first.
+- **One build per change.** Vercel bills build minutes; only `main` builds
+  (`vercel.json` disables `claude/*` and `staging`). Batch commits and push
+  once per change, not per commit.
+- Verify locally first: `rm -rf .next && npm run build`, plus the dev server
+  (`.claude/launch.json` → `sw-dev` on :3001) for browser checks.
 
-## Environments — STAGING IS PAUSED (2026-07)
+## Environments — STAGING RETIRED (2026-08)
 
 | | Production | Staging |
 |---|---|---|

@@ -7,7 +7,7 @@
 // unlabelled single number once made a business running +15% read as flat.
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { SubNav, Reg, Tag, btnPrimary, btnSecondary, inputCls, Kicker } from "@/components/ops/Bits";
 import {
   saveWeeklyUpdate,
@@ -94,6 +94,40 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
   const [commentBody, setCommentBody] = useState("");
   const [commentSection, setCommentSection] = useState("operations");
   const [comments, setComments] = useState(data.comments);
+
+  // SPOT "Outgoing Summary" import — fills the revenue inputs from a
+  // screenshot/PDF of the report. A week-long range fills the weekly fields,
+  // a Jan-1-anchored range fills the YTD fields.
+  const spotInput = useRef<HTMLInputElement>(null);
+  const [spotBusy, setSpotBusy] = useState(false);
+  const [spotNote, setSpotNote] = useState("");
+
+  async function importSpot(file: File) {
+    setSpotBusy(true);
+    setSpotNote("Reading the export…");
+    try {
+      const fd = new FormData();
+      fd.append("export", file);
+      const r = await fetch("/api/reports/spot-extract", { method: "POST", body: fd });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Couldn't read that file");
+      const rev = d.revenue as { span: "week" | "ytd"; sweetwater: number; delivery: number };
+      if (rev.span === "ytd") {
+        setSwYtd(String(rev.sweetwater));
+        setDelYtd(String(rev.delivery));
+        setSpotNote(`Filled YTD: Sweetwater's $${Math.round(rev.sweetwater).toLocaleString()}, delivery $${Math.round(rev.delivery).toLocaleString()}.`);
+      } else {
+        setSwWeek(String(rev.sweetwater));
+        setDelWeek(String(rev.delivery));
+        setSpotNote(`Filled this week: Sweetwater's $${Math.round(rev.sweetwater).toLocaleString()}, delivery $${Math.round(rev.delivery).toLocaleString()}. Upload a Jan-1-to-date export to fill YTD.`);
+      }
+    } catch (e) {
+      setSpotNote(e instanceof Error ? e.message : "Couldn't read that file");
+    } finally {
+      setSpotBusy(false);
+      if (spotInput.current) spotInput.current.value = "";
+    }
+  }
 
   // Revenue derivations — the four labelled values per line.
   const rows = useMemo(() => {
@@ -297,8 +331,25 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
                 <h2 className="font-barlowc font-semibold text-[24px] leading-none">
                   <span className="text-[rgba(26,26,26,.5)] mr-3">3</span>Growth
                 </h2>
-                <Tag tone="accent">four values per line, always</Tag>
+                <div className="flex items-center gap-3">
+                  <button
+                    className={btnSecondary}
+                    disabled={spotBusy}
+                    onClick={() => spotInput.current?.click()}
+                  >
+                    {spotBusy ? "Reading…" : "Import SPOT export"}
+                  </button>
+                  <Tag tone="accent">four values per line, always</Tag>
+                </div>
               </div>
+              <input
+                ref={spotInput}
+                type="file"
+                accept="image/*,application/pdf"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void importSpot(f); }}
+              />
+              {spotNote && <p className="mt-2 text-[13px] text-[rgba(26,26,26,.68)]">{spotNote}</p>}
               {/* Inputs */}
               <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
                 {[
