@@ -1,10 +1,11 @@
 "use client";
 
-// Action items — card-per-task grid, MCG's Tasks layout: outlined square card,
-// a colored status stripe down the left edge, owner as a colored initials
-// chip picked from the real team. No Ops/Growth split — one flat list.
+// Action items — one full-width bar per item (the WBC/MCG row shape): a
+// colored status stripe down the left edge, owner as a colored initials chip
+// picked from the real team, and a critical flag that sorts to the top. No
+// Ops/Growth split — one flat list.
 import { useState, useTransition } from "react";
-import { addActionItem, setActionItemDone, removeActionItem } from "@/lib/actions/weekly";
+import { addActionItem, setActionItemDone, removeActionItem, setActionItemCritical } from "@/lib/actions/weekly";
 import type { ActionItemRow } from "@/lib/actions/weekly";
 import { btnPrimary, btnSecondary, inputCls } from "@/components/ops/Bits";
 
@@ -56,6 +57,7 @@ export default function ActionItemsPanel({
   const [newOwnerId, setNewOwnerId] = useState<string | null>(null);
   const [newOwnerName, setNewOwnerName] = useState("");
   const [newAction, setNewAction] = useState("");
+  const [newCritical, setNewCritical] = useState(false);
 
   function apply(next: ActionItemRow[]) {
     setRows(next);
@@ -77,6 +79,15 @@ export default function ActionItemsPanel({
     });
   }
 
+  function toggleCritical(a: ActionItemRow) {
+    const next = !a.critical;
+    apply(rows.map((x) => (x.id === a.id ? { ...x, critical: next } : x)));
+    start(async () => {
+      const r = await setActionItemCritical(a.id, next);
+      if (r?.error) { apply(rows.map((x) => (x.id === a.id ? { ...x, critical: !next } : x))); setErr(r.error); }
+    });
+  }
+
   function pickOwner(m: ActionItemTeamMember) {
     const deselecting = newOwnerId === m.id;
     setNewOwnerId(deselecting ? null : m.id);
@@ -91,18 +102,19 @@ export default function ActionItemsPanel({
     start(async () => {
       // The section split isn't shown anymore — every item created here just
       // lands in "operations" (the DB column stays for old data / reporting).
-      const r = await addActionItem({ owner, ownerId: newOwnerId, action, section: "operations", openedWeek: weekStart });
+      const r = await addActionItem({ owner, ownerId: newOwnerId, action, section: "operations", openedWeek: weekStart, critical: newCritical });
       if (r?.error) {
         setErr(r.error);
         return;
       }
       apply([
         ...rows,
-        { id: `tmp-${Date.now()}`, owner, owner_id: newOwnerId, action, section: "operations", opened_week: weekStart, completed_week: null },
+        { id: `tmp-${Date.now()}`, owner, owner_id: newOwnerId, critical: newCritical, action, section: "operations", opened_week: weekStart, completed_week: null },
       ]);
       setNewOwnerId(null);
       setNewOwnerName("");
       setNewAction("");
+      setNewCritical(false);
       setAdding(false);
     });
   }
@@ -115,13 +127,22 @@ export default function ActionItemsPanel({
           and MCG. A card grid made every item look like its own object to
           consider; a list reads as one thing to work down. */}
       <div className="flex flex-col gap-2">
-        {rows.map((a) => {
+        {[...rows]
+          .sort((a, b) => {
+            // Critical to the top, but never above the fold of "done" — a
+            // finished item shouldn't jump the queue just for being flagged.
+            const aDone = a.completed_week === weekStart, bDone = b.completed_week === weekStart;
+            if (aDone !== bDone) return aDone ? 1 : -1;
+            if (!!a.critical !== !!b.critical) return a.critical ? -1 : 1;
+            return 0;
+          })
+          .map((a) => {
           const done = a.completed_week === weekStart;
           const carried = a.opened_week !== weekStart && !done;
-          const stripe = done ? "rgba(26,26,26,.2)" : carried ? "#7a2626" : "#02733e";
+          const stripe = done ? "rgba(26,26,26,.2)" : a.critical ? "#b03a2e" : carried ? "#7a2626" : "#02733e";
           return (
             <div key={a.id} className="flex items-stretch border border-ops-divider bg-ops-bg" style={{ opacity: done ? 0.6 : 1 }}>
-              <div style={{ background: stripe }} className="w-[5px] shrink-0" />
+              <div style={{ background: stripe, width: a.critical && !done ? 8 : 5 }} className="shrink-0" />
               <div className="min-w-0 flex-1 flex items-center gap-3 px-3 py-2.5">
                 <button
                   aria-label={done ? "Reopen" : "Complete"}
@@ -129,8 +150,21 @@ export default function ActionItemsPanel({
                   className={`w-4 h-4 shrink-0 border ${done ? "bg-ops-accent border-ops-accent" : "border-ops-divider"}`}
                 />
                 <span className={`font-barlow text-[15px] leading-snug flex-1 min-w-0 ${done ? "line-through text-[rgba(26,26,26,.5)]" : ""}`}>
+                  {a.critical && !done && (
+                    <span className="text-[10.5px] font-barlowc font-semibold uppercase tracking-wider px-1.5 py-0.5 mr-2 align-middle bg-[#b03a2e] text-ops-bg">
+                      Critical
+                    </span>
+                  )}
                   {a.action}
                 </span>
+                <button
+                  onClick={() => toggleCritical(a)}
+                  aria-pressed={!!a.critical}
+                  title={a.critical ? "Remove critical flag" : "Flag as critical"}
+                  className={`shrink-0 text-[15px] leading-none ${a.critical ? "text-[#b03a2e]" : "text-[rgba(26,26,26,.25)] hover:text-[#b03a2e]"}`}
+                >
+                  ⚑
+                </button>
                 <span className="flex items-center gap-1.5 shrink-0">
                   <OwnerChip name={a.owner} size={20} />
                   <span className="text-[12.5px] font-barlow text-[rgba(26,26,26,.68)] hidden sm:inline">
@@ -191,6 +225,15 @@ export default function ActionItemsPanel({
                 autoFocus
                 className={`${inputCls} w-full`}
               />
+              <label className="flex items-center gap-2 cursor-pointer min-h-tap">
+                <input
+                  type="checkbox"
+                  checked={newCritical}
+                  onChange={(e) => setNewCritical(e.target.checked)}
+                  className="w-4 h-4 accent-[#b03a2e]"
+                />
+                <span className="text-[13px] font-barlow">Critical</span>
+              </label>
               <div className="flex gap-2">
                 <button className={btnSecondary} onClick={() => setAdding(false)}>
                   Cancel

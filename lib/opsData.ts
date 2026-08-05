@@ -190,6 +190,7 @@ export interface OpenActionItem {
   id: string;
   owner: string;
   owner_id: string | null;
+  critical: boolean;
   action: string;
   section: "operations" | "growth";
   opened_week: string;
@@ -198,6 +199,7 @@ export interface OpenActionItem {
 
 const ACTION_ITEM_CORE = "id, owner, action, section, opened_week, completed_week";
 const ACTION_ITEM_V2 = `${ACTION_ITEM_CORE}, owner_id`;
+const ACTION_ITEM_V3 = `${ACTION_ITEM_V2}, critical`;
 
 export async function getActionItems(supabase: Admin, weekStart: string): Promise<OpenActionItem[]> {
   try {
@@ -207,10 +209,18 @@ export async function getActionItems(supabase: Admin, weekStart: string): Promis
     let error: { message: string } | null;
     ({ data, error } = await supabase
       .from("action_items")
-      .select(ACTION_ITEM_V2)
+      .select(ACTION_ITEM_V3)
       .is("deleted_at", null)
       .or(`completed_week.is.null,completed_week.eq.${weekStart}`)
       .order("opened_week", { ascending: true }));
+    if (error) {
+      ({ data, error } = await supabase
+        .from("action_items")
+        .select(ACTION_ITEM_V2)
+        .is("deleted_at", null)
+        .or(`completed_week.is.null,completed_week.eq.${weekStart}`)
+        .order("opened_week", { ascending: true }));
+    }
     if (error) {
       ({ data, error } = await supabase
         .from("action_items")
@@ -220,7 +230,7 @@ export async function getActionItems(supabase: Admin, weekStart: string): Promis
         .order("opened_week", { ascending: true }));
     }
     if (error) return [];
-    return ((data ?? []) as unknown as OpenActionItem[]).map((i) => ({ ...i, owner_id: i.owner_id ?? null }));
+    return ((data ?? []) as unknown as OpenActionItem[]).map((i) => ({ ...i, owner_id: i.owner_id ?? null, critical: i.critical ?? false }));
   } catch {
     return [];
   }

@@ -8,6 +8,7 @@ export interface ActionItemRow {
   id: string;
   owner: string;
   owner_id: string | null;
+  critical: boolean;
   action: string;
   section: "operations" | "growth";
   opened_week: string;
@@ -171,6 +172,7 @@ export async function addActionItem(input: {
   action: string;
   section: "operations" | "growth";
   openedWeek: string;
+  critical?: boolean;
 }) {
   const session = await requireSession("dispatcher");
   const supabase = createAdminClient();
@@ -181,9 +183,13 @@ export async function addActionItem(input: {
     opened_week: input.openedWeek,
     created_by: session.name,
   };
-  // owner_id lands with ops_hub.sql — try it, fall back to the core insert on
-  // a database that hasn't run that migration yet.
-  let { error } = await supabase.from("action_items").insert({ ...base, owner_id: input.ownerId ?? null });
+  // owner_id and critical each land with their own migration — step the
+  // fallback so a database missing one doesn't lose the other.
+  const withOwner = { ...base, owner_id: input.ownerId ?? null };
+  let { error } = await supabase.from("action_items").insert({ ...withOwner, critical: !!input.critical });
+  if (error && /critical/i.test(error.message)) {
+    ({ error } = await supabase.from("action_items").insert(withOwner));
+  }
   if (error && /owner_id/i.test(error.message)) {
     ({ error } = await supabase.from("action_items").insert(base));
   }
@@ -211,6 +217,17 @@ export async function setActionItemDone(id: string, weekStart: string, done: boo
   revalidatePath("/dispatch/weekly");
   revalidatePath("/today");
   revalidatePath("/reports");
+  return { success: true };
+}
+
+/** Flag/unflag an item as critical. */
+export async function setActionItemCritical(id: string, critical: boolean) {
+  await requireSession("dispatcher");
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("action_items").update({ critical }).eq("id", id);
+  if (error) return { error: /critical/i.test(error.message) ? "Run supabase/action_item_critical.sql first." : error.message };
+  revalidatePath("/reports");
+  revalidatePath("/today");
   return { success: true };
 }
 
