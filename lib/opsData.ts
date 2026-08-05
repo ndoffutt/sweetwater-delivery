@@ -357,18 +357,35 @@ export interface RetentionCustomer {
   spend_2026: number | null;
   status: string;
   snapshot_at: string;
+  category: string;
+  reason: string | null;
 }
 
-/** Lapsed accounts, biggest historic spend first — the ones worth a call. */
+/** The retention list. Ordering and the lost/reduced split are applied in the
+ *  component, which has the arithmetic for "dollars gone" in front of it. */
 export async function getRetentionCustomers(supabase: Admin): Promise<RetentionCustomer[]> {
   try {
     const { data, error } = await supabase
       .from("customer_retention")
-      .select("id, customer_name, customer_id, first_seen, last_seen, orders, spend_2024, spend_2025, spend_2026, status, snapshot_at")
+      .select("id, customer_name, customer_id, first_seen, last_seen, orders, spend_2024, spend_2025, spend_2026, status, snapshot_at, category, reason")
       .is("deleted_at", null)
       .neq("status", "dismissed")
       .order("spend_2025", { ascending: false });
-    if (error) return [];
+    if (error) {
+      // category/reason arrive with retention_categories.sql.
+      const fb = await supabase
+        .from("customer_retention")
+        .select("id, customer_name, customer_id, first_seen, last_seen, orders, spend_2024, spend_2025, spend_2026, status, snapshot_at")
+        .is("deleted_at", null)
+        .neq("status", "dismissed")
+        .order("spend_2025", { ascending: false });
+      if (fb.error) return [];
+      return ((fb.data ?? []) as RetentionCustomer[]).map((r) => ({
+        ...r,
+        category: (r.spend_2026 ?? 0) === 0 ? "lost" : "reduced",
+        reason: null,
+      }));
+    }
     return (data ?? []) as RetentionCustomer[];
   } catch {
     return [];
