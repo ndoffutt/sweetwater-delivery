@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   createTeamMember,
   setTeamMemberPin,
@@ -187,6 +188,24 @@ export default function TeamPanel({
           </p>
         </div>
         {error && <p className="mt-3 text-[13px] text-ops-danger">{error}</p>}
+
+        {/* Master route — off the Delivery nav on purpose. The pre-dispatch
+            check flags a bad order on the day, which is when it matters; this
+            is for the occasional deliberate reshuffle. */}
+        <section className="mt-9 border-t border-ops-text pt-4">
+          <h2 className="font-barlowc font-semibold uppercase text-[22px] tracking-[0.06em] leading-none">Master route</h2>
+          <div className="mt-4 flex items-center justify-between gap-4 border border-ops-divider p-4 max-w-[720px]">
+            <div>
+              <p className="font-barlow text-[15px]">Route plan</p>
+              <p className="font-barlow text-[12.5px] text-[rgba(26,26,26,.55)] mt-0.5">
+                The standing stop order every run is built from. Each dispatch is
+                checked against it automatically, so this is only for reordering
+                the master list itself.
+              </p>
+            </div>
+            <Link href="/delivery/route-plan" className={`${btnSecondary} shrink-0`}>Open</Link>
+          </div>
+        </section>
 
         {/* Notifications */}
         <section className="mt-9 border-t border-ops-text pt-4">
