@@ -75,7 +75,7 @@ export async function createTeamMember(input: { name: string; role: TeamRole; pi
     .select("id, name, role, phone, active, created_at")
     .single();
   if (error) return { error: error.message };
-  revalidatePath("/settings");
+  revalidatePath("/team");
   return { user: data };
 }
 
@@ -91,7 +91,7 @@ export async function setTeamMemberPin(id: string, pin: string) {
   }
   const { error } = await supabase.from("users").update({ pin_hash }).eq("id", id);
   if (error) return { error: error.message };
-  revalidatePath("/settings");
+  revalidatePath("/team");
   return { success: true };
 }
 
@@ -104,7 +104,7 @@ export async function renameTeamMember(id: string, name: string) {
   if (denied) return { error: denied };
   const { error } = await supabase.from("users").update({ name: trimmed }).eq("id", id);
   if (error) return { error: error.message };
-  revalidatePath("/settings");
+  revalidatePath("/team");
   return { success: true };
 }
 
@@ -127,7 +127,7 @@ export async function setTeamMemberActive(id: string, active: boolean) {
   }
   const { error } = await supabase.from("users").update({ active }).eq("id", id);
   if (error) return { error: error.message };
-  revalidatePath("/settings");
+  revalidatePath("/team");
   return { success: true };
 }
 
@@ -150,6 +150,6 @@ export async function removeTeamMember(id: string) {
     .update({ deleted_at: new Date().toISOString(), active: false })
     .eq("id", id);
   if (error) return { error: error.message };
-  revalidatePath("/settings");
+  revalidatePath("/team");
   return { success: true };
 }

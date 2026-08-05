@@ -1,12 +1,12 @@
 "use client";
 
-// Action items — structured the way MCG's Tasks module does it: the owner is
-// a real person picked from the team (colored initials chip), not free text.
-// Square, not round — Sweetwater's blueprint system has no rounded corners.
+// Action items — card-per-task grid, MCG's Tasks layout: outlined square card,
+// a colored status stripe down the left edge, owner as a colored initials
+// chip picked from the real team. No Ops/Growth split — one flat list.
 import { useState, useTransition } from "react";
 import { addActionItem, setActionItemDone, removeActionItem } from "@/lib/actions/weekly";
 import type { ActionItemRow } from "@/lib/actions/weekly";
-import { btnSecondary, inputCls } from "@/components/ops/Bits";
+import { btnPrimary, btnSecondary, inputCls } from "@/components/ops/Bits";
 
 export interface ActionItemTeamMember {
   id: string;
@@ -24,7 +24,7 @@ function initials(name: string): string {
   return ((p[0]?.[0] ?? "") + (p[1]?.[0] ?? "")).toUpperCase() || "?";
 }
 
-function OwnerChip({ name, size = 22 }: { name: string; size?: number }) {
+function OwnerChip({ name, size = 24 }: { name: string; size?: number }) {
   return (
     <span
       style={{ background: chipColor(name), width: size, height: size, fontSize: size * 0.42 }}
@@ -51,11 +51,11 @@ export default function ActionItemsPanel({
   const [rows, setRows] = useState(items);
   const [pending, start] = useTransition();
   const [err, setErr] = useState("");
+  const [adding, setAdding] = useState(false);
 
   const [newOwnerId, setNewOwnerId] = useState<string | null>(null);
   const [newOwnerName, setNewOwnerName] = useState("");
   const [newAction, setNewAction] = useState("");
-  const [newSection, setNewSection] = useState<"operations" | "growth">("operations");
 
   function apply(next: ActionItemRow[]) {
     setRows(next);
@@ -89,109 +89,119 @@ export default function ActionItemsPanel({
     if (!owner || !action) return;
     setErr("");
     start(async () => {
-      const r = await addActionItem({ owner, ownerId: newOwnerId, action, section: newSection, openedWeek: weekStart });
+      // The section split isn't shown anymore — every item created here just
+      // lands in "operations" (the DB column stays for old data / reporting).
+      const r = await addActionItem({ owner, ownerId: newOwnerId, action, section: "operations", openedWeek: weekStart });
       if (r?.error) {
         setErr(r.error);
         return;
       }
       apply([
         ...rows,
-        { id: `tmp-${Date.now()}`, owner, owner_id: newOwnerId, action, section: newSection, opened_week: weekStart, completed_week: null },
+        { id: `tmp-${Date.now()}`, owner, owner_id: newOwnerId, action, section: "operations", opened_week: weekStart, completed_week: null },
       ]);
       setNewOwnerId(null);
       setNewOwnerName("");
       setNewAction("");
+      setAdding(false);
     });
   }
 
   return (
     <div>
-      {err && <p className="text-[13px] text-ops-danger mb-2">{err}</p>}
-      {rows.length === 0 ? (
-        <p className="text-[14px] text-[rgba(26,26,26,.62)] py-2">Nothing open.</p>
-      ) : (
-        rows.map((a) => {
+      {err && <p className="text-[13px] text-ops-danger mb-3">{err}</p>}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+        {rows.map((a) => {
           const done = a.completed_week === weekStart;
           const carried = a.opened_week !== weekStart && !done;
+          const stripe = done ? "rgba(26,26,26,.2)" : carried ? "#7a2626" : "#02733e";
           return (
-            <div key={a.id} className="border-b border-ops-hairline py-3 flex items-start gap-3">
-              <button
-                aria-label={done ? "Reopen" : "Complete"}
-                onClick={() => toggle(a)}
-                className={`mt-0.5 w-4 h-4 shrink-0 border ${done ? "bg-ops-accent border-ops-accent" : "border-ops-divider"}`}
-              />
-              <OwnerChip name={a.owner} />
-              <div className="min-w-0 flex-1">
-                <div className={`text-[15px] ${done ? "line-through text-[rgba(26,26,26,.5)]" : ""}`}>{a.action}</div>
-                <div className="text-[12.5px] mt-0.5 flex items-center gap-2">
-                  <span className="text-[rgba(26,26,26,.62)]">{a.owner}</span>
-                  {done ? (
-                    <span className="text-ops-accent">Completed — drops off next week</span>
-                  ) : carried ? (
-                    <span className="text-ops-danger">
-                      Overdue · carried since {new Date(a.opened_week + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </span>
-                  ) : (
-                    <span className="text-[rgba(26,26,26,.5)]">This week</span>
-                  )}
+            <div key={a.id} className="flex border border-ops-divider bg-ops-bg" style={{ opacity: done ? 0.6 : 1 }}>
+              <div style={{ background: stripe }} className="w-[5px] shrink-0" />
+              <div className="min-w-0 flex-1 px-3 py-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className={`font-barlow text-[15px] leading-snug ${done ? "line-through text-[rgba(26,26,26,.5)]" : ""}`}>
+                    {a.action}
+                  </div>
+                  <button
+                    aria-label={done ? "Reopen" : "Complete"}
+                    onClick={() => toggle(a)}
+                    className={`mt-0.5 w-4 h-4 shrink-0 border ${done ? "bg-ops-accent border-ops-accent" : "border-ops-divider"}`}
+                  />
+                </div>
+                <div className="flex items-center gap-2 mt-2.5">
+                  <OwnerChip name={a.owner} size={20} />
+                  <span className="text-[12.5px] font-barlow text-[rgba(26,26,26,.68)]">{a.owner.split(/\s+/)[0]}</span>
+                  <span className="ml-auto text-[11px] font-barlowc uppercase tracking-[0.06em]" style={{ color: stripe }}>
+                    {done ? "Done" : carried ? "Overdue" : "This week"}
+                  </span>
+                  <button onClick={() => remove(a)} className="text-[rgba(26,26,26,.35)] hover:text-ops-danger">
+                    ✕
+                  </button>
                 </div>
               </div>
-              <button onClick={() => remove(a)} className="text-[rgba(26,26,26,.4)] hover:text-ops-danger shrink-0">
-                ✕
-              </button>
             </div>
           );
-        })
-      )}
+        })}
 
-      <div className="mt-3">
-        {team.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {team.map((m) => {
-              const on = newOwnerId === m.id;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => pickOwner(m)}
-                  className={`flex items-center gap-1.5 pl-1 pr-2 py-1 border min-h-tap ${
-                    on ? "border-ops-accent bg-ops-accent-100" : "border-ops-divider hover:bg-[rgba(26,26,26,.05)]"
-                  }`}
-                >
-                  <OwnerChip name={m.name} size={18} />
-                  <span className="text-[12.5px] font-barlow">{m.name.split(/\s+/)[0]}</span>
+        {/* Add card — same footprint as a task card, sits in the grid */}
+        <div className="border border-dashed border-ops-divider p-3">
+          {adding ? (
+            <div className="space-y-2">
+              {team.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {team.map((m) => {
+                    const on = newOwnerId === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => pickOwner(m)}
+                        className={`flex items-center gap-1 pl-0.5 pr-1.5 py-0.5 border min-h-tap ${
+                          on ? "border-ops-accent bg-ops-accent-100" : "border-ops-divider hover:bg-[rgba(26,26,26,.05)]"
+                        }`}
+                      >
+                        <OwnerChip name={m.name} size={16} />
+                        <span className="text-[11.5px] font-barlow">{m.name.split(/\s+/)[0]}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <input
+                value={newOwnerName}
+                onChange={(e) => {
+                  setNewOwnerName(e.target.value);
+                  setNewOwnerId(null);
+                }}
+                placeholder="Owner (or pick above)"
+                className={`${inputCls} w-full`}
+              />
+              <input
+                value={newAction}
+                onChange={(e) => setNewAction(e.target.value)}
+                placeholder="What needs doing?"
+                autoFocus
+                className={`${inputCls} w-full`}
+              />
+              <div className="flex gap-2">
+                <button className={btnSecondary} onClick={() => setAdding(false)}>
+                  Cancel
                 </button>
-              );
-            })}
-          </div>
-        )}
-        <div className="flex flex-wrap gap-2">
-          <input
-            value={newOwnerName}
-            onChange={(e) => {
-              setNewOwnerName(e.target.value);
-              setNewOwnerId(null);
-            }}
-            placeholder="Owner"
-            className={`${inputCls} w-[110px]`}
-          />
-          <input
-            value={newAction}
-            onChange={(e) => setNewAction(e.target.value)}
-            placeholder="Action"
-            className={`${inputCls} flex-1 min-w-[140px]`}
-          />
-          <select
-            value={newSection}
-            onChange={(e) => setNewSection(e.target.value as "operations" | "growth")}
-            className={`${inputCls} w-[92px]`}
-          >
-            <option value="operations">Ops</option>
-            <option value="growth">Growth</option>
-          </select>
-          <button className={btnSecondary} disabled={!newOwnerName.trim() || !newAction.trim() || pending} onClick={add}>
-            Add
-          </button>
+                <button className={`${btnPrimary} flex-1`} disabled={!newOwnerName.trim() || !newAction.trim() || pending} onClick={add}>
+                  Add
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAdding(true)}
+              className="w-full h-full min-h-[64px] flex items-center justify-center gap-1.5 text-[14px] font-barlowc font-semibold text-[rgba(26,26,26,.5)] hover:text-ops-text"
+            >
+              + New action item
+            </button>
+          )}
         </div>
       </div>
     </div>
