@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import TeamPanel, { type TeamMember, type DeletionEntry } from "@/components/ops/TeamPanel";
+import TextingSettings from "@/components/ops/TextingSettings";
+import { getMessagingSettings, smsConfigured } from "@/lib/messaging";
+import { Band } from "@/components/ops/Bits";
 
 export const dynamic = "force-dynamic";
 
@@ -31,12 +34,25 @@ export default async function TeamPage() {
     deletions = (dels ?? []) as DeletionEntry[];
   } catch { /* deletion_audit migration pending */ }
 
+  const messaging = await getMessagingSettings();
+
   return (
+    <>
     <TeamPanel
       meId={session.id}
       viewerRole="admin"
       team={(data ?? []) as TeamMember[]}
       deletions={deletions}
     />
+    <div className="mx-auto max-w-[1440px] px-5 md:px-12 pb-10">
+      <Band title="Texting">
+        <TextingSettings
+          autoTextsOn={messaging.autoTextsOn}
+          testTo={messaging.testTo}
+          smsConfigured={smsConfigured()}
+        />
+      </Band>
+    </div>
+    </>
   );
 }

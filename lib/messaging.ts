@@ -12,6 +12,8 @@
 
 import { createHmac } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getMessagingSettings } from "@/lib/settings";
+import { bodyForStop } from "@/lib/autoTexts";
 
 const SID = process.env.TWILIO_ACCOUNT_SID;
 const TOKEN = process.env.TWILIO_AUTH_TOKEN;
@@ -32,17 +34,10 @@ export const callConfigured = () => Boolean(SID && TOKEN && FROM && BRIDGE);
 // add "dispatcher") to open sending up to the Manager later.
 export const canTransmitSms = (role: string | null | undefined) => role === "admin";
 
-// Master switch for the automated out-for-delivery text. Env-var gated on
-// purpose: turning automated texting off is a Vercel env change + redeploy,
-// never a code edit, so it can be killed fast without shipping. Unset =
-// off. Manual texts (Messages inbox, one-off sends) are unaffected either way.
-export const autoTextsOn = () => process.env.AUTO_TEXTS === "1";
-
-// Dry-run target. When set, every AUTOMATED text goes to this one number
-// instead of the real customers, with the intended recipient named in the
-// body — so the whole flow can be exercised end-to-end against a phone you
-// own before a single customer hears from us. Unset = real recipients.
-const TEST_TO = process.env.AUTO_TEXTS_TEST_TO;
+// Master switch + dry-run target now live in the database (Settings → Texting)
+// so they take effect on the next request instead of waiting on a redeploy.
+// Manual texts (Messages inbox, one-off sends) are unaffected either way.
+export { getMessagingSettings } from "@/lib/settings";
 
 /**
  * The one automated customer text: fires once, when the driver taps Navigate
@@ -58,11 +53,12 @@ const TEST_TO = process.env.AUTO_TEXTS_TEST_TO;
 // message is a fixed, pre-approved string with no human input, and the whole
 // point is that the DRIVER taps it — gating it by role would just record
 // everything as "pending" and silently never send. So it transmits for whoever
-// taps it, still subject to autoTextsOn() and smsConfigured().
+// taps it, still subject to the Settings switch and smsConfigured().
 export async function notifyRouteDeparted(
   supabase: ReturnType<typeof createAdminClient>,
   routeId: string
 ) {
+  const { testTo } = await getMessagingSettings();
   const { data: stops } = await supabase
     .from("route_stops")
     .select("id, customer_id, status, has_dropoff, has_pickup, customers(name, phone, auto_texts_enabled)")
@@ -79,15 +75,12 @@ export async function notifyRouteDeparted(
     list
       .filter((s) => s.customers?.phone && s.customers?.auto_texts_enabled !== false)
       .map((s) => {
-        // A pickup-only stop is the van coming to COLLECT — telling those
-        // customers their "delivery is on the way" is just wrong.
-        const body =
-          s.has_pickup && !s.has_dropoff
-            ? "Hi! Sweetwater's Cleaners is on the way today. Please have your clothes ready for pick up!"
-            : "Hi! Your Sweetwater's Cleaners delivery is on the way today.";
+        // Bodies come from lib/autoTexts.ts, the same list Settings displays,
+        // so what's documented and what's sent can't drift apart.
+        const body = bodyForStop(s.has_dropoff, s.has_pickup);
         return recordAndSend({
-          phone: TEST_TO || s.customers!.phone!,
-          body: TEST_TO ? `[TEST → ${s.customers!.name}] ${body}` : body,
+          phone: testTo || s.customers!.phone!,
+          body: testTo ? `[TEST → ${s.customers!.name}] ${body}` : body,
           customerId: s.customer_id,
           stopId: s.id,
           senderName: "Auto",

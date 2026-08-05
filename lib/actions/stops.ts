@@ -3,15 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/session";
-import { recordAndSend, canTransmitSms, autoTextsOn } from "@/lib/messaging";
+import { recordAndSend, canTransmitSms } from "@/lib/messaging";
 import type { StopStatus } from "@/lib/types";
 
-// Per-stop arrive/complete auto-texts are DORMANT — the out-for-delivery
-// blast on dispatch (lib/messaging.ts notifyRouteDispatched, fired from
-// dispatchRoute in lib/actions/routes.ts + lib/actions/manifest.ts) is the
-// only automated text that's actually wired to fire for now. Both this
-// helper and its call sites below stay gated behind autoTextsOn() in case
-// per-stop texts come back later.
+// Per-stop arrive/complete auto-texts are DORMANT. The one live automated
+// text is the out-for-delivery message, fired from markRouteDeparted in
+// lib/actions/routes.ts when the driver taps Navigate. This constant is
+// deliberately not wired to the Settings switch: flipping automated texts on
+// there must not silently resurrect a per-stop message nobody asked for. Kept
+// only because per-stop texts may come back.
+const PER_STOP_AUTO_TEXTS = false;
+
 // Best-effort auto-text on arrive/complete. Sends for real once Twilio is
 // configured; until then it's recorded as pending. No-op without a phone.
 async function autoText(
@@ -218,11 +220,11 @@ export async function updateStopStatus(stopId: string, status: StopStatus) {
   // Auto-text the customer on arrive / complete (per the map-first flow) — only
   // when automated texting is switched on. Manual sends are unaffected.
   const transmit = canTransmitSms(session.role);
-  if (autoTextsOn() && status === "arrived" && firstArrival) {
+  if (PER_STOP_AUTO_TEXTS && status === "arrived" && firstArrival) {
     await autoText(supabase, stopId, "Hi! Your Sweetwater's delivery is on the way.", transmit);
   }
   if (status === "completed" && firstCompletion) {
-    if (autoTextsOn()) {
+    if (PER_STOP_AUTO_TEXTS) {
       await autoText(supabase, stopId, "Your Sweetwater's delivery is complete.", transmit);
     }
     await logDeliveryVisit(supabase, stop.customer_id, session.name);

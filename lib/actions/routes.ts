@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/session";
-import { autoTextsOn, notifyRouteDeparted } from "@/lib/messaging";
+import { notifyRouteDeparted, getMessagingSettings } from "@/lib/messaging";
 
 export async function createRoute(date: string) {
   const session = await requireSession("dispatcher");
@@ -215,7 +215,8 @@ export async function markRouteDeparted(routeId: string) {
   if (error) {
     return { error: /departed_at/i.test(error.message) ? "Run supabase/auto_texts.sql first." : error.message };
   }
-  if (stamped && stamped.length > 0 && autoTextsOn()) {
+  const { autoTextsOn } = await getMessagingSettings();
+  if (stamped && stamped.length > 0 && autoTextsOn) {
     await notifyRouteDeparted(supabase, routeId);
   }
   revalidatePath("/driver");
