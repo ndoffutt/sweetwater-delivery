@@ -31,7 +31,7 @@ export interface ThreadRow {
 
 /** The unified message table: one row per phone thread, newest first. */
 export async function getThreadTable(supabase: Admin): Promise<ThreadRow[]> {
-  type M = { phone: string; direction: "inbound" | "outbound"; body: string | null; created_at: string };
+  type M = { phone: string; direction: "inbound" | "outbound"; body: string | null; created_at: string; reaction?: string | null };
   let msgs: M[] = [];
   try {
     // The live inbox is the v2 `messages` table (messaging_v2.sql). The old
@@ -39,7 +39,7 @@ export async function getThreadTable(supabase: Admin): Promise<ThreadRow[]> {
     // page empty while real conversations sat in `messages`.
     const { data, error } = await supabase
       .from("messages")
-      .select("phone, direction, body, created_at")
+      .select("phone, direction, body, created_at, reaction")
       .order("created_at", { ascending: true })
       .limit(4000);
     if (error) return [];
@@ -117,8 +117,12 @@ export async function getThreadTable(supabase: Admin): Promise<ThreadRow[]> {
     t.lastBody = (m.body ?? "").slice(0, 160);
     t.lastAt = m.created_at;
     t.lastDirection = m.direction;
-    // waitingSince = the first inbound after the last outbound.
+    // waitingSince = the first inbound after the last outbound. Reacting to an
+    // inbound message (👍 etc.) counts as dealing with it — the whole point of
+    // a thumbs-up is "seen, nothing to say back", so it must clear the wait or
+    // the thread nags forever in Needs reply.
     if (m.direction === "outbound") t.waitingSince = null;
+    else if (m.reaction) t.waitingSince = null;
     else if (t.waitingSince == null) t.waitingSince = m.created_at;
     acc.set(d, t);
   }

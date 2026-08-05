@@ -10,7 +10,9 @@ export default function ProspectsNav({
   checkinsDue?: number;
 }) {
   const items = [
-    { label: "Pipeline", href: "/prospects" },
+    // The pipeline board is columns-across — unusable on a phone, where List
+    // and Check-ins due are what you actually want. Desktop keeps it.
+    { label: "Pipeline", href: "/prospects", desktopOnly: true },
     { label: "List", href: "/prospects/list" },
     { label: "Check-ins due", href: "/prospects/checkins", count: checkinsDue },
     { label: "Touchpoints", href: "/prospects/touchpoints" },

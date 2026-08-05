@@ -292,6 +292,40 @@ export default function DispatchConsole({
     return () => { stop = true; clearInterval(t); };
   }, [phase]);
 
+  // Watch for a route appearing while this screen is sitting on the upload
+  // prompt. Without this, a console opened before the manifest went up stays
+  // on "Upload today's SPOT manifest" all day even after the manager
+  // dispatches — it only ever polled once it already knew about a route, so
+  // it could never find out about one. Refreshing on focus too, since the
+  // office leaves this tab open for hours.
+  //
+  // Deliberately NOT run during "review": a refresh mid-review would throw
+  // away the dispatcher's uncommitted row edits.
+  useEffect(() => {
+    if (phase !== "empty") return;
+    let stop = false;
+    async function check() {
+      if (stop || document.visibilityState !== "visible") return;
+      try {
+        const res = await fetch("/api/live", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        // A route exists now but this screen doesn't know about it.
+        if (!stop && data?.route) router.refresh();
+      } catch { /* offline blip — try again next tick */ }
+    }
+    void check();
+    const t = setInterval(() => void check(), 30_000);
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    return () => {
+      stop = true;
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("focus", check);
+    };
+  }, [phase, router]);
+
   // Van status chip — the Bouncie device reports around the clock, so the
   // office can always see where the van is, route out or not.
   interface Van { lat: number; lng: number; speed: number | null; lastUpdated: string | null }

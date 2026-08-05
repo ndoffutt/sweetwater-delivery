@@ -3,19 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/session";
-import { recordAndSend, canTransmitSms } from "@/lib/messaging";
-import { trackUrl } from "@/lib/track";
+import { recordAndSend, canTransmitSms, autoTextsOn } from "@/lib/messaging";
 import type { StopStatus } from "@/lib/types";
 
-// Master switch for ALL automated customer texts (arrive/complete notifications
-// + the out-for-delivery blast). HARD OFF during the Twilio rollout — automated
-// texting is fully disabled regardless of environment, so nothing can fire.
-// To re-enable once texting is fully tested, change this back to
-//   process.env.AUTO_TEXTS === "1"
-// (and set AUTO_TEXTS=1). Manual texts (Messages inbox, one-off sends) are
-// unaffected either way.
-const autoTextsOn = () => false;
-
+// Per-stop arrive/complete auto-texts are DORMANT — the out-for-delivery
+// blast on dispatch (lib/messaging.ts notifyRouteDispatched, fired from
+// dispatchRoute in lib/actions/routes.ts + lib/actions/manifest.ts) is the
+// only automated text that's actually wired to fire for now. Both this
+// helper and its call sites below stay gated behind autoTextsOn() in case
+// per-stop texts come back later.
 // Best-effort auto-text on arrive/complete. Sends for real once Twilio is
 // configured; until then it's recorded as pending. No-op without a phone.
 async function autoText(
@@ -26,11 +22,13 @@ async function autoText(
 ) {
   const { data: stop } = await supabase
     .from("route_stops")
-    .select("customer_id, customers(phone)")
+    .select("customer_id, customers(phone, auto_texts_enabled)")
     .eq("id", stopId)
     .single();
-  const customer = stop?.customers as unknown as { phone: string | null } | null;
+  const customer = stop?.customers as unknown as { phone: string | null; auto_texts_enabled: boolean | null } | null;
   if (!customer?.phone) return;
+  // Commercial accounts default this off — see supabase/auto_texts.sql.
+  if (customer.auto_texts_enabled === false) return;
   await recordAndSend({
     phone: customer.phone,
     body: message,
@@ -39,42 +37,6 @@ async function autoText(
     senderName: "Auto",
     transmit,
   });
-}
-
-// When the van rolls (route flips to in_progress), text every customer on the
-// route their personal tracking link - the Domino's-style "out for delivery"
-// moment. Gated behind TRACK_LINKS=1 because the 10DLC campaign must declare
-// embedded links before texts may carry URLs; until then this is a no-op.
-async function notifyRouteStarted(
-  supabase: ReturnType<typeof createAdminClient>,
-  routeId: string,
-  transmit: boolean
-) {
-  if (process.env.TRACK_LINKS !== "1") return;
-  const { data: stops } = await supabase
-    .from("route_stops")
-    .select("id, customer_id, status, customers(name, phone)")
-    .eq("route_id", routeId)
-    .eq("status", "pending");
-  const list = (stops ?? []) as unknown as {
-    id: string;
-    customer_id: string;
-    customers: { name: string; phone: string | null } | null;
-  }[];
-  await Promise.all(
-    list
-      .filter((s) => s.customers?.phone)
-      .map((s) =>
-        recordAndSend({
-          phone: s.customers!.phone!,
-          body: `Sweetwater's Cleaners: your delivery is out for delivery today. Track it live: ${trackUrl(s.id)}`,
-          customerId: s.customer_id,
-          stopId: s.id,
-          senderName: "Auto",
-          transmit,
-        })
-      )
-  );
 }
 
 // A completed delivery to an active prospect is logged as its own "delivery"
@@ -238,19 +200,14 @@ export async function updateStopStatus(stopId: string, status: StopStatus) {
 
   if (error) return { error: error.message };
 
-  // If first stop arrived, start the route. The .eq("status","dispatched")
-  // guard + .select() makes this fire exactly once per route: only the call
-  // that flips dispatched -> in_progress gets rows back.
+  // If first stop arrived, start the route (dispatched -> in_progress). The
+  // out-for-delivery text already went out at dispatch time, not here.
   if (status === "arrived" && firstArrival) {
-    const { data: started } = await supabase
+    await supabase
       .from("routes")
       .update({ status: "in_progress", started_at: new Date().toISOString() })
       .eq("id", stop.route_id)
-      .eq("status", "dispatched")
-      .select("id");
-    if (started && started.length > 0 && autoTextsOn()) {
-      await notifyRouteStarted(supabase, stop.route_id, canTransmitSms(session.role));
-    }
+      .eq("status", "dispatched");
   }
 
   // Check if all stops are completed/skipped to complete the route

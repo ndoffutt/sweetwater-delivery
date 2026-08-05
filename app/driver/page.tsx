@@ -148,5 +148,13 @@ export default async function DriverPage() {
   );
   const stops: RouteStop[] = merged.map((s, i) => ({ ...s, stop_order: i + 1 }));
 
-  return <DriverMap initialStops={stops} isManager={isManager} canMessage={session.role === "admin"} routeId={route.id} />;
+  return (
+    <DriverMap
+      initialStops={stops}
+      isManager={isManager}
+      canMessage={session.role === "admin"}
+      routeId={route.id}
+      departedAt={(route as { departed_at?: string | null }).departed_at ?? null}
+    />
+  );
 }

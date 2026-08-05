@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { logout } from "@/lib/actions/auth";
+import { markRouteDeparted } from "@/lib/actions/routes";
 import { runStopAction, subscribeSync, flushBeforeLeaving, type SyncState } from "@/lib/offline";
 import PhotoCapture from "@/components/PhotoCapture";
 import RouteMap from "@/components/RouteMap";
@@ -331,7 +332,7 @@ function mapsHref(c: { address: string; lat: number | null; lng: number | null }
 }
 
 // ── Main ───────────────────────────────────────────────────────
-export default function DriverMap({ initialStops, isManager, canMessage = false, routeId }: { initialStops: RouteStop[]; isManager: boolean; canMessage?: boolean; routeId: string }) {
+export default function DriverMap({ initialStops, isManager, canMessage = false, routeId, departedAt = null }: { initialStops: RouteStop[]; isManager: boolean; canMessage?: boolean; routeId: string; departedAt?: string | null }) {
   const [stops, setStops] = useState(initialStops);
   const [targetId, setTargetId] = useState(() => (initialStops.find((s) => s.status === "pending" || s.status === "arrived") ?? initialStops[0])?.id ?? "");
   // Prospect stops open expanded so the standing notes + touch history are
@@ -453,6 +454,27 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
     // today" card and taps its own "Back to Dispatch" when ready. Bouncing them
     // out immediately felt too abrupt.
   }
+  // The van leaving the shop is what texts the day's customers. There's no
+  // separate button for it: the driver taps Navigate on their first stop
+  // anyway, so we hang it off that and it can never be forgotten.
+  //
+  // Strictly fire-and-forget. Out here a request HANGS rather than failing
+  // (Hamptons dead zones), so this must never be awaited and must never gate
+  // opening Google Maps. If it doesn't land, `departed` flips back and the
+  // next Navigate tap retries — the server side is idempotent
+  // (`.is("departed_at", null)`), so a retry can't double-text anyone.
+  const [departed, setDeparted] = useState(departedAt != null);
+  const departingRef = useRef(false);
+  function headOut() {
+    if (departed || departingRef.current) return;
+    departingRef.current = true;
+    setDeparted(true);
+    markRouteDeparted(routeId)
+      .then((r) => { if (r?.error) setDeparted(false); })
+      .catch(() => setDeparted(false))
+      .finally(() => { departingRef.current = false; });
+  }
+
   const photoCount = (s: RouteStop) =>
     (s.photos?.length ?? 0) + (photoBump[s.id]?.dropoff ?? 0) + (photoBump[s.id]?.pickup ?? 0);
   // Per-service proof. Legacy photos (kind null, taken before the photo_kinds
@@ -958,7 +980,7 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
                   </div>
                 )}
                 <div style={{ display: "flex", gap: 10 }}>
-                  <button onClick={() => { void flushBeforeLeaving(); window.open(mapsHref(cust), "_blank"); }} style={{ flex: 1, minHeight: 54, borderRadius: 15, background: C.gold, color: C.charcoal, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                  <button onClick={() => { headOut(); void flushBeforeLeaving(); window.open(mapsHref(cust), "_blank"); }} style={{ flex: 1, minHeight: 54, borderRadius: 15, background: C.gold, color: C.charcoal, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                     <Icon name="nav" size={18} color={C.charcoal} /> Navigate
                   </button>
                   <button onClick={() => setProblemFor(target)} style={{ width: 54, minHeight: 54, borderRadius: 15, background: "#fff", border: `1px solid ${C.creamDark}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>

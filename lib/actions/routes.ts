@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/session";
+import { autoTextsOn, notifyRouteDeparted } from "@/lib/messaging";
 
 export async function createRoute(date: string) {
   const session = await requireSession("dispatcher");
@@ -188,5 +189,36 @@ export async function dispatchRoute(routeId: string) {
   revalidatePath(`/dispatch/route/${routeId}`);
   revalidatePath("/dispatch");
   revalidatePath("/driver");
+  return { success: true };
+}
+
+/**
+ * Driver tapped "Heading out" — the van is leaving the shop. This is the one
+ * moment that fires the automated out-for-delivery text to every customer on
+ * the route. The `.is("departed_at", null)` guard + `.select()` makes it fire
+ * exactly once: only the call that actually stamps departed_at gets rows back,
+ * so a double-tap or a replayed request can't text everyone twice.
+ */
+export async function markRouteDeparted(routeId: string) {
+  await requireSession();
+  const supabase = createAdminClient();
+
+  const { data: stamped, error } = await supabase
+    .from("routes")
+    .update({ departed_at: new Date().toISOString() })
+    .eq("id", routeId)
+    .is("departed_at", null)
+    .select("id");
+
+  // departed_at lands with supabase/auto_texts.sql — on a database that hasn't
+  // run it, say so rather than silently swallowing the tap.
+  if (error) {
+    return { error: /departed_at/i.test(error.message) ? "Run supabase/auto_texts.sql first." : error.message };
+  }
+  if (stamped && stamped.length > 0 && autoTextsOn()) {
+    await notifyRouteDeparted(supabase, routeId);
+  }
+  revalidatePath("/driver");
+  revalidatePath("/dispatch");
   return { success: true };
 }

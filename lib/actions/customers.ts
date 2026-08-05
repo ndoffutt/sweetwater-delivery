@@ -272,6 +272,19 @@ export async function deleteCustomer(id: string) {
 // back. Shelving also pulls them from the master route so the numbering closes
 // up; bringing them back leaves them unpositioned and the directory prompts for
 // a new route spot.
+// Toggle whether this customer receives AUTOMATED texts (arrive/complete/
+// out-for-delivery). Manual sends from the Messages inbox are unaffected.
+export async function setAutoTexts(id: string, enabled: boolean) {
+  await requireSession("dispatcher");
+  const supabase = createAdminClient();
+
+  const { error } = await supabase.from("customers").update({ auto_texts_enabled: enabled }).eq("id", id);
+  if (error) return { error: isMissingColumn(error.message) ? "Run supabase/auto_texts.sql first." : error.message };
+
+  revalidatePath("/dispatch/customers");
+  return { success: true };
+}
+
 export async function setCustomerRange(id: string, outOfRange: boolean) {
   await requireSession("dispatcher");
   const supabase = createAdminClient();

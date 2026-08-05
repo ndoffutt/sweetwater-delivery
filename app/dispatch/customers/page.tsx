@@ -35,22 +35,25 @@ export default async function CustomersPage({
 
   const baseCols =
     "id,name,address,phone,gate_code,delivery_notes,tags,spot_account,account_type,route_seq,lat,lng,active,created_at";
-  // delivery_days is optional (tolerant of the migration not having run yet).
-  let { data: customers } = await supabase
-    .from("customers")
-    .select(`${baseCols},delivery_days`)
-    .eq("active", true)
-    .is("deleted_at", null)
-    .order("name");
-  if (!customers) {
-    const retry = await supabase
+  // delivery_days and auto_texts_enabled each arrive with their own migration,
+  // so step the fallback rather than dropping straight to the base columns —
+  // one missing column must not also cost us the other's data (that would
+  // silently blank the delivery-day chips).
+  // Dynamic column lists defeat supabase-js's generic inference, so unwrap to
+  // the shape we actually asked for.
+  const selectCustomers = async (cols: string): Promise<Customer[] | null> => {
+    const { data } = await supabase
       .from("customers")
-      .select(baseCols)
+      .select(cols)
       .eq("active", true)
       .is("deleted_at", null)
       .order("name");
-    customers = retry.data as typeof customers;
-  }
+    return (data as unknown as Customer[] | null) ?? null;
+  };
+
+  let customers = await selectCustomers(`${baseCols},delivery_days,auto_texts_enabled`);
+  if (!customers) customers = await selectCustomers(`${baseCols},delivery_days`);
+  if (!customers) customers = await selectCustomers(baseCols);
 
   // Which of these customers are shelved as out of range (tolerant of the
   // column not existing yet). Merged onto each row below so the directory can

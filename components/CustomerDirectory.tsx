@@ -14,6 +14,7 @@ import {
   reorderRoute,
   setDeliveryDays,
   setCustomerRange,
+  setAutoTexts,
   type RoutePositioning,
 } from "@/lib/actions/customers";
 import RouteMap from "@/components/RouteMap";
@@ -496,6 +497,12 @@ function Detail({
     onPatch({ out_of_range: outOfRange, ...(outOfRange ? { route_seq: null } : {}) });
     pending(() => { setCustomerRange(c.id, outOfRange); });
   }
+  const autoTextsOn = c.auto_texts_enabled !== false; // missing column = on
+  function toggleAutoTexts() {
+    const next = !autoTextsOn;
+    onPatch({ auto_texts_enabled: next });
+    pending(() => { setAutoTexts(c.id, next); });
+  }
   async function saveNotes() {
     onPatch({ gate_code: gate.trim() || null, delivery_notes: notes.trim() || null });
     await saveCustomerNotes(c.id, { gate_code: gate.trim() || null, delivery_notes: notes.trim() || null });
@@ -685,6 +692,22 @@ function Detail({
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Automated texts: arrive/complete/out-for-delivery. Off by default for
+          commercial accounts. Manual sends from Messages aren't affected. */}
+      <div className="flex items-center justify-between gap-3 bg-cream rounded-xl border border-cream-dark px-3 py-2.5">
+        <div>
+          <p className="text-sm font-body text-charcoal">Automated texts</p>
+          <p className="text-xs text-charcoal/40 font-body">Arrive/complete alerts. Manual texts unaffected.</p>
+        </div>
+        <button
+          onClick={toggleAutoTexts}
+          aria-pressed={autoTextsOn}
+          className={`shrink-0 min-h-tap w-12 h-7 rounded-full transition-colors relative ${autoTextsOn ? "bg-green-primary" : "bg-charcoal/20"}`}
+        >
+          <span className={`absolute top-1 w-5 h-5 rounded-full bg-cream transition-transform ${autoTextsOn ? "translate-x-6" : "translate-x-1"}`} />
+        </button>
       </div>
 
       {/* Gate + notes (editable) */}

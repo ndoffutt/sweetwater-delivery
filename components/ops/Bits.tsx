@@ -89,6 +89,9 @@ export interface SubNavItem {
   href: string;
   active?: boolean;
   count?: number;
+  /** Hide on phones. For wide, board-style views that don't survive a narrow
+   *  screen — the tab just eats scroll space there. */
+  desktopOnly?: boolean;
 }
 
 /** Second-row navigation: 48px on desktop, scrollable kickers on mobile. */
@@ -100,7 +103,9 @@ export function SubNav({ items, action }: { items: SubNavItem[]; action?: React.
           <Link
             key={it.href + it.label}
             href={it.href}
-            className={`shrink-0 font-barlowc font-semibold uppercase text-[13px] tracking-[0.08em] leading-none h-full flex items-center border-b-2 ${
+            className={`shrink-0 font-barlowc font-semibold uppercase text-[13px] tracking-[0.08em] leading-none h-full ${
+              it.desktopOnly ? "hidden md:flex" : "flex"
+            } items-center border-b-2 ${
               it.active ? "border-ops-accent text-ops-text" : "border-transparent text-[rgba(26,26,26,.62)] hover:text-ops-text"
             }`}
           >

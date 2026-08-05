@@ -32,6 +32,71 @@ export const callConfigured = () => Boolean(SID && TOKEN && FROM && BRIDGE);
 // add "dispatcher") to open sending up to the Manager later.
 export const canTransmitSms = (role: string | null | undefined) => role === "admin";
 
+// Master switch for the automated out-for-delivery text. Env-var gated on
+// purpose: turning automated texting off is a Vercel env change + redeploy,
+// never a code edit, so it can be killed fast without shipping. Unset =
+// off. Manual texts (Messages inbox, one-off sends) are unaffected either way.
+export const autoTextsOn = () => process.env.AUTO_TEXTS === "1";
+
+// Dry-run target. When set, every AUTOMATED text goes to this one number
+// instead of the real customers, with the intended recipient named in the
+// body — so the whole flow can be exercised end-to-end against a phone you
+// own before a single customer hears from us. Unset = real recipients.
+const TEST_TO = process.env.AUTO_TEXTS_TEST_TO;
+
+/**
+ * The one automated customer text: fires once, when the driver taps Navigate
+ * on their first stop and the van actually pulls out — not at dispatch time,
+ * and not per stop. Texts every customer with a PENDING stop, so if a dead
+ * zone delayed this until mid-route, already-delivered customers are skipped.
+ * Also skips anyone with auto_texts_enabled off (commercial accounts default
+ * to off — see supabase/auto_texts.sql).
+ */
+// NOTE on the transmit gate: canTransmitSms() is owner-only, and deliberately
+// NOT applied here. That gate exists to stop un-vetted staff sending arbitrary
+// free-form texts from the office line while Twilio is being trusted out. This
+// message is a fixed, pre-approved string with no human input, and the whole
+// point is that the DRIVER taps it — gating it by role would just record
+// everything as "pending" and silently never send. So it transmits for whoever
+// taps it, still subject to autoTextsOn() and smsConfigured().
+export async function notifyRouteDeparted(
+  supabase: ReturnType<typeof createAdminClient>,
+  routeId: string
+) {
+  const { data: stops } = await supabase
+    .from("route_stops")
+    .select("id, customer_id, status, has_dropoff, has_pickup, customers(name, phone, auto_texts_enabled)")
+    .eq("route_id", routeId)
+    .eq("status", "pending");
+  const list = (stops ?? []) as unknown as {
+    id: string;
+    customer_id: string;
+    has_dropoff: boolean;
+    has_pickup: boolean;
+    customers: { name: string; phone: string | null; auto_texts_enabled: boolean | null } | null;
+  }[];
+  await Promise.all(
+    list
+      .filter((s) => s.customers?.phone && s.customers?.auto_texts_enabled !== false)
+      .map((s) => {
+        // A pickup-only stop is the van coming to COLLECT — telling those
+        // customers their "delivery is on the way" is just wrong.
+        const body =
+          s.has_pickup && !s.has_dropoff
+            ? "Hi! Sweetwater's Cleaners is on the way today. Please have your clothes ready for pick up!"
+            : "Hi! Your Sweetwater's Cleaners delivery is on the way today.";
+        return recordAndSend({
+          phone: TEST_TO || s.customers!.phone!,
+          body: TEST_TO ? `[TEST → ${s.customers!.name}] ${body}` : body,
+          customerId: s.customer_id,
+          stopId: s.id,
+          senderName: "Auto",
+          transmit: true,
+        });
+      })
+  );
+}
+
 /** Last 10 digits - the key used to match numbers to customers and threads. */
 export const phoneDigits = (p: string | null | undefined) =>
   (p || "").replace(/\D/g, "").slice(-10);

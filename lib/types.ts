@@ -41,6 +41,10 @@ export interface Customer {
   // route, but kept in the directory so it can be brought back. Optional until
   // the out_of_range migration runs.
   out_of_range?: boolean | null;
+  // Opt-in/out of AUTOMATED texts (arrive/complete/out-for-delivery). Manual
+  // sends from Messages are unaffected. Optional until auto_texts.sql runs;
+  // defaults true when the column is missing.
+  auto_texts_enabled?: boolean | null;
   created_at: string;
 }
 
