@@ -15,7 +15,10 @@ import { logout } from "@/lib/actions/auth";
 
 type SectionId = "today" | "delivery" | "messages" | "reports" | "prospects";
 
+// Today is a section like any other. It used to be reachable on desktop only
+// by knowing the wordmark was a link, which is not something anyone knows.
 const SECTIONS: { id: SectionId; label: string; href: string }[] = [
+  { id: "today", label: "Today", href: "/today" },
   { id: "delivery", label: "Delivery", href: "/delivery" },
   { id: "messages", label: "Messages", href: "/messages" },
   { id: "reports", label: "Reports", href: "/reports" },
@@ -154,7 +157,7 @@ export default function OpsShell({
 
       {/* ── Mobile tab bar (dark field) ── */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 h-[68px] bg-ops-field flex">
-        {[{ id: "today" as SectionId, label: "Today", href: "/today" }, ...SECTIONS].map((s) => {
+        {SECTIONS.map((s) => {
           const on = active === s.id;
           const n = countFor(s.id);
           return (

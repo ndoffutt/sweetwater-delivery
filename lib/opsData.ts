@@ -226,6 +226,32 @@ export async function getActionItems(supabase: Admin, weekStart: string): Promis
   }
 }
 
+export interface CustomerIssue {
+  id: string;
+  description: string;
+  customer_name: string | null;
+  opened_week: string;
+  resolved_week: string | null;
+}
+
+/** Everything still open, plus whatever was closed during this week — so a
+ *  past week's update still shows what it resolved rather than only what's
+ *  outstanding today. */
+export async function getCustomerIssues(supabase: Admin, weekStart: string): Promise<CustomerIssue[]> {
+  try {
+    const { data, error } = await supabase
+      .from("customer_issues")
+      .select("id, description, customer_name, opened_week, resolved_week")
+      .is("deleted_at", null)
+      .or(`resolved_week.is.null,resolved_week.eq.${weekStart}`)
+      .order("opened_week", { ascending: true });
+    if (error) return [];
+    return (data ?? []) as CustomerIssue[];
+  } catch {
+    return [];
+  }
+}
+
 export interface TeamMember {
   id: string;
   name: string;

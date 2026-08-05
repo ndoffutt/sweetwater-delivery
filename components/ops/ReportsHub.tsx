@@ -10,11 +10,13 @@ import Link from "next/link";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { Reg, Tag, btnPrimary, btnSecondary, inputCls, Kicker } from "@/components/ops/Bits";
 import ActionItemsPanel, { type ActionItemTeamMember } from "@/components/ops/ActionItemsPanel";
+import CustomerIssuesPanel from "@/components/ops/CustomerIssuesPanel";
 import {
   saveWeeklyUpdate,
   submitWeeklyUpdate,
   addReportComment,
   type ReportCommentRow,
+  type CustomerIssueRow,
 } from "@/lib/actions/weekly";
 import type { OpenActionItem, WeeklyRow } from "@/lib/opsData";
 import { renderWeeklyUpdate, GOAL_MULTIPLIER, DELIVERY_GOAL_PCT } from "@/lib/weeklyUpdate";
@@ -29,6 +31,7 @@ export interface ReportsData {
   items: OpenActionItem[];
   team: ActionItemTeamMember[];
   issues: { open: number; newThisWeek: number; resolved: number };
+  customerIssues: CustomerIssueRow[];
   activeOpportunities: number;
   touchpointsThisWeek: number;
   comments: ReportCommentRow[];
@@ -84,9 +87,11 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
   const [keyUpdates, setKeyUpdates] = useState(s?.key_updates ?? "");
   const [expectation, setExpectation] = useState(s?.expectation_note ?? "");
 
-  const [issueOpen, setIssueOpen] = useState(String(data.issues.open));
-  const [issueNew, setIssueNew] = useState(String(data.issues.newThisWeek));
-  const [issueResolved, setIssueResolved] = useState(String(data.issues.resolved));
+  // Counts for the emailed copy come straight off the logged issues now —
+  // there's nothing to type, so nothing to get out of step with the list.
+  const issueOpen = data.customerIssues.filter((i) => !i.resolved_week).length;
+  const issueNew = data.customerIssues.filter((i) => !i.resolved_week && i.opened_week === data.weekStart).length;
+  const issueResolved = data.customerIssues.filter((i) => i.resolved_week === data.weekStart).length;
 
   const [items, setItems] = useState(data.items);
 
@@ -176,9 +181,9 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
   const updateText = () =>
     renderWeeklyUpdate({
       date: new Date(),
-      openIssues: num(issueOpen) ?? 0,
-      newIssues: num(issueNew) ?? 0,
-      resolvedIssues: num(issueResolved) ?? 0,
+      openIssues: issueOpen,
+      newIssues: issueNew,
+      resolvedIssues: issueResolved,
       expectationNote: expectation,
       staffingStatus: staffing, staffingNote,
       equipmentStatus: equipment, equipmentNote,
@@ -262,20 +267,9 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
                 <h2 className="font-barlowc font-semibold text-[24px] leading-none">
                   <span className="text-[rgba(26,26,26,.5)] mr-3">1</span>Customer Issues
                 </h2>
-                <Tag tone="neutral">auto-filled from the exception log</Tag>
+                <Tag tone="neutral">filled in weekly · unresolved carries over</Tag>
               </div>
-              <div className="mt-4 flex gap-6">
-                {[
-                  ["Open", issueOpen, setIssueOpen],
-                  ["New this week", issueNew, setIssueNew],
-                  ["Resolved", issueResolved, setIssueResolved],
-                ].map(([label, v, set]) => (
-                  <label key={label as string} className="block">
-                    <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">{label as string}</span>
-                    <input value={v as string} onChange={(e) => (set as (s: string) => void)(e.target.value)} className={`${inputCls} w-[76px] text-center`} />
-                  </label>
-                ))}
-              </div>
+              <CustomerIssuesPanel issues={data.customerIssues} weekStart={data.weekStart} />
               <label className="block mt-4">
                 <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">Expectation missed (leave blank if met)</span>
                 <input value={expectation} onChange={(e) => setExpectation(e.target.value)} className={inputCls} />
@@ -301,14 +295,29 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
                   <Seg value={equipment ?? "Green"} onChange={setEquipment} />
                 </div>
               </div>
+              {/* These are filled in ahead of the call, so they're lists to
+                  work down rather than one-line boxes — a single input invites
+                  a single thought and the rest goes unsaid. */}
               <div className="mt-4 grid md:grid-cols-2 gap-4">
                 <label className="block">
-                  <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">Staffing note</span>
-                  <input value={staffingNote ?? ""} onChange={(e) => setStaffingNote(e.target.value)} className={inputCls} />
+                  <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">Staffing — one per line</span>
+                  <textarea
+                    value={staffingNote ?? ""}
+                    onChange={(e) => setStaffingNote(e.target.value)}
+                    rows={3}
+                    placeholder={"Who's out / covering\nOpen roles\nAnything to raise on the call"}
+                    className={inputCls}
+                  />
                 </label>
                 <label className="block">
-                  <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">Equipment note</span>
-                  <input value={equipmentNote ?? ""} onChange={(e) => setEquipmentNote(e.target.value)} className={inputCls} />
+                  <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">Equipment — one per line</span>
+                  <textarea
+                    value={equipmentNote ?? ""}
+                    onChange={(e) => setEquipmentNote(e.target.value)}
+                    rows={3}
+                    placeholder={"Anything down or limping\nRepairs booked\nParts / service needed"}
+                    className={inputCls}
+                  />
                 </label>
               </div>
               <label className="block mt-4">
@@ -316,8 +325,14 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
                 <input value={blocking ?? ""} onChange={(e) => setBlocking(e.target.value)} className={inputCls} />
               </label>
               <label className="block mt-4">
-                <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">Key updates (one per line)</span>
-                <textarea value={keyUpdates ?? ""} onChange={(e) => setKeyUpdates(e.target.value)} rows={3} className={inputCls} />
+                <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">Key updates — one per line</span>
+                <textarea
+                  value={keyUpdates ?? ""}
+                  onChange={(e) => setKeyUpdates(e.target.value)}
+                  rows={4}
+                  placeholder={"What changed this week\nWhat you need a decision on\nAnything the owner should know before the call"}
+                  className={inputCls}
+                />
               </label>
               <CommentCallout section="operations" />
             </section>

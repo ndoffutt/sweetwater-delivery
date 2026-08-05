@@ -111,41 +111,47 @@ export default function ActionItemsPanel({
     <div>
       {err && <p className="text-[13px] text-ops-danger mb-3">{err}</p>}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+      {/* Full-width bars, one per item — the same row shape as the WBC dash
+          and MCG. A card grid made every item look like its own object to
+          consider; a list reads as one thing to work down. */}
+      <div className="flex flex-col gap-2">
         {rows.map((a) => {
           const done = a.completed_week === weekStart;
           const carried = a.opened_week !== weekStart && !done;
           const stripe = done ? "rgba(26,26,26,.2)" : carried ? "#7a2626" : "#02733e";
           return (
-            <div key={a.id} className="flex border border-ops-divider bg-ops-bg" style={{ opacity: done ? 0.6 : 1 }}>
+            <div key={a.id} className="flex items-stretch border border-ops-divider bg-ops-bg" style={{ opacity: done ? 0.6 : 1 }}>
               <div style={{ background: stripe }} className="w-[5px] shrink-0" />
-              <div className="min-w-0 flex-1 px-3 py-2.5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className={`font-barlow text-[15px] leading-snug ${done ? "line-through text-[rgba(26,26,26,.5)]" : ""}`}>
-                    {a.action}
-                  </div>
-                  <button
-                    aria-label={done ? "Reopen" : "Complete"}
-                    onClick={() => toggle(a)}
-                    className={`mt-0.5 w-4 h-4 shrink-0 border ${done ? "bg-ops-accent border-ops-accent" : "border-ops-divider"}`}
-                  />
-                </div>
-                <div className="flex items-center gap-2 mt-2.5">
+              <div className="min-w-0 flex-1 flex items-center gap-3 px-3 py-2.5">
+                <button
+                  aria-label={done ? "Reopen" : "Complete"}
+                  onClick={() => toggle(a)}
+                  className={`w-4 h-4 shrink-0 border ${done ? "bg-ops-accent border-ops-accent" : "border-ops-divider"}`}
+                />
+                <span className={`font-barlow text-[15px] leading-snug flex-1 min-w-0 ${done ? "line-through text-[rgba(26,26,26,.5)]" : ""}`}>
+                  {a.action}
+                </span>
+                <span className="flex items-center gap-1.5 shrink-0">
                   <OwnerChip name={a.owner} size={20} />
-                  <span className="text-[12.5px] font-barlow text-[rgba(26,26,26,.68)]">{a.owner.split(/\s+/)[0]}</span>
-                  <span className="ml-auto text-[11px] font-barlowc uppercase tracking-[0.06em]" style={{ color: stripe }}>
-                    {done ? "Done" : carried ? "Overdue" : "This week"}
+                  <span className="text-[12.5px] font-barlow text-[rgba(26,26,26,.68)] hidden sm:inline">
+                    {a.owner.split(/\s+/)[0]}
                   </span>
-                  <button onClick={() => remove(a)} className="text-[rgba(26,26,26,.35)] hover:text-ops-danger">
-                    ✕
-                  </button>
-                </div>
+                </span>
+                <span
+                  className="text-[11px] font-barlowc uppercase tracking-[0.06em] shrink-0 w-[74px] text-right hidden sm:block"
+                  style={{ color: stripe }}
+                >
+                  {done ? "Done" : carried ? "Overdue" : "This week"}
+                </span>
+                <button onClick={() => remove(a)} className="text-[rgba(26,26,26,.35)] hover:text-ops-danger shrink-0">
+                  ✕
+                </button>
               </div>
             </div>
           );
         })}
 
-        {/* Add card — same footprint as a task card, sits in the grid */}
+        {/* Add row — same bar footprint as an item */}
         <div className="border border-dashed border-ops-divider p-3">
           {adding ? (
             <div className="space-y-2">
@@ -197,7 +203,7 @@ export default function ActionItemsPanel({
           ) : (
             <button
               onClick={() => setAdding(true)}
-              className="w-full h-full min-h-[64px] flex items-center justify-center gap-1.5 text-[14px] font-barlowc font-semibold text-[rgba(26,26,26,.5)] hover:text-ops-text"
+              className="w-full min-h-tap flex items-center justify-center gap-1.5 text-[14px] font-barlowc font-semibold text-[rgba(26,26,26,.5)] hover:text-ops-text"
             >
               + New action item
             </button>

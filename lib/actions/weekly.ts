@@ -102,6 +102,69 @@ export async function resolveReportComment(id: string) {
   return { success: true };
 }
 
+export interface CustomerIssueRow {
+  id: string;
+  description: string;
+  customer_name: string | null;
+  opened_week: string;
+  resolved_week: string | null;
+}
+
+/** Manager writes these in each week; an unresolved one carries forward. */
+export async function addCustomerIssue(input: {
+  description: string;
+  customerName?: string | null;
+  openedWeek: string;
+}) {
+  const session = await requireSession("dispatcher");
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("customer_issues").insert({
+    description: input.description.trim(),
+    customer_name: input.customerName?.trim() || null,
+    opened_week: input.openedWeek,
+    created_by: session.name,
+  });
+  if (error) return { error: missing(error.message) ? "Run supabase/customer_issues.sql first." : error.message };
+  revalidatePath("/reports");
+  revalidatePath("/dispatch/weekly");
+  return { success: true };
+}
+
+/** Resolve (or reopen). resolved_week records WHICH week it was closed in, so
+ *  a past update still shows what got closed during it. */
+export async function setCustomerIssueResolved(id: string, weekStart: string, resolved: boolean) {
+  await requireSession("dispatcher");
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("customer_issues")
+    .update(
+      resolved
+        ? { resolved_week: weekStart, resolved_at: new Date().toISOString() }
+        : { resolved_week: null, resolved_at: null }
+    )
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/reports");
+  revalidatePath("/dispatch/weekly");
+  return { success: true };
+}
+
+export async function removeCustomerIssue(id: string) {
+  const session = await requireSession("dispatcher");
+  const supabase = createAdminClient();
+  let { error } = await supabase
+    .from("customer_issues")
+    .update({ deleted_at: new Date().toISOString(), deleted_by: session.id })
+    .eq("id", id);
+  if (error && missing(error.message)) {
+    ({ error } = await supabase.from("customer_issues").delete().eq("id", id));
+  }
+  if (error) return { error: error.message };
+  revalidatePath("/reports");
+  revalidatePath("/dispatch/weekly");
+  return { success: true };
+}
+
 export async function addActionItem(input: {
   owner: string;
   ownerId?: string | null;

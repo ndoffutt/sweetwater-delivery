@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSession } from "@/lib/session";
 import { getOpenExceptions, getResolvedExceptions } from "@/lib/actions/exceptions";
-import { getActionItems, getTeamMembers, getWeeklyRow, currentWeekStart } from "@/lib/opsData";
+import { getActionItems, getTeamMembers, getWeeklyRow, getCustomerIssues, currentWeekStart } from "@/lib/opsData";
 import type { ReportCommentRow } from "@/lib/actions/weekly";
 import ReportsHub, { type ReportsData } from "@/components/ops/ReportsHub";
 import PrintedUpdate from "@/components/ops/PrintedUpdate";
@@ -49,6 +49,8 @@ export default async function ReportsPage({
     resolved: resolved.filter((e) => inWeek((e as unknown as { resolvedAt?: string }).resolvedAt ?? e.date)).length,
   };
 
+  const customerIssues = await getCustomerIssues(supabase, week);
+
   // Sales engine counts.
   let activeOpportunities = 0;
   let touchpointsThisWeek = 0;
@@ -95,6 +97,7 @@ export default async function ReportsPage({
     items,
     team,
     issues,
+    customerIssues,
     activeOpportunities,
     touchpointsThisWeek,
     comments,
