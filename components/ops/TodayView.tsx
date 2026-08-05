@@ -8,8 +8,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Band, Tag, OpenLink, btnPrimary, btnSecondary } from "@/components/ops/Bits";
+import ActionItemsPanel, { type ActionItemTeamMember } from "@/components/ops/ActionItemsPanel";
 import { resolveException, type ExceptionKind } from "@/lib/actions/exceptions";
-import { setActionItemDone } from "@/lib/actions/weekly";
+import type { ActionItemRow } from "@/lib/actions/weekly";
 import { GOAL_MULTIPLIER, DELIVERY_GOAL_PCT } from "@/lib/weeklyUpdate";
 
 export interface TodayData {
@@ -33,9 +34,10 @@ export interface TodayData {
     swYtd: number | null;
     swPrior: number | null;
     deliveryYtd: number | null;
-    actionItems: { id: string; owner: string; action: string; openedWeek: string }[];
     openItemCount: number;
   };
+  actionItems: ActionItemRow[];
+  team: ActionItemTeamMember[];
   prospects: { overdue: number; line: string };
   weekStart: string;
 }
@@ -53,7 +55,6 @@ export default function TodayView({ data }: { data: TodayData }) {
   const [, start] = useTransition();
   const [stops, setStops] = useState(data.route?.stops ?? []);
   const [exceptions, setExceptions] = useState(data.exceptions);
-  const [doneItems, setDoneItems] = useState<Set<string>>(new Set());
 
   // Live edge: poll /api/live every 30s while a route is out.
   useEffect(() => {
@@ -254,33 +255,13 @@ export default function TodayView({ data }: { data: TodayData }) {
               Revenue figures appear here once this week&apos;s numbers are entered in Reports.
             </p>
           )}
-          {data.reports.actionItems.map((a) => {
-            const checked = doneItems.has(a.id);
-            return (
-              <div key={a.id} className="mt-3 border-t border-ops-hairline pt-3 flex items-start gap-3">
-                <button
-                  aria-label={checked ? "Reopen" : "Mark completed"}
-                  onClick={() => {
-                    setDoneItems((cur) => {
-                      const next = new Set(cur);
-                      if (checked) next.delete(a.id); else next.add(a.id);
-                      return next;
-                    });
-                    start(async () => { await setActionItemDone(a.id, data.weekStart, !checked); });
-                  }}
-                  className={`mt-0.5 w-4 h-4 shrink-0 border ${checked ? "bg-ops-accent border-ops-accent" : "border-ops-divider"}`}
-                />
-                <div className="min-w-0">
-                  <div className={`text-[15px] ${checked ? "line-through text-[rgba(26,26,26,.5)]" : ""}`}>{a.action}</div>
-                  <div className="text-[12.5px] text-[rgba(26,26,26,.62)] mt-0.5">
-                    {a.owner}{a.openedWeek !== data.weekStart ? <span className="text-ops-danger"> · carried over</span> : null}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
         </Band>
       </div>
+
+      {/* ── Action Items band ── */}
+      <Band title="Action Items" right={<OpenLink href="/reports#items">Open Reports</OpenLink>}>
+        <ActionItemsPanel items={data.actionItems} team={data.team} weekStart={data.weekStart} />
+      </Band>
 
       {/* ── Prospects band ── */}
       <Band title="Prospects" right={<OpenLink href="/prospects">Open Prospects</OpenLink>} className="mb-6">

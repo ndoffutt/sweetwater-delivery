@@ -14,3 +14,8 @@ create table if not exists report_comments (
 );
 
 create index if not exists report_comments_week_idx on report_comments (week_start, section, created_at);
+
+-- Action item owner as a real person, not free text — picked from the team
+-- (mirrors MCG's task assignee_id/name pattern). `owner` stays as the
+-- denormalized display name, so old rows and a picker miss both still render.
+alter table action_items add column if not exists owner_id uuid references users(id) on delete set null;

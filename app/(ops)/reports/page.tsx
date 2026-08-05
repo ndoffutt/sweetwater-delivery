@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSession } from "@/lib/session";
 import { getOpenExceptions, getResolvedExceptions } from "@/lib/actions/exceptions";
-import { getActionItems, getWeeklyRow, currentWeekStart } from "@/lib/opsData";
+import { getActionItems, getTeamMembers, getWeeklyRow, currentWeekStart } from "@/lib/opsData";
 import type { ReportCommentRow } from "@/lib/actions/weekly";
 import ReportsHub, { type ReportsData } from "@/components/ops/ReportsHub";
 import PrintedUpdate from "@/components/ops/PrintedUpdate";
@@ -33,9 +33,10 @@ export default async function ReportsPage({
 
   const weekStartMs = new Date(week + "T00:00:00").getTime();
 
-  const [weekly, items, open, resolved] = await Promise.all([
+  const [weekly, items, team, open, resolved] = await Promise.all([
     getWeeklyRow(supabase, week),
     getActionItems(supabase, week),
+    getTeamMembers(supabase),
     getOpenExceptions(60).catch(() => []),
     getResolvedExceptions(60).catch(() => []),
   ]);
@@ -92,6 +93,7 @@ export default async function ReportsPage({
     userName: session?.name ?? "",
     weekly,
     items,
+    team,
     issues,
     activeOpportunities,
     touchpointsThisWeek,

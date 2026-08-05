@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/session";
 export interface ActionItemRow {
   id: string;
   owner: string;
+  owner_id: string | null;
   action: string;
   section: "operations" | "growth";
   opened_week: string;
@@ -103,21 +104,30 @@ export async function resolveReportComment(id: string) {
 
 export async function addActionItem(input: {
   owner: string;
+  ownerId?: string | null;
   action: string;
   section: "operations" | "growth";
   openedWeek: string;
 }) {
   const session = await requireSession("dispatcher");
   const supabase = createAdminClient();
-  const { error } = await supabase.from("action_items").insert({
+  const base = {
     owner: input.owner.trim(),
     action: input.action.trim(),
     section: input.section,
     opened_week: input.openedWeek,
     created_by: session.name,
-  });
+  };
+  // owner_id lands with ops_hub.sql — try it, fall back to the core insert on
+  // a database that hasn't run that migration yet.
+  let { error } = await supabase.from("action_items").insert({ ...base, owner_id: input.ownerId ?? null });
+  if (error && /owner_id/i.test(error.message)) {
+    ({ error } = await supabase.from("action_items").insert(base));
+  }
   if (error) return { error: missing(error.message) ? "Run supabase/weekly_updates.sql first." : error.message };
   revalidatePath("/dispatch/weekly");
+  revalidatePath("/today");
+  revalidatePath("/reports");
   return { success: true };
 }
 
@@ -136,6 +146,8 @@ export async function setActionItemDone(id: string, weekStart: string, done: boo
     .eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/dispatch/weekly");
+  revalidatePath("/today");
+  revalidatePath("/reports");
   return { success: true };
 }
 

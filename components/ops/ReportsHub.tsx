@@ -9,12 +9,10 @@
 import Link from "next/link";
 import { useMemo, useRef, useState, useTransition } from "react";
 import { SubNav, Reg, Tag, btnPrimary, btnSecondary, inputCls, Kicker } from "@/components/ops/Bits";
+import ActionItemsPanel, { type ActionItemTeamMember } from "@/components/ops/ActionItemsPanel";
 import {
   saveWeeklyUpdate,
   submitWeeklyUpdate,
-  addActionItem,
-  setActionItemDone,
-  removeActionItem,
   addReportComment,
   type ReportCommentRow,
 } from "@/lib/actions/weekly";
@@ -28,6 +26,7 @@ export interface ReportsData {
   userName: string;
   weekly: WeeklyRow | null;
   items: OpenActionItem[];
+  team: ActionItemTeamMember[];
   issues: { open: number; newThisWeek: number; resolved: number };
   activeOpportunities: number;
   touchpointsThisWeek: number;
@@ -88,9 +87,6 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
   const [issueNew, setIssueNew] = useState(String(data.issues.newThisWeek));
   const [issueResolved, setIssueResolved] = useState(String(data.issues.resolved));
 
-  const [newOwner, setNewOwner] = useState("");
-  const [newAction, setNewAction] = useState("");
-  const [newSection, setNewSection] = useState<"operations" | "growth">("operations");
   const [items, setItems] = useState(data.items);
 
   const [commentBody, setCommentBody] = useState("");
@@ -455,60 +451,7 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
             <p className="mt-2 text-[12.5px] text-[rgba(26,26,26,.62)]">
               Carried forward until closed. Owners are people, never &ldquo;management&rdquo;.
             </p>
-            {items.map((a) => {
-              const done = a.completed_week === data.weekStart;
-              const carried = a.opened_week !== data.weekStart && !done;
-              return (
-                <div key={a.id} className="border-b border-ops-hairline py-3.5 flex items-start gap-3">
-                  <button
-                    aria-label={done ? "Reopen" : "Complete"}
-                    onClick={() => {
-                      setItems((cur) => cur.map((x) => (x.id === a.id ? { ...x, completed_week: done ? null : data.weekStart } : x)));
-                      start(async () => { await setActionItemDone(a.id, data.weekStart, !done); });
-                    }}
-                    className={`mt-0.5 w-4 h-4 shrink-0 border ${done ? "bg-ops-accent border-ops-accent" : "border-ops-divider"}`}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className={`text-[15px] ${done ? "line-through text-[rgba(26,26,26,.5)]" : ""}`}>{a.action}</div>
-                    <div className="text-[12.5px] mt-1 flex items-center gap-2">
-                      <Tag tone="neutral">{a.owner}</Tag>
-                      {done ? (
-                        <span className="text-ops-accent">Completed — drops off next week</span>
-                      ) : carried ? (
-                        <span className="text-ops-danger">Overdue · carried since {new Date(a.opened_week + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
-                      ) : (
-                        <span className="text-[rgba(26,26,26,.62)]">This week</span>
-                      )}
-                    </div>
-                  </div>
-                  <button onClick={() => { setItems((cur) => cur.filter((x) => x.id !== a.id)); start(async () => { await removeActionItem(a.id); }); }} className="text-[rgba(26,26,26,.4)] hover:text-ops-danger shrink-0">✕</button>
-                </div>
-              );
-            })}
-            <div className="mt-3 flex flex-wrap gap-2">
-              <input value={newOwner} onChange={(e) => setNewOwner(e.target.value)} placeholder="Owner" className={`${inputCls} w-[90px]`} />
-              <input value={newAction} onChange={(e) => setNewAction(e.target.value)} placeholder="Action" className={`${inputCls} flex-1 min-w-[140px]`} />
-              <select value={newSection} onChange={(e) => setNewSection(e.target.value as "operations" | "growth")} className={`${inputCls} w-[92px]`}>
-                <option value="operations">Ops</option>
-                <option value="growth">Growth</option>
-              </select>
-              <button
-                className={btnSecondary}
-                disabled={!newOwner.trim() || !newAction.trim() || pending}
-                onClick={() =>
-                  start(async () => {
-                    const r = await addActionItem({ owner: newOwner, action: newAction, section: newSection, openedWeek: data.weekStart });
-                    if (r?.error) setErr(r.error);
-                    else {
-                      setItems((c) => [...c, { id: `tmp-${Date.now()}`, owner: newOwner.trim(), action: newAction.trim(), section: newSection, opened_week: data.weekStart, completed_week: null }]);
-                      setNewOwner(""); setNewAction("");
-                    }
-                  })
-                }
-              >
-                Add
-              </button>
-            </div>
+            <ActionItemsPanel items={items} team={data.team} weekStart={data.weekStart} onChange={setItems} />
 
             {/* Past updates */}
             <div className="mt-9 border-t border-ops-divider pt-3">

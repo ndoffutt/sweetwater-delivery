@@ -185,22 +185,60 @@ export async function getOverdueProspectCount(supabase: Admin): Promise<number> 
 export interface OpenActionItem {
   id: string;
   owner: string;
+  owner_id: string | null;
   action: string;
   section: "operations" | "growth";
   opened_week: string;
   completed_week: string | null;
 }
 
+const ACTION_ITEM_CORE = "id, owner, action, section, opened_week, completed_week";
+const ACTION_ITEM_V2 = `${ACTION_ITEM_CORE}, owner_id`;
+
 export async function getActionItems(supabase: Admin, weekStart: string): Promise<OpenActionItem[]> {
   try {
-    const { data, error } = await supabase
+    // owner_id lands with ops_hub.sql — select it optimistically and fall
+    // back to the core columns on a database that hasn't run it yet.
+    let data: unknown[] | null;
+    let error: { message: string } | null;
+    ({ data, error } = await supabase
       .from("action_items")
-      .select("id, owner, action, section, opened_week, completed_week")
+      .select(ACTION_ITEM_V2)
       .is("deleted_at", null)
       .or(`completed_week.is.null,completed_week.eq.${weekStart}`)
-      .order("opened_week", { ascending: true });
+      .order("opened_week", { ascending: true }));
+    if (error) {
+      ({ data, error } = await supabase
+        .from("action_items")
+        .select(ACTION_ITEM_CORE)
+        .is("deleted_at", null)
+        .or(`completed_week.is.null,completed_week.eq.${weekStart}`)
+        .order("opened_week", { ascending: true }));
+    }
     if (error) return [];
-    return (data ?? []) as OpenActionItem[];
+    return ((data ?? []) as unknown as OpenActionItem[]).map((i) => ({ ...i, owner_id: i.owner_id ?? null }));
+  } catch {
+    return [];
+  }
+}
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  role: "driver" | "dispatcher" | "admin";
+}
+
+/** Active team members, for the action-item owner picker. */
+export async function getTeamMembers(supabase: Admin): Promise<TeamMember[]> {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("id, name, role")
+      .is("deleted_at", null)
+      .eq("active", true)
+      .order("name");
+    if (error) return [];
+    return (data ?? []) as TeamMember[];
   } catch {
     return [];
   }

@@ -7,6 +7,7 @@ import {
   getThreadTable,
   getOverdueProspectCount,
   getActionItems,
+  getTeamMembers,
   getWeeklyRow,
   currentWeekStart,
 } from "@/lib/opsData";
@@ -40,11 +41,12 @@ export default async function TodayPage() {
     .sort((a, b) => a.stop_order - b.stop_order);
 
   // ── The other three bands ──
-  const [exceptions, allThreads, overdueProspects, items, weekly] = await Promise.all([
+  const [exceptions, allThreads, overdueProspects, items, team, weekly] = await Promise.all([
     getOpenExceptions(14).catch(() => []),
     getThreadTable(supabase),
     getOverdueProspectCount(supabase),
     getActionItems(supabase, week),
+    getTeamMembers(supabase),
     getWeeklyRow(supabase, week),
   ]);
   // Archived conversations are handled — don't resurface them on Today.
@@ -103,12 +105,10 @@ export default async function TodayPage() {
       swYtd: weekly?.sweetwater_ytd ?? null,
       swPrior: weekly?.sweetwater_ytd_prior ?? null,
       deliveryYtd: weekly?.delivery_ytd ?? null,
-      actionItems: items
-        .filter((i) => !i.completed_week)
-        .slice(0, 2)
-        .map((i) => ({ id: i.id, owner: i.owner, action: i.action, openedWeek: i.opened_week })),
       openItemCount: items.filter((i) => !i.completed_week).length,
     },
+    actionItems: items,
+    team,
     prospects: { overdue: overdueProspects, line: prospectLine },
     weekStart: week,
   };
