@@ -8,13 +8,17 @@ import { useState, useTransition } from "react";
 import { addCustomerIssue, setCustomerIssueResolved, removeCustomerIssue } from "@/lib/actions/weekly";
 import type { CustomerIssueRow } from "@/lib/actions/weekly";
 import { btnPrimary, btnSecondary, inputCls } from "@/components/ops/Bits";
+import CommentThread from "@/components/ops/CommentThread";
+import type { EntityComment } from "@/lib/actions/comments";
 
 export default function CustomerIssuesPanel({
   issues,
   weekStart,
+  comments = {},
 }: {
   issues: CustomerIssueRow[];
   weekStart: string;
+  comments?: Record<string, EntityComment[]>;
 }) {
   const [rows, setRows] = useState(issues);
   const [, start] = useTransition();
@@ -22,11 +26,33 @@ export default function CustomerIssuesPanel({
   const [adding, setAdding] = useState(false);
   const [who, setWho] = useState("");
   const [what, setWhat] = useState("");
+  // Closing an issue asks how — so `resolving` holds the id being closed
+  // while its reason is typed.
+  const [resolving, setResolving] = useState<string | null>(null);
+  const [why, setWhy] = useState("");
 
   function toggle(i: CustomerIssueRow) {
-    const done = !!i.resolved_week;
-    setRows((cur) => cur.map((x) => (x.id === i.id ? { ...x, resolved_week: done ? null : weekStart } : x)));
-    start(async () => { await setCustomerIssueResolved(i.id, weekStart, !done); });
+    if (!i.resolved_week) {
+      // Opening the reason box rather than resolving straight away.
+      setResolving(i.id);
+      setWhy("");
+      return;
+    }
+    setRows((cur) => cur.map((x) => (x.id === i.id ? { ...x, resolved_week: null, resolution: null } : x)));
+    start(async () => { await setCustomerIssueResolved(i.id, weekStart, false); });
+  }
+
+  function confirmResolve(i: CustomerIssueRow) {
+    const reason = why.trim();
+    if (!reason) return;
+    setErr("");
+    start(async () => {
+      const r = await setCustomerIssueResolved(i.id, weekStart, true, reason);
+      if (r?.error) { setErr(r.error); return; }
+      setRows((cur) => cur.map((x) => (x.id === i.id ? { ...x, resolved_week: weekStart, resolution: reason } : x)));
+      setResolving(null);
+      setWhy("");
+    });
   }
 
   function remove(i: CustomerIssueRow) {
@@ -43,7 +69,7 @@ export default function CustomerIssuesPanel({
       if (r?.error) { setErr(r.error); return; }
       setRows((cur) => [
         ...cur,
-        { id: `tmp-${cur.length}-${description.length}`, description, customer_name: who.trim() || null, opened_week: weekStart, resolved_week: null },
+        { id: `tmp-${cur.length}-${description.length}`, description, customer_name: who.trim() || null, opened_week: weekStart, resolved_week: null, resolution: null },
       ]);
       setWho("");
       setWhat("");
@@ -88,6 +114,28 @@ export default function CustomerIssuesPanel({
                   <div className="text-[11px] font-barlowc uppercase tracking-[0.06em] mt-1 text-[rgba(26,26,26,.45)]">
                     {done ? "Resolved" : isCarried ? `Carried from ${i.opened_week}` : "New this week"}
                   </div>
+                  {done && i.resolution && (
+                    <p className="font-barlow text-[13px] text-[rgba(26,26,26,.62)] mt-1">
+                      <span className="text-ops-accent">✓</span> {i.resolution}
+                    </p>
+                  )}
+                  {resolving === i.id && (
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        value={why}
+                        onChange={(e) => setWhy(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confirmResolve(i); } }}
+                        placeholder="How was it resolved?"
+                        autoFocus
+                        className={`${inputCls} flex-1`}
+                      />
+                      <button className={btnSecondary} onClick={() => setResolving(null)}>Cancel</button>
+                      <button className={btnPrimary} disabled={!why.trim()} onClick={() => confirmResolve(i)}>Resolve</button>
+                    </div>
+                  )}
+                  {!i.id.startsWith("tmp-") && (
+                    <CommentThread entityType="customer_issue" entityId={i.id} initial={comments[i.id] ?? []} />
+                  )}
                 </div>
                 <button onClick={() => remove(i)} className="text-[rgba(26,26,26,.35)] hover:text-ops-danger shrink-0">✕</button>
               </div>

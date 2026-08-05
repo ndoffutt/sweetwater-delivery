@@ -8,6 +8,8 @@ import { useState, useTransition } from "react";
 import { addActionItem, setActionItemDone, removeActionItem, setActionItemCritical } from "@/lib/actions/weekly";
 import type { ActionItemRow } from "@/lib/actions/weekly";
 import { btnPrimary, btnSecondary, inputCls } from "@/components/ops/Bits";
+import CommentThread from "@/components/ops/CommentThread";
+import type { EntityComment } from "@/lib/actions/comments";
 
 export interface ActionItemTeamMember {
   id: string;
@@ -40,11 +42,13 @@ export default function ActionItemsPanel({
   items,
   team,
   weekStart,
+  comments = {},
   onChange,
 }: {
   items: ActionItemRow[];
   team: ActionItemTeamMember[];
   weekStart: string;
+  comments?: Record<string, EntityComment[]>;
   /** Called after any local mutation, so a parent (e.g. Today) can update its
    *  own open-count badge without a full page reload. */
   onChange?: (items: ActionItemRow[]) => void;
@@ -141,7 +145,8 @@ export default function ActionItemsPanel({
           const carried = a.opened_week !== weekStart && !done;
           const stripe = done ? "rgba(26,26,26,.2)" : a.critical ? "#b03a2e" : carried ? "#7a2626" : "#02733e";
           return (
-            <div key={a.id} className="flex items-stretch border border-ops-divider bg-ops-bg" style={{ opacity: done ? 0.6 : 1 }}>
+            <div key={a.id} className="border border-ops-divider bg-ops-bg" style={{ opacity: done ? 0.6 : 1 }}>
+              <div className="flex items-stretch">
               <div style={{ background: stripe, width: a.critical && !done ? 8 : 5 }} className="shrink-0" />
               <div className="min-w-0 flex-1 flex items-center gap-3 px-3 py-2.5">
                 <button
@@ -181,6 +186,12 @@ export default function ActionItemsPanel({
                   ✕
                 </button>
               </div>
+              </div>
+              {!a.id.startsWith("tmp-") && (
+                <div className="px-3 pb-2.5 pl-[calc(0.75rem+5px)]">
+                  <CommentThread entityType="action_item" entityId={a.id} initial={comments[a.id] ?? []} />
+                </div>
+              )}
             </div>
           );
         })}

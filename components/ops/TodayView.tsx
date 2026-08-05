@@ -12,6 +12,7 @@ import ActionItemsPanel, { type ActionItemTeamMember } from "@/components/ops/Ac
 import { resolveException, type ExceptionKind } from "@/lib/actions/exceptions";
 import type { ActionItemRow } from "@/lib/actions/weekly";
 import { GOAL_MULTIPLIER, DELIVERY_GOAL_PCT } from "@/lib/weeklyUpdate";
+import type { EntityComment } from "@/lib/actions/comments";
 
 export interface TodayData {
   userName: string;
@@ -37,6 +38,7 @@ export interface TodayData {
     openItemCount: number;
   };
   actionItems: ActionItemRow[];
+  itemComments: Record<string, EntityComment[]>;
   team: ActionItemTeamMember[];
   prospects: { overdue: number; line: string };
   weekStart: string;
@@ -260,7 +262,7 @@ export default function TodayView({ data }: { data: TodayData }) {
 
       {/* ── Action Items band ── */}
       <Band title="Action Items" right={<OpenLink href="/reports#items">Open Reports</OpenLink>}>
-        <ActionItemsPanel items={data.actionItems} team={data.team} weekStart={data.weekStart} />
+        <ActionItemsPanel items={data.actionItems} team={data.team} weekStart={data.weekStart} comments={data.itemComments} />
       </Band>
 
       {/* ── Prospects band ── */}

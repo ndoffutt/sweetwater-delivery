@@ -109,6 +109,7 @@ export interface CustomerIssueRow {
   customer_name: string | null;
   opened_week: string;
   resolved_week: string | null;
+  resolution: string | null;
 }
 
 /** Manager writes these in each week; an unresolved one carries forward. */
@@ -133,17 +134,27 @@ export async function addCustomerIssue(input: {
 
 /** Resolve (or reopen). resolved_week records WHICH week it was closed in, so
  *  a past update still shows what got closed during it. */
-export async function setCustomerIssueResolved(id: string, weekStart: string, resolved: boolean) {
+export async function setCustomerIssueResolved(
+  id: string,
+  weekStart: string,
+  resolved: boolean,
+  resolution?: string
+) {
   await requireSession("dispatcher");
+  // Closing an issue requires saying how. "Resolved" alone is a checkbox, not
+  // an answer, and it's the repeat offenders where the how matters most.
+  const why = (resolution ?? "").trim();
+  if (resolved && !why) return { error: "Say how it was resolved." };
   const supabase = createAdminClient();
-  const { error } = await supabase
-    .from("customer_issues")
-    .update(
-      resolved
-        ? { resolved_week: weekStart, resolved_at: new Date().toISOString() }
-        : { resolved_week: null, resolved_at: null }
-    )
-    .eq("id", id);
+  const done = { resolved_week: weekStart, resolved_at: new Date().toISOString(), resolution: why };
+  const undone = { resolved_week: null, resolved_at: null, resolution: null };
+  let { error } = await supabase.from("customer_issues").update(resolved ? done : undone).eq("id", id);
+  if (error && /resolution/i.test(error.message)) {
+    // Pre-migration: still record the state change rather than losing it.
+    const { resolution: _drop, ...bare } = resolved ? done : undone;
+    void _drop;
+    ({ error } = await supabase.from("customer_issues").update(bare).eq("id", id));
+  }
   if (error) return { error: error.message };
   revalidatePath("/reports");
   revalidatePath("/dispatch/weekly");

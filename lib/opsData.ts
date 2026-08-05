@@ -242,6 +242,7 @@ export interface CustomerIssue {
   customer_name: string | null;
   opened_week: string;
   resolved_week: string | null;
+  resolution: string | null;
 }
 
 /** Everything still open, plus whatever was closed during this week — so a
@@ -251,14 +252,58 @@ export async function getCustomerIssues(supabase: Admin, weekStart: string): Pro
   try {
     const { data, error } = await supabase
       .from("customer_issues")
-      .select("id, description, customer_name, opened_week, resolved_week")
+      .select("id, description, customer_name, opened_week, resolved_week, resolution")
       .is("deleted_at", null)
       .or(`resolved_week.is.null,resolved_week.eq.${weekStart}`)
       .order("opened_week", { ascending: true });
-    if (error) return [];
+    if (error) {
+      // resolution arrives with comments_and_resolution.sql.
+      const fb = await supabase
+        .from("customer_issues")
+        .select("id, description, customer_name, opened_week, resolved_week")
+        .is("deleted_at", null)
+        .or(`resolved_week.is.null,resolved_week.eq.${weekStart}`)
+        .order("opened_week", { ascending: true });
+      if (fb.error) return [];
+      return ((fb.data ?? []) as CustomerIssue[]).map((i) => ({ ...i, resolution: null }));
+    }
     return (data ?? []) as CustomerIssue[];
   } catch {
     return [];
+  }
+}
+
+export interface EntityCommentRow {
+  id: string;
+  entity_type: string;
+  entity_id: string;
+  body: string;
+  author: string | null;
+  created_at: string;
+}
+
+/** Comments for a batch of entities, grouped by entity id. One query rather
+ *  than one per row — these render inline on every issue and action item. */
+export async function getEntityComments(
+  supabase: Admin,
+  entityType: "customer_issue" | "action_item",
+  ids: string[]
+): Promise<Record<string, EntityCommentRow[]>> {
+  if (ids.length === 0) return {};
+  try {
+    const { data, error } = await supabase
+      .from("entity_comments")
+      .select("id, entity_type, entity_id, body, author, created_at")
+      .eq("entity_type", entityType)
+      .in("entity_id", ids)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true });
+    if (error) return {};
+    const out: Record<string, EntityCommentRow[]> = {};
+    for (const c of (data ?? []) as EntityCommentRow[]) (out[c.entity_id] ??= []).push(c);
+    return out;
+  } catch {
+    return {};
   }
 }
 

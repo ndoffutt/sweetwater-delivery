@@ -7,7 +7,7 @@ import {
   getThreadTable,
   getOverdueProspectCount,
   getActionItems,
-  getTeamMembers,
+  getTeamMembers, getEntityComments,
   getWeeklyRow,
   currentWeekStart,
 } from "@/lib/opsData";
@@ -49,6 +49,8 @@ export default async function TodayPage() {
     getTeamMembers(supabase),
     getWeeklyRow(supabase, week),
   ]);
+  const itemComments = await getEntityComments(supabase, "action_item", items.map((i) => i.id));
+
   // Archived conversations are handled — don't resurface them on Today.
   const threads = allThreads.filter((t) => !t.archived);
 
@@ -108,6 +110,7 @@ export default async function TodayPage() {
       openItemCount: items.filter((i) => !i.completed_week).length,
     },
     actionItems: items,
+    itemComments,
     team,
     prospects: { overdue: overdueProspects, line: prospectLine },
     weekStart: week,

@@ -11,6 +11,8 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import { Reg, Tag, btnPrimary, btnSecondary, inputCls, Kicker } from "@/components/ops/Bits";
 import ActionItemsPanel, { type ActionItemTeamMember } from "@/components/ops/ActionItemsPanel";
 import CustomerIssuesPanel from "@/components/ops/CustomerIssuesPanel";
+import LineListField from "@/components/ops/LineListField";
+import type { EntityComment } from "@/lib/actions/comments";
 import {
   saveWeeklyUpdate,
   submitWeeklyUpdate,
@@ -32,6 +34,8 @@ export interface ReportsData {
   team: ActionItemTeamMember[];
   issues: { open: number; newThisWeek: number; resolved: number };
   customerIssues: CustomerIssueRow[];
+  issueComments: Record<string, EntityComment[]>;
+  itemComments: Record<string, EntityComment[]>;
   activeOpportunities: number;
   touchpointsThisWeek: number;
   comments: ReportCommentRow[];
@@ -269,7 +273,7 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
                 </h2>
                 <Tag tone="neutral">filled in weekly · unresolved carries over</Tag>
               </div>
-              <CustomerIssuesPanel issues={data.customerIssues} weekStart={data.weekStart} />
+              <CustomerIssuesPanel issues={data.customerIssues} weekStart={data.weekStart} comments={data.issueComments} />
               <label className="block mt-4">
                 <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">Expectation missed (leave blank if met)</span>
                 <input value={expectation} onChange={(e) => setExpectation(e.target.value)} className={inputCls} />
@@ -295,45 +299,35 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
                   <Seg value={equipment ?? "Green"} onChange={setEquipment} />
                 </div>
               </div>
-              {/* These are filled in ahead of the call, so they're lists to
-                  work down rather than one-line boxes — a single input invites
-                  a single thought and the rest goes unsaid. */}
+              {/* Genuinely lists, so edited as lists. A textarea labelled
+                  "one per line" is a textarea asking the writer to remember a
+                  convention, and it reliably got one long sentence instead. */}
               <div className="mt-4 grid md:grid-cols-2 gap-4">
-                <label className="block">
-                  <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">Staffing — one per line</span>
-                  <textarea
-                    value={staffingNote ?? ""}
-                    onChange={(e) => setStaffingNote(e.target.value)}
-                    rows={3}
-                    placeholder={"Who's out / covering\nOpen roles\nAnything to raise on the call"}
-                    className={inputCls}
-                  />
-                </label>
-                <label className="block">
-                  <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">Equipment — one per line</span>
-                  <textarea
-                    value={equipmentNote ?? ""}
-                    onChange={(e) => setEquipmentNote(e.target.value)}
-                    rows={3}
-                    placeholder={"Anything down or limping\nRepairs booked\nParts / service needed"}
-                    className={inputCls}
-                  />
-                </label>
+                <LineListField
+                  label="Staffing"
+                  value={staffingNote ?? ""}
+                  onChange={setStaffingNote}
+                  placeholder={["Who's out / covering", "Open roles", "Anything to raise on the call"]}
+                />
+                <LineListField
+                  label="Equipment"
+                  value={equipmentNote ?? ""}
+                  onChange={setEquipmentNote}
+                  placeholder={["Anything down or limping", "Repairs booked", "Parts / service needed"]}
+                />
               </div>
               <label className="block mt-4">
                 <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">Operations blocking growth</span>
                 <input value={blocking ?? ""} onChange={(e) => setBlocking(e.target.value)} className={inputCls} />
               </label>
-              <label className="block mt-4">
-                <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">Key updates — one per line</span>
-                <textarea
+              <div className="mt-4">
+                <LineListField
+                  label="Key updates"
                   value={keyUpdates ?? ""}
-                  onChange={(e) => setKeyUpdates(e.target.value)}
-                  rows={4}
-                  placeholder={"What changed this week\nWhat you need a decision on\nAnything the owner should know before the call"}
-                  className={inputCls}
+                  onChange={setKeyUpdates}
+                  placeholder={["What changed this week", "What you need a decision on", "Anything the owner should know before the call"]}
                 />
-              </label>
+              </div>
               <CommentCallout section="operations" />
             </section>
 
@@ -460,7 +454,7 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
             <p className="mt-2 text-[12.5px] text-[rgba(26,26,26,.62)]">
               Carried forward until closed. Owners are people, never &ldquo;management&rdquo;.
             </p>
-            <ActionItemsPanel items={items} team={data.team} weekStart={data.weekStart} onChange={setItems} />
+            <ActionItemsPanel items={items} team={data.team} weekStart={data.weekStart} comments={data.itemComments} onChange={setItems} />
 
             {/* Past updates */}
             <div className="mt-9 border-t border-ops-divider pt-3">
