@@ -52,6 +52,42 @@ export async function saveWeeklyUpdate(row: WeeklyUpdateRow) {
   return { success: true };
 }
 
+/** Revenue only. Deliberately NOT saveWeeklyUpdate: that upserts the whole
+ *  row, so saving figures from the Revenue page would blank the manager's
+ *  staffing, equipment and key-updates text for that week. */
+export async function saveWeeklyRevenue(row: {
+  week_start: string;
+  sweetwater_revenue: number | null;
+  sweetwater_ytd: number | null;
+  sweetwater_ytd_prior: number | null;
+  jrs_revenue: number | null;
+  jrs_ytd: number | null;
+  jrs_ytd_prior: number | null;
+  delivery_revenue: number | null;
+  delivery_ytd: number | null;
+}) {
+  await requireSession("dispatcher");
+  const supabase = createAdminClient();
+  const { week_start, ...figures } = row;
+  const patch = { ...figures, updated_at: new Date().toISOString() };
+
+  // Update in place when the week already exists; insert only if it doesn't.
+  const { data: existing } = await supabase
+    .from("weekly_updates")
+    .select("id")
+    .eq("week_start", week_start)
+    .maybeSingle();
+
+  const { error } = existing
+    ? await supabase.from("weekly_updates").update(patch).eq("week_start", week_start)
+    : await supabase.from("weekly_updates").insert({ week_start, ...patch });
+
+  if (error) return { error: missing(error.message) ? "Run supabase/weekly_updates.sql first." : error.message };
+  revalidatePath("/reports");
+  revalidatePath("/reports/revenue");
+  return { success: true };
+}
+
 export async function submitWeeklyUpdate(weekStart: string) {
   await requireSession("dispatcher");
   const supabase = createAdminClient();

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Kicker } from "@/components/ops/Bits";
 import ReportsNav from "@/components/ops/ReportsNav";
+import RevenueEntry, { type RevenueWeek } from "@/components/ops/RevenueEntry";
+import { currentWeekStart } from "@/lib/opsData";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +76,18 @@ export default async function RevenuePage() {
     /* table missing → empty state */
   }
 
+  // This week's full row, for the entry panel.
+  const thisWeek = currentWeekStart();
+  let week: RevenueWeek | null = null;
+  try {
+    const { data } = await supabase
+      .from("weekly_updates")
+      .select("week_start, sweetwater_revenue, sweetwater_ytd, sweetwater_ytd_prior, jrs_revenue, jrs_ytd, jrs_ytd_prior, delivery_revenue, delivery_ytd")
+      .eq("week_start", thisWeek)
+      .maybeSingle();
+    week = (data as RevenueWeek) ?? null;
+  } catch { /* empty state */ }
+
   const sum = (pick: (r: WeekRow) => number | null) =>
     rows.reduce((a, r) => a + (pick(r) ?? 0), 0);
   const latest = [...rows].reverse();
@@ -93,6 +107,10 @@ export default async function RevenuePage() {
           <p className="mt-2 text-[13px] text-[rgba(26,26,26,.62)]">
             Weekly dollars from every update on record · {rows.length} weeks
           </p>
+        </div>
+
+        <RevenueEntry week={week} weekStart={thisWeek} />
+        <div>
         </div>
 
         {rows.length === 0 ? (
