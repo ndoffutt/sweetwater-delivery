@@ -290,17 +290,6 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
                 activeOpportunities={data.activeOpportunities}
               />
               <CommentCallout section="growth" />
-            </section>
-
-            {/* 4 · Retention — accounts that used to spend and stopped. */}
-            <section className="mt-8 border-t-2 border-ops-text pt-4 mb-10">
-              <div className="flex items-baseline justify-between">
-                <h2 className="font-barlowc font-semibold text-[24px] leading-none">
-                  <span className="text-[rgba(26,26,26,.5)] mr-3">4</span>Retention
-                </h2>
-                <Tag tone="neutral">from the SPOT export</Tag>
-              </div>
-              <RetentionPanel rows={data.retention} comments={data.retentionComments} />
               <div className="mt-5 flex gap-2">
                 <button className={btnSecondary} disabled={pending} onClick={() => save()}>
                   {pending ? "Saving…" : "Save draft"}
@@ -348,6 +337,17 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
               Carried forward until closed. Owners are people, never &ldquo;management&rdquo;.
             </p>
             <ActionItemsPanel items={items} team={data.team} weekStart={data.weekStart} comments={data.itemComments} onChange={setItems} />
+
+            {/* Retention sits with the action items rather than in the numbered
+                sections: it isn't something to write up, it's a list of calls
+                to assign. */}
+            <div className="mt-9 border-t-2 border-ops-text pt-4">
+              <div className="flex items-baseline justify-between">
+                <h2 className="font-barlowc font-semibold uppercase text-[22px] tracking-[0.06em] leading-none">Retention</h2>
+                <Tag tone="neutral">from the SPOT export</Tag>
+              </div>
+              <RetentionPanel rows={data.retention} comments={data.retentionComments} />
+            </div>
 
             {/* Past updates */}
             <div className="mt-9 border-t border-ops-divider pt-3">

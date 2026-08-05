@@ -13,6 +13,7 @@ import { resolveException, type ExceptionKind } from "@/lib/actions/exceptions";
 import type { ActionItemRow } from "@/lib/actions/weekly";
 import { GOAL_MULTIPLIER, DELIVERY_GOAL_PCT } from "@/lib/weeklyUpdate";
 import type { EntityComment } from "@/lib/actions/comments";
+import RetentionPanel, { type RetentionRow } from "@/components/ops/RetentionPanel";
 
 export interface TodayData {
   userName: string;
@@ -39,6 +40,8 @@ export interface TodayData {
   };
   actionItems: ActionItemRow[];
   itemComments: Record<string, EntityComment[]>;
+  retention: RetentionRow[];
+  retentionComments: Record<string, EntityComment[]>;
   team: ActionItemTeamMember[];
   prospects: { overdue: number; line: string };
   weekStart: string;
@@ -264,6 +267,12 @@ export default function TodayView({ data }: { data: TodayData }) {
       <Band title="Action Items" right={<OpenLink href="/reports#items">Open Reports</OpenLink>}>
         <ActionItemsPanel items={data.actionItems} team={data.team} weekStart={data.weekStart} comments={data.itemComments} />
       </Band>
+
+      {data.retention.length > 0 && (
+        <Band title="Retention" right={<OpenLink href="/reports#items">Open Reports</OpenLink>}>
+          <RetentionPanel rows={data.retention} comments={data.retentionComments} />
+        </Band>
+      )}
 
       {/* ── Prospects band ── */}
       <Band title="Prospects" right={<OpenLink href="/prospects">Open Prospects</OpenLink>} className="mb-6">
