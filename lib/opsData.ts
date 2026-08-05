@@ -307,6 +307,44 @@ export async function getEntityComments(
   }
 }
 
+export interface WeekTouchpoint {
+  id: string;
+  prospect_id: string;
+  prospect_name: string;
+  type: string;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+/** Outreach logged during a given week, newest first — the Growth section of
+ *  the weekly update. Notes are included here (unlike the check-in clock)
+ *  because the point is to read what happened, not to measure contact. */
+export async function getWeekTouchpoints(supabase: Admin, weekStart: string): Promise<WeekTouchpoint[]> {
+  try {
+    const from = new Date(weekStart + "T00:00:00Z");
+    const to = new Date(from.getTime() + 7 * 86_400_000);
+    const { data, error } = await supabase
+      .from("prospect_touchpoints")
+      .select("id, prospect_id, type, note, created_by, created_at, prospects(name)")
+      .gte("created_at", from.toISOString())
+      .lt("created_at", to.toISOString())
+      .order("created_at", { ascending: false });
+    if (error) return [];
+    return ((data ?? []) as unknown as (WeekTouchpoint & { prospects: { name: string } | null })[]).map((t) => ({
+      id: t.id,
+      prospect_id: t.prospect_id,
+      prospect_name: t.prospects?.name ?? "Prospect",
+      type: t.type,
+      note: t.note,
+      created_by: t.created_by,
+      created_at: t.created_at,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export interface TeamMember {
   id: string;
   name: string;

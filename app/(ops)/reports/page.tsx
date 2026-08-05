@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSession } from "@/lib/session";
 import { getOpenExceptions, getResolvedExceptions } from "@/lib/actions/exceptions";
-import { getActionItems, getTeamMembers, getWeeklyRow, getCustomerIssues, getEntityComments, currentWeekStart } from "@/lib/opsData";
+import { getActionItems, getTeamMembers, getWeeklyRow, getCustomerIssues, getEntityComments, getWeekTouchpoints, currentWeekStart } from "@/lib/opsData";
 import type { ReportCommentRow } from "@/lib/actions/weekly";
 import ReportsHub, { type ReportsData } from "@/components/ops/ReportsHub";
 import PrintedUpdate from "@/components/ops/PrintedUpdate";
@@ -50,6 +50,7 @@ export default async function ReportsPage({
   };
 
   const customerIssues = await getCustomerIssues(supabase, week);
+  const weekTouchpoints = await getWeekTouchpoints(supabase, week);
   const [issueComments, itemComments] = await Promise.all([
     getEntityComments(supabase, "customer_issue", customerIssues.map((i) => i.id)),
     getEntityComments(supabase, "action_item", items.map((i) => i.id)),
@@ -106,6 +107,7 @@ export default async function ReportsPage({
     itemComments,
     activeOpportunities,
     touchpointsThisWeek,
+    weekTouchpoints,
     comments,
     pastUpdates,
   };

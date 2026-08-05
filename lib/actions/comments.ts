@@ -49,3 +49,30 @@ export async function removeEntityComment(id: string) {
   revalidatePath("/today");
   return { success: true };
 }
+
+/**
+ * A comment on a touchpoint in the weekly update is written back to the
+ * prospect itself, as a `note` touchpoint — so it lands in the Prospects
+ * touchpoint log and the prospect's own history rather than living only
+ * inside one week's update.
+ *
+ * Deliberately type 'note': notes are excluded from the outreach clock
+ * everywhere else, so adding context can't masquerade as contact and quietly
+ * reset a prospect's check-in timer.
+ */
+export async function addTouchpointNote(prospectId: string, body: string) {
+  const session = await requireSession("dispatcher");
+  const trimmed = body.trim();
+  if (!trimmed) return { error: "Write something first." };
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("prospect_touchpoints")
+    .insert({ prospect_id: prospectId, type: "note", note: trimmed, created_by: session.name })
+    .select("id, type, note, created_by, created_at")
+    .single();
+  if (error) return { error: error.message };
+  revalidatePath("/reports");
+  revalidatePath("/prospects/touchpoints");
+  revalidatePath("/sales/prospects");
+  return { note: data as { id: string; type: string; note: string | null; created_by: string | null; created_at: string } };
+}

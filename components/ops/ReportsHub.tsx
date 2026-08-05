@@ -7,11 +7,12 @@
 // unlabelled single number once made a business running +15% read as flat.
 
 import Link from "next/link";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Reg, Tag, btnPrimary, btnSecondary, inputCls, Kicker } from "@/components/ops/Bits";
 import ActionItemsPanel, { type ActionItemTeamMember } from "@/components/ops/ActionItemsPanel";
 import CustomerIssuesPanel from "@/components/ops/CustomerIssuesPanel";
 import LineListField from "@/components/ops/LineListField";
+import GrowthTouchpoints, { type WeekTouchpointRow } from "@/components/ops/GrowthTouchpoints";
 import type { EntityComment } from "@/lib/actions/comments";
 import {
   saveWeeklyUpdate,
@@ -21,7 +22,7 @@ import {
   type CustomerIssueRow,
 } from "@/lib/actions/weekly";
 import type { OpenActionItem, WeeklyRow } from "@/lib/opsData";
-import { renderWeeklyUpdate, GOAL_MULTIPLIER, DELIVERY_GOAL_PCT } from "@/lib/weeklyUpdate";
+import { renderWeeklyUpdate } from "@/lib/weeklyUpdate";
 import ReportsNav from "@/components/ops/ReportsNav";
 
 export interface ReportsData {
@@ -38,12 +39,12 @@ export interface ReportsData {
   itemComments: Record<string, EntityComment[]>;
   activeOpportunities: number;
   touchpointsThisWeek: number;
+  weekTouchpoints: WeekTouchpointRow[];
   comments: ReportCommentRow[];
   pastUpdates: { week_start: string; submitted_at: string | null }[];
 }
 
 const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(/[^0-9.-]/g, "")));
-const money = (n: number | null) => (n == null ? "—" : `$${Math.round(n).toLocaleString()}`);
 const RAG = ["Green", "Yellow", "Red"] as const;
 
 function Seg({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -73,15 +74,17 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
   const [copied, setCopied] = useState(false);
   const [submitted, setSubmitted] = useState(!!s?.submitted_at);
 
-  // Revenue inputs (weekly + YTD + prior YTD — the format needs all of them).
-  const [swWeek, setSwWeek] = useState(String(s?.sweetwater_revenue ?? ""));
-  const [swYtd, setSwYtd] = useState(String(s?.sweetwater_ytd ?? ""));
-  const [swPrior, setSwPrior] = useState(String(s?.sweetwater_ytd_prior ?? ""));
-  const [jrsWeek, setJrsWeek] = useState(String(s?.jrs_revenue ?? ""));
-  const [jrsYtd, setJrsYtd] = useState(String(s?.jrs_ytd ?? ""));
-  const [jrsPrior, setJrsPrior] = useState(String(s?.jrs_ytd_prior ?? ""));
-  const [delWeek, setDelWeek] = useState(String(s?.delivery_revenue ?? ""));
-  const [delYtd, setDelYtd] = useState(String(s?.delivery_ytd ?? ""));
+  // Revenue is no longer edited here — the section is touchpoints now — but
+  // the emailed copy still carries the figures, so read them straight off the
+  // saved row.
+  const swWeek = String(s?.sweetwater_revenue ?? "");
+  const swYtd = String(s?.sweetwater_ytd ?? "");
+  const swPrior = String(s?.sweetwater_ytd_prior ?? "");
+  const jrsWeek = String(s?.jrs_revenue ?? "");
+  const jrsYtd = String(s?.jrs_ytd ?? "");
+  const jrsPrior = String(s?.jrs_ytd_prior ?? "");
+  const delWeek = String(s?.delivery_revenue ?? "");
+  const delYtd = String(s?.delivery_ytd ?? "");
 
   const [staffing, setStaffing] = useState(s?.staffing_status ?? "Green");
   const [staffingNote, setStaffingNote] = useState(s?.staffing_note ?? "");
@@ -103,67 +106,6 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
   const [commentSection, setCommentSection] = useState("operations");
   const [comments, setComments] = useState(data.comments);
 
-  // SPOT "Outgoing Summary" import — fills the revenue inputs from a
-  // screenshot/PDF of the report. A week-long range fills the weekly fields,
-  // a Jan-1-anchored range fills the YTD fields.
-  const spotInput = useRef<HTMLInputElement>(null);
-  const [spotBusy, setSpotBusy] = useState(false);
-  const [spotNote, setSpotNote] = useState("");
-
-  async function importSpot(file: File) {
-    setSpotBusy(true);
-    setSpotNote("Reading the export…");
-    try {
-      const fd = new FormData();
-      fd.append("export", file);
-      const r = await fetch("/api/reports/spot-extract", { method: "POST", body: fd });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "Couldn't read that file");
-      const rev = d.revenue as { span: "week" | "ytd"; sweetwater: number; delivery: number };
-      if (rev.span === "ytd") {
-        setSwYtd(String(rev.sweetwater));
-        setDelYtd(String(rev.delivery));
-        setSpotNote(`Filled YTD: Sweetwater's $${Math.round(rev.sweetwater).toLocaleString()}, delivery $${Math.round(rev.delivery).toLocaleString()}.`);
-      } else {
-        setSwWeek(String(rev.sweetwater));
-        setDelWeek(String(rev.delivery));
-        setSpotNote(`Filled this week: Sweetwater's $${Math.round(rev.sweetwater).toLocaleString()}, delivery $${Math.round(rev.delivery).toLocaleString()}. Upload a Jan-1-to-date export to fill YTD.`);
-      }
-    } catch (e) {
-      setSpotNote(e instanceof Error ? e.message : "Couldn't read that file");
-    } finally {
-      setSpotBusy(false);
-      if (spotInput.current) spotInput.current.value = "";
-    }
-  }
-
-  // Revenue derivations — the four labelled values per line.
-  const rows = useMemo(() => {
-    const build = (label: string, weekS: string, ytdS: string, priorS: string, mult: number) => {
-      const ytd = num(ytdS), prior = num(priorS);
-      if (ytd == null || prior == null || prior === 0)
-        return { label, week: num(weekS), vsPrior: null as number | null, vsGoal: null as number | null, dollar: null as number | null };
-      const goal = prior * mult;
-      return {
-        label,
-        week: num(weekS),
-        vsPrior: ((ytd - prior) / prior) * 100,
-        vsGoal: ((ytd - goal) / goal) * 100,
-        dollar: ytd - goal,
-      };
-    };
-    const sw = build("Sweetwater's", swWeek, swYtd, swPrior, GOAL_MULTIPLIER.sweetwater);
-    const jrs = build("JRS", jrsWeek, jrsYtd, jrsPrior, GOAL_MULTIPLIER.jrs);
-    const dYtd = num(delYtd), swY = num(swYtd);
-    const delivery = {
-      week: num(delWeek),
-      share: dYtd != null && swY ? (dYtd / swY) * 100 : null,
-      gap: dYtd != null && swY ? swY * (DELIVERY_GOAL_PCT / 100) - dYtd : null,
-    };
-    return { sw, jrs, delivery };
-  }, [swWeek, swYtd, swPrior, jrsWeek, jrsYtd, jrsPrior, delWeek, delYtd]);
-
-  const pct = (n: number | null) => (n == null ? "—" : `${n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(n >= 10 || n <= -10 ? 1 : 2)}%`);
 
   function save(then?: () => void) {
     setErr("");
@@ -331,82 +273,19 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
               <CommentCallout section="operations" />
             </section>
 
-            {/* 3 · Growth */}
+            {/* 3 · Growth — touchpoints. Revenue entry is deliberately not
+                here for now; the figures still render on Reports → Revenue. */}
             <section className="mt-8 border-t-2 border-ops-text pt-4 mb-10">
               <div className="flex items-baseline justify-between">
                 <h2 className="font-barlowc font-semibold text-[24px] leading-none">
                   <span className="text-[rgba(26,26,26,.5)] mr-3">3</span>Growth
                 </h2>
-                <div className="flex items-center gap-3">
-                  <button
-                    className={btnSecondary}
-                    disabled={spotBusy}
-                    onClick={() => spotInput.current?.click()}
-                  >
-                    {spotBusy ? "Reading…" : "Import SPOT export"}
-                  </button>
-                  <Tag tone="accent">four values per line, always</Tag>
-                </div>
+                <Tag tone="neutral">this week&apos;s outreach</Tag>
               </div>
-              <input
-                ref={spotInput}
-                type="file"
-                accept="image/*,application/pdf"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) void importSpot(f); }}
+              <GrowthTouchpoints
+                touchpoints={data.weekTouchpoints}
+                activeOpportunities={data.activeOpportunities}
               />
-              {spotNote && <p className="mt-2 text-[13px] text-[rgba(26,26,26,.68)]">{spotNote}</p>}
-              {/* Inputs */}
-              <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-                {[
-                  ["SW week", swWeek, setSwWeek], ["SW YTD", swYtd, setSwYtd], ["SW YTD prior", swPrior, setSwPrior],
-                  ["JRS week", jrsWeek, setJrsWeek], ["JRS YTD", jrsYtd, setJrsYtd], ["JRS YTD prior", jrsPrior, setJrsPrior],
-                  ["Delivery week", delWeek, setDelWeek], ["Delivery YTD", delYtd, setDelYtd],
-                ].map(([label, v, set]) => (
-                  <label key={label as string} className="block">
-                    <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">{label as string}</span>
-                    <input value={v as string} onChange={(e) => (set as (s: string) => void)(e.target.value)} className={inputCls} placeholder="$" />
-                  </label>
-                ))}
-              </div>
-              {/* Derived table */}
-              <div className="mt-5 overflow-x-auto">
-                <table className="w-full min-w-[560px] text-[14px]">
-                  <thead>
-                    <tr className="border-b border-ops-divider">
-                      {["", "Week", "YTD vs prior yr", "YTD vs goal", "$ vs goal"].map((h) => (
-                        <th key={h} className="text-left font-barlowc font-semibold uppercase text-[11px] tracking-[0.08em] text-[rgba(26,26,26,.62)] py-2 pr-4 last:text-right last:pr-0">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[rows.sw, rows.jrs].map((r) => (
-                      <tr key={r.label} className="border-b border-[rgba(26,26,26,.08)]">
-                        <td className="py-2.5 pr-4">{r.label}</td>
-                        <td className="py-2.5 pr-4">{money(r.week)}</td>
-                        <td className={`py-2.5 pr-4 ${r.vsPrior != null && r.vsPrior >= 0 ? "text-ops-accent" : r.vsPrior != null ? "text-ops-danger" : ""}`}>{pct(r.vsPrior)}</td>
-                        <td className={`py-2.5 pr-4 ${r.vsGoal != null && r.vsGoal >= 0 ? "text-ops-accent" : r.vsGoal != null ? "text-ops-danger" : ""}`}>{pct(r.vsGoal)}</td>
-                        <td className={`py-2.5 text-right ${r.dollar != null && r.dollar >= 0 ? "text-ops-accent" : r.dollar != null ? "text-ops-danger" : ""}`}>
-                          {r.dollar == null ? "—" : `${r.dollar >= 0 ? "+" : "−"}$${Math.abs(Math.round(r.dollar)).toLocaleString()}`}
-                        </td>
-                      </tr>
-                    ))}
-                    <tr className="border-b border-[rgba(26,26,26,.08)]">
-                      <td className="py-2.5 pr-4">Delivery</td>
-                      <td className="py-2.5 pr-4">{money(rows.delivery.week)}</td>
-                      <td className="py-2.5 pr-4 text-[rgba(26,26,26,.68)]">{rows.delivery.share == null ? "—" : `${rows.delivery.share.toFixed(1)}% YTD`}</td>
-                      <td className="py-2.5 pr-4 text-ops-gold-deep">goal {DELIVERY_GOAL_PCT}%</td>
-                      <td className="py-2.5 text-right text-ops-danger">
-                        {rows.delivery.gap == null ? "—" : rows.delivery.gap > 0 ? `−$${Math.abs(Math.round(rows.delivery.gap)).toLocaleString()}` : `+$${Math.abs(Math.round(rows.delivery.gap)).toLocaleString()}`}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p className="mt-3 text-[15px]">
-                Active opportunities <b>{data.activeOpportunities}</b>
-                <span className="ml-6">Touchpoints this week <b>{data.touchpointsThisWeek}</b></span>
-              </p>
               <CommentCallout section="growth" />
               <div className="mt-5 flex gap-2">
                 <button className={btnSecondary} disabled={pending} onClick={() => save()}>
