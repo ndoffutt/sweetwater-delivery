@@ -220,7 +220,6 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
           { label: "Weekly update", href: "/reports", active: true },
           { label: "Revenue", href: "/reports/revenue" },
           { label: "Signups", href: "/delivery/signups" },
-          { label: "Delivery volume", href: "/reports/analytics" },
         ]}
       />
       <div className="mx-auto max-w-[1440px] px-5 md:px-12">

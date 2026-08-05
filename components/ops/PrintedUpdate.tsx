@@ -28,7 +28,6 @@ export default function PrintedUpdate({
           { label: "Weekly update", href: "/reports" },
           { label: "Revenue", href: "/reports/revenue" },
           { label: "Signups", href: "/delivery/signups" },
-          { label: "Delivery volume", href: "/reports/analytics" },
         ]}
       />
       <div className="mx-auto max-w-[840px] px-5 md:px-12 pb-16">

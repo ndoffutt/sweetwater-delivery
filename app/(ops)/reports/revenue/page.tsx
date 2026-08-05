@@ -90,7 +90,6 @@ export default async function RevenuePage() {
           { label: "Weekly update", href: "/reports" },
           { label: "Revenue", href: "/reports/revenue", active: true },
           { label: "Signups", href: "/delivery/signups" },
-          { label: "Delivery volume", href: "/reports/analytics" },
         ]}
       />
       <div className="mx-auto max-w-[1440px] px-5 md:px-12 pb-12">
