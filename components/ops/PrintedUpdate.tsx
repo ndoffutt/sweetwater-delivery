@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SubNav } from "@/components/ops/Bits";
+import ReportsNav from "@/components/ops/ReportsNav";
 
 // A pre-app weekly update, rendered as the printed copy of the original email
 // — not the editable form. **bold** markers from the archive become real bold;
@@ -23,13 +23,7 @@ export default function PrintedUpdate({
 
   return (
     <>
-      <SubNav
-        items={[
-          { label: "Weekly update", href: "/reports" },
-          { label: "Revenue", href: "/reports/revenue" },
-          { label: "Signups", href: "/delivery/signups" },
-        ]}
-      />
+      <ReportsNav active="Weekly update" />
       <div className="mx-auto max-w-[840px] px-5 md:px-12 pb-16">
         <div className="pt-8 flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="font-barlowc font-semibold text-[30px] md:text-[40px] leading-none">

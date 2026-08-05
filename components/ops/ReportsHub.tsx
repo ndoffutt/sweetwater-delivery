@@ -8,7 +8,7 @@
 
 import Link from "next/link";
 import { useMemo, useRef, useState, useTransition } from "react";
-import { SubNav, Reg, Tag, btnPrimary, btnSecondary, inputCls, Kicker } from "@/components/ops/Bits";
+import { Reg, Tag, btnPrimary, btnSecondary, inputCls, Kicker } from "@/components/ops/Bits";
 import ActionItemsPanel, { type ActionItemTeamMember } from "@/components/ops/ActionItemsPanel";
 import {
   saveWeeklyUpdate,
@@ -18,6 +18,7 @@ import {
 } from "@/lib/actions/weekly";
 import type { OpenActionItem, WeeklyRow } from "@/lib/opsData";
 import { renderWeeklyUpdate, GOAL_MULTIPLIER, DELIVERY_GOAL_PCT } from "@/lib/weeklyUpdate";
+import ReportsNav from "@/components/ops/ReportsNav";
 
 export interface ReportsData {
   weekStart: string;
@@ -215,13 +216,7 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
 
   return (
     <>
-      <SubNav
-        items={[
-          { label: "Weekly update", href: "/reports", active: true },
-          { label: "Revenue", href: "/reports/revenue" },
-          { label: "Signups", href: "/delivery/signups" },
-        ]}
-      />
+      <ReportsNav active="Weekly update" />
       <div className="mx-auto max-w-[1440px] px-5 md:px-12">
         {/* Title */}
         <div className="pt-8 flex flex-wrap items-start justify-between gap-4">

@@ -13,7 +13,6 @@ export default function DeliveryNav({ active }: { active: string }) {
     // space. The page still exists at /delivery/route-plan for the rare
     // master-route reshuffle.
     { label: "History", href: "/delivery/history" },
-    { label: "Volume", href: "/delivery/volume" },
     { label: "Customers", href: "/delivery/customers" },
     { label: "Signups", href: "/delivery/signups" },
   ];

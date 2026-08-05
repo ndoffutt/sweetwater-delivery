@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { SubNav, Kicker } from "@/components/ops/Bits";
+import { Kicker } from "@/components/ops/Bits";
+import ReportsNav from "@/components/ops/ReportsNav";
 
 export const dynamic = "force-dynamic";
 
@@ -85,13 +86,7 @@ export default async function RevenuePage() {
 
   return (
     <>
-      <SubNav
-        items={[
-          { label: "Weekly update", href: "/reports" },
-          { label: "Revenue", href: "/reports/revenue", active: true },
-          { label: "Signups", href: "/delivery/signups" },
-        ]}
-      />
+      <ReportsNav active="Revenue" />
       <div className="mx-auto max-w-[1440px] px-5 md:px-12 pb-12">
         <div className="pt-8">
           <h1 className="font-barlowc font-semibold text-[30px] md:text-[40px] leading-none">Revenue</h1>
