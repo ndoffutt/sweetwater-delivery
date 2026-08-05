@@ -56,8 +56,20 @@ export default function HistoryView({
   openExceptions?: DeliveryException[];
   resolvedExceptions?: ResolvedException[];
 }) {
-  const [open, setOpen] = useState<string | null>(routes[0]?.id ?? null);
+  // Everything starts closed. This page is scanned far more often than it's
+  // read: you want the whole month of runs on one screen and to open only the
+  // day you're chasing. Auto-opening the newest day pushed the rest below the
+  // fold for no benefit.
+  const [open, setOpen] = useState<string | null>(null);
+  const [showFlags, setShowFlags] = useState(false);
   const router = useRouter();
+
+  // Exceptions carry the route date, so they attribute back to a day without
+  // another round trip.
+  const exByDate = openExceptions.reduce<Record<string, number>>((acc, e) => {
+    acc[e.date] = (acc[e.date] ?? 0) + 1;
+    return acc;
+  }, {});
 
   return (
     <div className="p-5 md:p-8 md:max-w-6xl md:mx-auto">
@@ -93,8 +105,27 @@ export default function HistoryView({
         );
       })()}
 
-      {/* Exception log — open ones resolvable here, recent resolutions below */}
-      <div className="mb-6 space-y-2.5">
+      {/* Exception log, behind a disclosure like everything else — the counts
+          above already say whether there's anything to look at. */}
+      {(openExceptions.length > 0 || resolvedExceptions.length > 0) && (
+        <button
+          onClick={() => setShowFlags((v) => !v)}
+          className="w-full flex items-center justify-between bg-cream rounded-xl border border-cream-dark p-3.5 mb-2.5 text-left"
+        >
+          <span className="font-body text-sm text-charcoal">
+            {openExceptions.length > 0 ? (
+              <><b className="text-red-600">{openExceptions.length}</b> needing attention</>
+            ) : (
+              <span className="text-charcoal/60">Nothing needs attention</span>
+            )}
+            {resolvedExceptions.length > 0 && (
+              <span className="text-charcoal/40"> · {resolvedExceptions.length} resolved</span>
+            )}
+          </span>
+          <span className="text-charcoal/30 text-sm">{showFlags ? "▲" : "▼"}</span>
+        </button>
+      )}
+      <div className={`mb-6 space-y-2.5 ${showFlags ? "" : "hidden"}`}>
         <NeedsAttention exceptions={openExceptions} />
         {resolvedExceptions.length > 0 && (
           <div className="bg-cream rounded-2xl border border-cream-dark overflow-hidden opacity-70">
@@ -121,31 +152,57 @@ export default function HistoryView({
           No completed routes yet.
         </div>
       ) : (
-        // Two columns of day cards on desktop; an expanded day takes the full
-        // width so its map and stop list have room.
-        <div className="space-y-3 md:space-y-0 md:grid md:grid-cols-2 md:gap-3 md:items-start">
+        // One column: every run is a single row you can run your eye down.
+        <div className="space-y-2">
           {routes.map((r) => {
             const expanded = open === r.id;
             const done = r.stops.filter((s) => s.status === "completed").length;
             const flagged = r.stops.filter((s) => s.status === "skipped").length;
             const items = r.stops.reduce((n, s) => n + (s.pieces || 0), 0);
+            // A completed delivery with no photo is unproven — the single most
+            // useful thing to surface without opening the day.
+            const noPhoto = r.stops.filter(
+              (s) => s.kind === "delivery" && s.status === "completed" && s.photos.length === 0
+            ).length;
+            const openEx = exByDate[r.date] ?? 0;
             const firstArrived = r.stops.map((s) => s.arrivedAt).filter(Boolean)[0] ?? null;
             const lastDone = [...r.stops].reverse().map((s) => s.completedAt).filter(Boolean)[0] ?? r.completedAt;
             // Driver-out time: route start (left the shop / first arrive) to route
             // completion — falls back to first-arrival→last-stop when either is missing.
             const outTotal = dur(mins(r.startedAt ?? firstArrived, r.completedAt ?? lastDone)) ?? dur(mins(firstArrived, lastDone));
             return (
-              <div key={r.id} className={`bg-cream rounded-xl border border-cream-dark overflow-hidden ${expanded ? "md:col-span-2" : ""}`}>
-                <button onClick={() => setOpen(expanded ? null : r.id)} className="w-full flex items-center justify-between p-4 text-left">
-                  <div>
-                    <div className="font-body font-medium text-charcoal">
-                      {new Date(r.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+              <div key={r.id} className="bg-cream rounded-xl border border-cream-dark overflow-hidden">
+                <button onClick={() => setOpen(expanded ? null : r.id)} className="w-full flex items-center gap-3 p-3.5 text-left min-h-tap">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-body font-medium text-charcoal">
+                        {new Date(r.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                      </span>
+                      <span className="font-body text-xs text-charcoal/45">{done}/{r.stops.length} stops</span>
+                      {items > 0 && <span className="font-body text-xs text-charcoal/45">{items} items</span>}
+                      {/* Problems, loudest first — enough detail to know whether
+                          this day is worth opening. */}
+                      {noPhoto > 0 && (
+                        <span className="text-[10.5px] font-body uppercase tracking-wider px-1.5 py-0.5 rounded bg-gold-primary/25 text-gold-dark">
+                          {noPhoto} no photo
+                        </span>
+                      )}
+                      {flagged > 0 && (
+                        <span className="text-[10.5px] font-body uppercase tracking-wider px-1.5 py-0.5 rounded bg-gold-primary/30 text-gold-dark">
+                          {flagged} skipped
+                        </span>
+                      )}
+                      {openEx > 0 && (
+                        <span className="text-[10.5px] font-body uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                          {openEx} open
+                        </span>
+                      )}
                     </div>
-                    <div className="text-xs text-charcoal/40 font-body mt-0.5">
-                      {done} delivered{items ? ` · ${items} items` : ""}{flagged ? ` · ${flagged} flagged` : ""}{outTotal ? ` · driver out ${outTotal}` : ""}{r.completedAt ? ` · done ${time(r.completedAt)}` : ""}
+                    <div className="text-[11px] text-charcoal/35 font-body mt-0.5">
+                      {outTotal ? `out ${outTotal}` : ""}{outTotal && r.completedAt ? " · " : ""}{r.completedAt ? `done ${time(r.completedAt)}` : ""}
                     </div>
                   </div>
-                  <span className="text-charcoal/30 text-sm">{expanded ? "▲" : "▼"}</span>
+                  <span className="text-charcoal/30 text-sm shrink-0">{expanded ? "▲" : "▼"}</span>
                 </button>
 
                 {expanded && (
