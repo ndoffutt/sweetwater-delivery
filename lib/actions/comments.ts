@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/session";
 
-export type CommentEntity = "customer_issue" | "action_item";
+export type CommentEntity = "customer_issue" | "action_item" | "retention";
 
 export interface EntityComment {
   id: string;
@@ -75,4 +75,15 @@ export async function addTouchpointNote(prospectId: string, body: string) {
   revalidatePath("/prospects/touchpoints");
   revalidatePath("/sales/prospects");
   return { note: data as { id: string; type: string; note: string | null; created_by: string | null; created_at: string } };
+}
+
+/** Where a lapsed account stands: open → working → recovered, or dismissed
+ *  to take it off the list without losing the history that put it there. */
+export async function setRetentionStatus(id: string, status: "open" | "working" | "recovered" | "dismissed") {
+  await requireSession("dispatcher");
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("customer_retention").update({ status }).eq("id", id);
+  if (error) return { error: missing(error.message) ? "Run supabase/customer_retention.sql first." : error.message };
+  revalidatePath("/reports");
+  return { success: true };
 }

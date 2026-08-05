@@ -286,7 +286,7 @@ export interface EntityCommentRow {
  *  than one per row — these render inline on every issue and action item. */
 export async function getEntityComments(
   supabase: Admin,
-  entityType: "customer_issue" | "action_item",
+  entityType: "customer_issue" | "action_item" | "retention",
   ids: string[]
 ): Promise<Record<string, EntityCommentRow[]>> {
   if (ids.length === 0) return {};
@@ -340,6 +340,36 @@ export async function getWeekTouchpoints(supabase: Admin, weekStart: string): Pr
       created_by: t.created_by,
       created_at: t.created_at,
     }));
+  } catch {
+    return [];
+  }
+}
+
+export interface RetentionCustomer {
+  id: string;
+  customer_name: string;
+  customer_id: string | null;
+  first_seen: string | null;
+  last_seen: string | null;
+  orders: number | null;
+  spend_2024: number | null;
+  spend_2025: number | null;
+  spend_2026: number | null;
+  status: string;
+  snapshot_at: string;
+}
+
+/** Lapsed accounts, biggest historic spend first — the ones worth a call. */
+export async function getRetentionCustomers(supabase: Admin): Promise<RetentionCustomer[]> {
+  try {
+    const { data, error } = await supabase
+      .from("customer_retention")
+      .select("id, customer_name, customer_id, first_seen, last_seen, orders, spend_2024, spend_2025, spend_2026, status, snapshot_at")
+      .is("deleted_at", null)
+      .neq("status", "dismissed")
+      .order("spend_2025", { ascending: false });
+    if (error) return [];
+    return (data ?? []) as RetentionCustomer[];
   } catch {
     return [];
   }

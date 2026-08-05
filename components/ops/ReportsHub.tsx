@@ -13,6 +13,7 @@ import ActionItemsPanel, { type ActionItemTeamMember } from "@/components/ops/Ac
 import CustomerIssuesPanel from "@/components/ops/CustomerIssuesPanel";
 import LineListField from "@/components/ops/LineListField";
 import GrowthTouchpoints, { type WeekTouchpointRow } from "@/components/ops/GrowthTouchpoints";
+import RetentionPanel, { type RetentionRow } from "@/components/ops/RetentionPanel";
 import type { EntityComment } from "@/lib/actions/comments";
 import {
   saveWeeklyUpdate,
@@ -40,6 +41,8 @@ export interface ReportsData {
   activeOpportunities: number;
   touchpointsThisWeek: number;
   weekTouchpoints: WeekTouchpointRow[];
+  retention: RetentionRow[];
+  retentionComments: Record<string, EntityComment[]>;
   comments: ReportCommentRow[];
   pastUpdates: { week_start: string; submitted_at: string | null }[];
 }
@@ -287,6 +290,17 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
                 activeOpportunities={data.activeOpportunities}
               />
               <CommentCallout section="growth" />
+            </section>
+
+            {/* 4 · Retention — accounts that used to spend and stopped. */}
+            <section className="mt-8 border-t-2 border-ops-text pt-4 mb-10">
+              <div className="flex items-baseline justify-between">
+                <h2 className="font-barlowc font-semibold text-[24px] leading-none">
+                  <span className="text-[rgba(26,26,26,.5)] mr-3">4</span>Retention
+                </h2>
+                <Tag tone="neutral">from the SPOT export</Tag>
+              </div>
+              <RetentionPanel rows={data.retention} comments={data.retentionComments} />
               <div className="mt-5 flex gap-2">
                 <button className={btnSecondary} disabled={pending} onClick={() => save()}>
                   {pending ? "Saving…" : "Save draft"}

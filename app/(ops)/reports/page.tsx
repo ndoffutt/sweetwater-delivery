@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSession } from "@/lib/session";
 import { getOpenExceptions, getResolvedExceptions } from "@/lib/actions/exceptions";
-import { getActionItems, getTeamMembers, getWeeklyRow, getCustomerIssues, getEntityComments, getWeekTouchpoints, currentWeekStart } from "@/lib/opsData";
+import { getActionItems, getTeamMembers, getWeeklyRow, getCustomerIssues, getEntityComments, getWeekTouchpoints, getRetentionCustomers, currentWeekStart } from "@/lib/opsData";
 import type { ReportCommentRow } from "@/lib/actions/weekly";
 import ReportsHub, { type ReportsData } from "@/components/ops/ReportsHub";
 import PrintedUpdate from "@/components/ops/PrintedUpdate";
@@ -51,9 +51,11 @@ export default async function ReportsPage({
 
   const customerIssues = await getCustomerIssues(supabase, week);
   const weekTouchpoints = await getWeekTouchpoints(supabase, week);
-  const [issueComments, itemComments] = await Promise.all([
+  const retention = await getRetentionCustomers(supabase);
+  const [issueComments, itemComments, retentionComments] = await Promise.all([
     getEntityComments(supabase, "customer_issue", customerIssues.map((i) => i.id)),
     getEntityComments(supabase, "action_item", items.map((i) => i.id)),
+    getEntityComments(supabase, "retention", retention.map((r) => r.id)),
   ]);
 
   // Sales engine counts.
@@ -108,6 +110,8 @@ export default async function ReportsPage({
     activeOpportunities,
     touchpointsThisWeek,
     weekTouchpoints,
+    retention,
+    retentionComments,
     comments,
     pastUpdates,
   };
