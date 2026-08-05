@@ -47,6 +47,15 @@ export function daysSinceVisit(p: VisitInput): number {
   return Math.floor((Date.now() - new Date(clock(p)).getTime()) / 86400000);
 }
 
+/** How far PAST due a prospect is — not how long since we last spoke.
+ *  A high-priority prospect touched 40 days ago is 10 days overdue on a
+ *  30-day window, not 40. Showing the raw gap made everything look far worse
+ *  than it was and made the windows meaningless. 0 when still inside the
+ *  window (including a manual request, which has no due date of its own). */
+export function daysOverdue(p: VisitInput): number {
+  return Math.max(0, daysSinceVisit(p) - overdueDaysFor(p.priority));
+}
+
 export function isOverdueForVisit(p: VisitInput): boolean {
   if (!SCOPE.has(p.status)) return false;
   return daysSinceVisit(p) >= overdueDaysFor(p.priority);

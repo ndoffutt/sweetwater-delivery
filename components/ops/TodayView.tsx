@@ -227,7 +227,7 @@ export default function TodayView({ data }: { data: TodayData }) {
           )}
         </Band>
 
-        <Band title="Reports" right={<OpenLink href="/reports">Open Reports</OpenLink>}>
+        <Band title="Weekly update" right={<OpenLink href="/reports">Open Reports</OpenLink>}>
           <p className="mt-1 text-[13px] text-[rgba(26,26,26,.62)]">
             Weekly update {data.reports.submitted ? "submitted" : "due Friday 8:00"} · {data.reports.openItemCount} action item{data.reports.openItemCount === 1 ? "" : "s"} open
           </p>
@@ -263,19 +263,8 @@ export default function TodayView({ data }: { data: TodayData }) {
         </Band>
       </div>
 
-      {/* ── Action Items band ── */}
-      <Band title="Action Items" right={<OpenLink href="/reports#items">Open Reports</OpenLink>}>
-        <ActionItemsPanel items={data.actionItems} team={data.team} weekStart={data.weekStart} comments={data.itemComments} />
-      </Band>
-
-      {data.retention.length > 0 && (
-        <Band title="Retention" right={<OpenLink href="/reports#items">Open Reports</OpenLink>}>
-          <RetentionPanel rows={data.retention} comments={data.retentionComments} />
-        </Band>
-      )}
-
       {/* ── Prospects band ── */}
-      <Band title="Prospects" right={<OpenLink href="/prospects">Open Prospects</OpenLink>} className="mb-6">
+      <Band title="Prospects" right={<OpenLink href="/prospects">Open Prospects</OpenLink>}>
         <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-3">
           <div className="flex items-baseline gap-2 shrink-0">
             <span className={`font-barlowc font-semibold text-[34px] leading-none ${data.prospects.overdue > 0 ? "text-ops-danger" : "text-ops-accent"}`}>
@@ -289,6 +278,18 @@ export default function TodayView({ data }: { data: TodayData }) {
           <Link href="/prospects" className={btnSecondary}>Review check-ins</Link>
         </div>
       </Band>
+
+      {/* ── Action Items band ── */}
+      <Band title="Action Items" right={<OpenLink href="/reports#items">Open Reports</OpenLink>}>
+        <ActionItemsPanel items={data.actionItems} team={data.team} weekStart={data.weekStart} comments={data.itemComments} />
+      </Band>
+
+      {data.retention.length > 0 && (
+        <Band title="Retention" right={<OpenLink href="/reports#items">Open Reports</OpenLink>} className="mb-6">
+          <RetentionPanel rows={data.retention} comments={data.retentionComments} />
+        </Band>
+      )}
+
     </div>
   );
 }

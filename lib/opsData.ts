@@ -4,7 +4,7 @@
 // than erroring.
 import { createAdminClient } from "@/lib/supabase/admin";
 import { needsAttention } from "@/lib/prospectVisit";
-import { easternToday } from "@/lib/date";
+import { easternToday, touchpointWeekForWeekStart } from "@/lib/date";
 import type { Prospect } from "@/lib/types";
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -317,13 +317,14 @@ export interface WeekTouchpoint {
   created_at: string;
 }
 
-/** Outreach logged during a given week, newest first — the Growth section of
- *  the weekly update. Notes are included here (unlike the check-in clock)
- *  because the point is to read what happened, not to measure contact. */
+/** Outreach logged during the reporting week (Friday–Thursday), newest first
+ *  — the Growth section of the weekly update. Notes are included here (unlike
+ *  the check-in clock) because the point is to read what happened, not to
+ *  measure contact. */
 export async function getWeekTouchpoints(supabase: Admin, weekStart: string): Promise<WeekTouchpoint[]> {
   try {
-    const from = new Date(weekStart + "T00:00:00Z");
-    const to = new Date(from.getTime() + 7 * 86_400_000);
+    // Friday–Thursday, closing the day before the update is written.
+    const { from, to } = touchpointWeekForWeekStart(weekStart);
     const { data, error } = await supabase
       .from("prospect_touchpoints")
       .select("id, prospect_id, type, note, created_by, created_at, prospects(name)")

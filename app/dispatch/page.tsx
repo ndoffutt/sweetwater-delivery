@@ -6,7 +6,7 @@ import { easternToday } from "@/lib/date";
 import DispatchConsole, { type InitialStop } from "@/components/DispatchConsole";
 import { getOpenExceptions } from "@/lib/actions/exceptions";
 import type { DeliveryDay } from "@/lib/deliveryDay";
-import { isOverdueForVisit, needsAttention, daysSinceVisit, overdueDaysFor, hasManualRequest } from "@/lib/prospectVisit";
+import { isOverdueForVisit, needsAttention, daysOverdue, hasManualRequest } from "@/lib/prospectVisit";
 import { outOfRangeIdSet } from "@/lib/customerRange";
 import type { Prospect } from "@/lib/types";
 
@@ -194,7 +194,7 @@ export default async function DispatchPage() {
       name: p.name,
       town: p.town ?? null,
       priority: (p.priority ?? "medium") as string,
-      daysOverdue: daysSinceVisit(p) - overdueDaysFor(p.priority),
+      daysOverdue: daysOverdue(p),
       callOnly: !!p.call_only || p.lat == null || p.lng == null,
       manual: hasManualRequest(p),
     }))

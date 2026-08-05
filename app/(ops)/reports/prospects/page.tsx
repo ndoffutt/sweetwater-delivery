@@ -2,8 +2,9 @@ import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Band, Kicker, Tag } from "@/components/ops/Bits";
 import ReportsNav from "@/components/ops/ReportsNav";
-import { needsAttention, daysSinceVisit } from "@/lib/prospectVisit";
+import { needsAttention, daysOverdue } from "@/lib/prospectVisit";
 import type { Prospect } from "@/lib/types";
+import { touchpointWeek } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 
@@ -53,11 +54,19 @@ export default async function ReportsProspectsPage() {
     prospects = (data ?? []) as unknown as (Prospect & { name: string; town: string | null })[];
   } catch { /* same */ }
 
-  const since = (days: number) => Date.now() - days * DAY;
-  const inWindow = (t: TpRow, days: number) => new Date(t.created_at).getTime() >= since(days);
+  // The reporting week runs Friday–Thursday, matching the weekly update.
+  const thisWeek = touchpointWeek();
+  const lastWeek = {
+    from: new Date(thisWeek.from.getTime() - 7 * DAY),
+    to: thisWeek.from,
+  };
+  const at = (t: TpRow) => new Date(t.created_at).getTime();
+  const between = (t: TpRow, w: { from: Date; to: Date }) =>
+    at(t) >= w.from.getTime() && at(t) < w.to.getTime();
+  const inWindow = (t: TpRow, days: number) => at(t) >= Date.now() - days * DAY;
 
-  const week = touches.filter((t) => inWindow(t, 7));
-  const prior = touches.filter((t) => !inWindow(t, 7) && inWindow(t, 14));
+  const week = touches.filter((t) => between(t, thisWeek));
+  const prior = touches.filter((t) => between(t, lastWeek));
   const month = touches.filter((t) => inWindow(t, 30));
 
   // By type, this week.
@@ -74,7 +83,7 @@ export default async function ReportsProspectsPage() {
       const who = (t.created_by || "").trim() || "Unattributed";
       acc[who] ??= { week: 0, month: 0 };
       acc[who].month += 1;
-      if (inWindow(t, 7)) acc[who].week += 1;
+      if (between(t, thisWeek)) acc[who].week += 1;
       return acc;
     }, {})
   ).sort((a, b) => b[1].month - a[1].month);
@@ -94,7 +103,7 @@ export default async function ReportsProspectsPage() {
 
   const due = prospects
     .filter(needsAttention)
-    .sort((a, b) => daysSinceVisit(b) - daysSinceVisit(a));
+    .sort((a, b) => daysOverdue(b) - daysOverdue(a));
 
   const delta = week.length - prior.length;
 
@@ -105,7 +114,8 @@ export default async function ReportsProspectsPage() {
         <div>
           <h1 className="font-barlowc text-[26px] font-semibold uppercase tracking-[0.04em]">Prospects</h1>
           <p className="font-barlow text-[14px] text-[rgba(26,26,26,.6)] mt-0.5">
-            Outreach that reached someone — notes excluded, same as the check-in clock.
+            Outreach that reached someone — notes excluded, same as the check-in
+            clock. The week runs Friday to Thursday, matching the weekly update.
           </p>
         </div>
 
@@ -114,7 +124,7 @@ export default async function ReportsProspectsPage() {
           {[
             { label: "This week", value: week.length, sub: prior.length > 0 || week.length > 0 ? `${delta >= 0 ? "+" : ""}${delta} vs last week` : "no activity yet" },
             { label: "Last 30 days", value: month.length, sub: `${byPerson.length} ${byPerson.length === 1 ? "person" : "people"}` },
-            { label: "Check-ins due", value: due.length, sub: due.length ? `worst ${daysSinceVisit(due[0])}d` : "all current" },
+            { label: "Check-ins due", value: due.length, sub: due.length ? `worst ${daysOverdue(due[0])}d past due` : "all current" },
             { label: "Active prospects", value: prospects.length, sub: "new, working, active" },
           ].map((s) => (
             <div key={s.label} className="border border-ops-divider p-4">
@@ -202,7 +212,9 @@ export default async function ReportsProspectsPage() {
                   <Link key={p.id} href={`/prospects/list?id=${p.id}`} className="flex items-center gap-3 py-2.5 hover:bg-[rgba(26,26,26,.03)]">
                     <span className="font-barlow text-[14px] flex-1 min-w-0 truncate">{p.name}</span>
                     {p.town && <span className="font-barlow text-[12.5px] text-[rgba(26,26,26,.45)]">{p.town}</span>}
-                    <Tag tone={daysSinceVisit(p) >= 30 ? "danger" : "gold"}>{daysSinceVisit(p)}d</Tag>
+                    <Tag tone={daysOverdue(p) >= 30 ? "danger" : "gold"}>
+                      {daysOverdue(p) > 0 ? `${daysOverdue(p)}d past due` : "Requested"}
+                    </Tag>
                   </Link>
                 ))}
               </div>

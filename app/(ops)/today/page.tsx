@@ -13,7 +13,7 @@ import {
 } from "@/lib/opsData";
 import TodayView, { type TodayData } from "@/components/ops/TodayView";
 import type { Prospect } from "@/lib/types";
-import { needsAttention, daysSinceVisit } from "@/lib/prospectVisit";
+import { needsAttention, daysOverdue } from "@/lib/prospectVisit";
 
 export const dynamic = "force-dynamic";
 
@@ -66,9 +66,14 @@ export default async function TodayPage() {
       .in("status", ["new", "working", "active"]);
     const overdueList = ((data ?? []) as unknown as (Prospect & { name: string })[])
       .filter(needsAttention)
-      .sort((a, b) => daysSinceVisit(b) - daysSinceVisit(a));
+      .sort((a, b) => daysOverdue(b) - daysOverdue(a));
     const worst = overdueList[0];
-    if (worst) prospectLine = `${worst.name} is ${daysSinceVisit(worst)} days overdue`;
+    if (worst) {
+      const over = daysOverdue(worst);
+      prospectLine = over > 0
+        ? `${worst.name} is ${over} ${over === 1 ? "day" : "days"} past due`
+        : `${worst.name} was flagged for outreach`;
+    }
   } catch { /* fine — line stays empty */ }
 
   const waiting = threads.filter((t) => t.waitingSince);

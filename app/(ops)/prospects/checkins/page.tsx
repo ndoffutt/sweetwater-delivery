@@ -3,8 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { SubNav, Tag } from "@/components/ops/Bits";
 import {
   lastEngagementAt,
+  daysOverdue,
   overdueDaysFor,
-  daysSinceVisit,
   needsAttention,
   hasManualRequest,
 } from "@/lib/prospectVisit";
@@ -34,7 +34,6 @@ export default async function CheckinsPage() {
   const due = prospects
     .filter(needsAttention)
     .map((p) => {
-      const days = daysSinceVisit(p);
       const window = overdueDaysFor(p.priority);
       const lastAt = lastEngagementAt(p.touchpoints);
       return {
@@ -43,7 +42,7 @@ export default async function CheckinsPage() {
         segment: SEG_LABEL[p.business_type] ?? p.business_type,
         town: p.town ?? null,
         priority: p.priority ?? "medium",
-        overdueBy: Math.max(days - window, 0),
+        overdueBy: daysOverdue(p),
         manual: hasManualRequest(p),
         lastLine: lastAt
           ? `Last touch ${new Date(lastAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · every ${window}d`
