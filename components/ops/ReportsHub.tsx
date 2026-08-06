@@ -113,11 +113,10 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
   function save(then?: () => void) {
     setErr("");
     start(async () => {
+      // Revenue is owned by Reports -> Revenue; sending it from here would
+      // let a stale tab overwrite figures entered after it loaded.
       const res = await saveWeeklyUpdate({
         week_start: data.weekStart,
-        sweetwater_revenue: num(swWeek), jrs_revenue: num(jrsWeek), delivery_revenue: num(delWeek),
-        sweetwater_ytd: num(swYtd), jrs_ytd: num(jrsYtd), delivery_ytd: num(delYtd),
-        sweetwater_ytd_prior: num(swPrior), jrs_ytd_prior: num(jrsPrior), delivery_ytd_prior: null,
         staffing_status: staffing, staffing_note: staffingNote,
         equipment_status: equipment, equipment_note: equipmentNote,
         blocking_growth: blocking, key_updates: keyUpdates, expectation_note: expectation,

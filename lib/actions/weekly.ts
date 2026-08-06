@@ -18,15 +18,18 @@ export interface ActionItemRow {
 export interface WeeklyUpdateRow {
   id?: string;
   week_start: string;
-  sweetwater_revenue: number | null;
-  jrs_revenue: number | null;
-  delivery_revenue: number | null;
-  sweetwater_ytd: number | null;
-  jrs_ytd: number | null;
-  delivery_ytd: number | null;
-  sweetwater_ytd_prior: number | null;
-  jrs_ytd_prior: number | null;
-  delivery_ytd_prior: number | null;
+  // Revenue is optional here and never written by saveWeeklyUpdate — the
+  // Revenue page owns those columns. Kept on the type only so older callers
+  // still type-check.
+  sweetwater_revenue?: number | null;
+  jrs_revenue?: number | null;
+  delivery_revenue?: number | null;
+  sweetwater_ytd?: number | null;
+  jrs_ytd?: number | null;
+  delivery_ytd?: number | null;
+  sweetwater_ytd_prior?: number | null;
+  jrs_ytd_prior?: number | null;
+  delivery_ytd_prior?: number | null;
   staffing_status: string | null;
   staffing_note: string | null;
   equipment_status: string | null;
@@ -41,14 +44,42 @@ export interface WeeklyUpdateRow {
 // rather than breaking the page (same tolerance used elsewhere in this app).
 const missing = (m?: string) => !!m && /(does not exist|schema cache|could not find)/i.test(m);
 
+/** The written update: statuses and text. Deliberately does NOT touch the
+ *  revenue columns — those belong to the Revenue page now.
+ *
+ *  It used to upsert the whole row, including eight revenue figures the
+ *  weekly-update screen no longer even shows. A tab opened before the figures
+ *  were entered still held the old (usually empty) values, so clicking "Save
+ *  draft" hours later wrote them back over whatever had since been saved. The
+ *  Revenue page was already guarded against the mirror of this; this is the
+ *  other direction. */
 export async function saveWeeklyUpdate(row: WeeklyUpdateRow) {
   await requireSession("dispatcher");
   const supabase = createAdminClient();
-  const { error } = await supabase
+  const patch = {
+    staffing_status: row.staffing_status,
+    staffing_note: row.staffing_note,
+    equipment_status: row.equipment_status,
+    equipment_note: row.equipment_note,
+    blocking_growth: row.blocking_growth,
+    key_updates: row.key_updates,
+    expectation_note: row.expectation_note,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data: existing } = await supabase
     .from("weekly_updates")
-    .upsert({ ...row, updated_at: new Date().toISOString() }, { onConflict: "week_start" });
+    .select("id")
+    .eq("week_start", row.week_start)
+    .maybeSingle();
+
+  const { error } = existing
+    ? await supabase.from("weekly_updates").update(patch).eq("week_start", row.week_start)
+    : await supabase.from("weekly_updates").insert({ week_start: row.week_start, ...patch });
+
   if (error) return { error: missing(error.message) ? "Run supabase/weekly_updates.sql first." : error.message };
   revalidatePath("/dispatch/weekly");
+  revalidatePath("/reports");
   return { success: true };
 }
 
