@@ -29,7 +29,7 @@ export const AUTO_TEXTS: AutoTextSpec[] = [
     appliesTo: "Stops with a drop-off",
     when: OUT_FOR_DELIVERY_WHEN,
     who: OUT_FOR_DELIVERY_WHO,
-    body: "Hi! Your Sweetwater's Cleaners delivery is on the way today.",
+    body: "Hi! Your Sweetwater's Cleaners delivery is on the way.",
   },
   {
     id: "out_for_delivery_pickup",
@@ -37,7 +37,7 @@ export const AUTO_TEXTS: AutoTextSpec[] = [
     appliesTo: "Pick-up-only stops",
     when: OUT_FOR_DELIVERY_WHEN,
     who: OUT_FOR_DELIVERY_WHO,
-    body: "Hi! Sweetwater's Cleaners is on the way today. Please have your clothes ready for pick up!",
+    body: "Hi! Sweetwater's Cleaners is on the way. Please have your clothes ready for pick up!",
   },
 ];
 

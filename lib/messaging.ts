@@ -71,9 +71,29 @@ export async function notifyRouteDeparted(
     has_pickup: boolean;
     customers: { name: string; phone: string | null; auto_texts_enabled: boolean | null } | null;
   }[];
+
+  // If the office already texted this stop today (a manual fallback while
+  // this was stuck, a reply, anything outbound) don't also send the
+  // automated notice on top of it — that's exactly how 2026-08-06 double-
+  // texted 7 customers. One outbound message to a stop is enough contact.
+  const eligibleIds = list
+    .filter((s) => s.customers?.phone && s.customers?.auto_texts_enabled !== false)
+    .map((s) => s.id);
+  let alreadyContacted = new Set<string>();
+  if (eligibleIds.length) {
+    const { data: existing } = await supabase
+      .from("messages")
+      .select("stop_id")
+      .eq("direction", "outbound")
+      .in("stop_id", eligibleIds);
+    alreadyContacted = new Set(
+      ((existing ?? []) as { stop_id: string | null }[]).map((m) => m.stop_id).filter((id): id is string => !!id)
+    );
+  }
+
   await Promise.all(
     list
-      .filter((s) => s.customers?.phone && s.customers?.auto_texts_enabled !== false)
+      .filter((s) => s.customers?.phone && s.customers?.auto_texts_enabled !== false && !alreadyContacted.has(s.id))
       .map((s) => {
         // Bodies come from lib/autoTexts.ts, the same list Settings displays,
         // so what's documented and what's sent can't drift apart.
