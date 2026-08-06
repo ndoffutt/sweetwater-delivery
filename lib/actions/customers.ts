@@ -285,6 +285,48 @@ export async function setAutoTexts(id: string, enabled: boolean) {
   return { success: true };
 }
 
+export interface StopActivity {
+  id: string;
+  date: string;
+  dropoff: boolean;
+  pickup: boolean;
+  pieces: number;
+  photos: string[];
+}
+
+/** A customer's own delivery/pickup history — for the quick-look popup off a
+ *  route stop, so a dispatcher can see what's normal for this account without
+ *  leaving the console for the full directory. */
+export async function getCustomerStopHistory(customerId: string, limit = 8): Promise<StopActivity[]> {
+  await requireSession();
+  const supabase = createAdminClient();
+
+  const { data } = await supabase
+    .from("route_stops")
+    .select("id,completed_at,has_dropoff,has_pickup,piece_count,stop_photos(storage_path)")
+    .eq("customer_id", customerId)
+    .eq("status", "completed")
+    .order("completed_at", { ascending: false })
+    .limit(limit);
+
+  const photoUrl = (p: string) =>
+    supabase.storage.from("stop-photos").getPublicUrl(p).data.publicUrl;
+
+  return ((data ?? []) as unknown as {
+    id: string; completed_at: string | null; has_dropoff: boolean; has_pickup: boolean;
+    piece_count: number | null; stop_photos: { storage_path: string }[] | null;
+  }[])
+    .filter((s) => s.completed_at)
+    .map((s) => ({
+      id: s.id,
+      date: s.completed_at as string,
+      dropoff: s.has_dropoff,
+      pickup: s.has_pickup,
+      pieces: s.piece_count ?? 0,
+      photos: (s.stop_photos ?? []).map((p) => photoUrl(p.storage_path)),
+    }));
+}
+
 export async function setCustomerRange(id: string, outOfRange: boolean) {
   await requireSession("dispatcher");
   const supabase = createAdminClient();

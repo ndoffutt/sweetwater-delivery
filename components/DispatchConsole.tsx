@@ -15,6 +15,7 @@ import PlannedVisits, { type PlannedVisit } from "@/components/PlannedVisits";
 import { NeedsAttention, CheckinsDue, type CheckinDue } from "@/components/TodayRail";
 import type { DeliveryException } from "@/lib/actions/exceptions";
 import { addProspectVisit } from "@/lib/actions/prospectVisits";
+import StopDetailSheet, { type StopDetailInfo } from "@/components/StopDetailSheet";
 import type { RouteStop } from "@/lib/types";
 
 export interface InitialStop {
@@ -268,6 +269,9 @@ export default function DispatchConsole({
   // "currently at" card updates, and the driver dot moves on the map.
   interface LiveStop { customer_id: string | null; status: string; arrived_at: string | null; completed_at: string | null }
   const [liveStops, setLiveStops] = useState<LiveStop[]>([]);
+  // Quick-look popup for a dispatched stop card — today's task + this
+  // customer's history, in place, instead of navigating off to the directory.
+  const [detailStop, setDetailStop] = useState<StopDetailInfo | null>(null);
   const [liveDriver, setLiveDriver] = useState<{ lat: number; lng: number } | null>(null);
   const [liveRouteStatus, setLiveRouteStatus] = useState<string | null>(today?.status ?? null);
   useEffect(() => {
@@ -902,14 +906,14 @@ export default function DispatchConsole({
   // off server data (today.stops + plannedVisits) so it stays correct after the
   // post-send refresh, when the client rows no longer carry stop_order.
   type WovenStop =
-    | { kind: "delivery"; order: number; customerId: string; name: string; address: string; town: string; vip: boolean; pieces: number; has_dropoff: boolean; has_pickup: boolean }
+    | { kind: "delivery"; order: number; customerId: string; name: string; address: string; town: string; phone: string | null; notes: string | null; vip: boolean; pieces: number; has_dropoff: boolean; has_pickup: boolean }
     | { kind: "prospect"; order: number; prospectId: string; name: string; visited: boolean };
   const deliveryStops = today?.stops ?? [];
   const wovenStops: WovenStop[] = dispatched
     ? [
         ...deliveryStops.map((s, i) => ({
           kind: "delivery" as const, order: s.stopOrder ?? i, customerId: s.customerId, name: s.name, address: s.address,
-          town: s.town, vip: s.vip, pieces: s.pieces, has_dropoff: s.has_dropoff, has_pickup: s.has_pickup,
+          town: s.town, phone: s.phone, notes: s.notes, vip: s.vip, pieces: s.pieces, has_dropoff: s.has_dropoff, has_pickup: s.has_pickup,
         })),
         ...plannedVisits.map((v, i) => ({
           kind: "prospect" as const, order: v.stopOrder ?? 9000 + i, prospectId: v.prospectId, name: v.name, visited: v.status === "visited",
@@ -1118,12 +1122,9 @@ export default function DispatchConsole({
               const lv = w.kind === "delivery" ? liveByCustomer.get(w.customerId) : undefined;
               const liveDone = w.kind === "prospect" ? w.visited : lv ? lv.status === "completed" || lv.status === "skipped" : false;
               const liveNow = w.kind === "delivery" && lv?.status === "arrived";
-              return (
-              <Link
-                key={i}
-                href={w.kind === "delivery" ? `/dispatch/customers?id=${w.customerId}` : `/sales/prospects?id=${w.prospectId}`}
-                className={`flex items-start gap-2.5 p-2.5 rounded-xl transition-colors hover:bg-cream-dark/30 ${liveNow ? "bg-gold-primary/[0.09]" : w.kind === "prospect" ? "bg-gold-primary/[0.06]" : ""} ${liveDone ? "opacity-60" : ""}`}
-              >
+              const cardClassName = `flex items-start gap-2.5 p-2.5 rounded-xl transition-colors hover:bg-cream-dark/30 cursor-pointer ${liveNow ? "bg-gold-primary/[0.09]" : w.kind === "prospect" ? "bg-gold-primary/[0.06]" : ""} ${liveDone ? "opacity-60" : ""}`;
+              const cardInner = (
+                <>
                 <span className={`w-7 h-7 shrink-0 rounded-full text-sm font-body flex items-center justify-center mt-0.5 ${liveDone ? "bg-green-primary/20 text-green-primary" : liveNow ? "bg-gold-primary text-charcoal" : w.kind === "prospect" ? "bg-gold-primary/20 text-gold-dark ring-1 ring-gold-primary/40" : "bg-green-primary text-cream"}`}>{liveDone ? "✓" : i + 1}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
@@ -1148,7 +1149,31 @@ export default function DispatchConsole({
                   )}
                   <span className="text-charcoal/30 ml-1">›</span>
                 </div>
-              </Link>
+                </>
+              );
+              if (w.kind === "prospect") {
+                return (
+                  <Link key={i} href={`/sales/prospects?id=${w.prospectId}`} className={cardClassName}>
+                    {cardInner}
+                  </Link>
+                );
+              }
+              const openDetail = () => setDetailStop({
+                customerId: w.customerId, name: w.name, address: w.address, town: w.town,
+                phone: w.phone, vip: w.vip, pieces: w.pieces, hasDropoff: w.has_dropoff, hasPickup: w.has_pickup,
+                notes: w.notes, status: lv?.status ?? "pending", arrivedAt: lv?.arrived_at ?? null, completedAt: lv?.completed_at ?? null,
+              });
+              return (
+                <div
+                  key={i}
+                  role="button"
+                  tabIndex={0}
+                  onClick={openDetail}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDetail(); } }}
+                  className={cardClassName}
+                >
+                  {cardInner}
+                </div>
               );
             })}
             {!dispatched && included.map((r, i) => (
@@ -1449,6 +1474,8 @@ export default function DispatchConsole({
           </div>
         </div>
       )}
+
+      {detailStop && <StopDetailSheet stop={detailStop} onClose={() => setDetailStop(null)} />}
     </div>
   );
 }
