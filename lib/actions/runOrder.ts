@@ -146,3 +146,52 @@ export async function markOrderChangesSeen(ids: string[]) {
   revalidatePath("/delivery");
   return { success: true };
 }
+
+/**
+ * The driver tapped a stop that wasn't next. That IS the reorder — he's told
+ * us where he's going, so the route follows him rather than the other way
+ * round, and the office sees that it happened.
+ *
+ * Stops already done keep their positions; the chosen stop moves to the front
+ * of what's left and everything else keeps its relative order.
+ */
+export async function jumpToStop(routeId: string, stopId: string) {
+  const session = await requireSession();
+  const supabase = createAdminClient();
+
+  const all = await currentOrder(supabase, routeId);
+  const { data: statuses } = await supabase
+    .from("route_stops")
+    .select("id, status")
+    .eq("route_id", routeId)
+    .is("deleted_at", null);
+  const statusOf = new Map(((statuses ?? []) as { id: string; status: string }[]).map((s) => [s.id, s.status]));
+
+  const done = all.filter((s) => ["completed", "skipped"].includes(statusOf.get(s.id) ?? ""));
+  const remaining = all.filter((s) => !done.some((d) => d.id === s.id));
+
+  const idx = remaining.findIndex((s) => s.id === stopId);
+  // Already next, or not a remaining stop — nothing to record.
+  if (idx <= 0) return { success: true, moved: false };
+
+  const chosen = remaining[idx];
+  const reordered = [chosen, ...remaining.filter((s) => s.id !== stopId)];
+  const finalOrder = [...done, ...reordered];
+
+  await Promise.all(
+    finalOrder.map((s, i) =>
+      supabase.from("route_stops").update({ stop_order: i + 1 }).eq("id", s.id).eq("route_id", routeId)
+    )
+  );
+
+  const skipped = idx; // how many he passed over
+  await logChange(
+    supabase, routeId, "reorder", all, finalOrder,
+    `Went to ${chosen.customers?.name ?? "a stop"} next, ahead of ${skipped} stop${skipped === 1 ? "" : "s"}.`,
+    session.name
+  );
+
+  revalidatePath("/dispatch");
+  revalidatePath("/delivery");
+  return { success: true, moved: true };
+}

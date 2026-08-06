@@ -17,6 +17,7 @@ import type { RouteStop } from "@/lib/types";
 import { googleVoiceCallHref, formatPhone } from "@/lib/phone";
 import ProspectVisitSheet from "@/components/ProspectVisitSheet";
 import RunOrderConfirm, { type RunStop } from "@/components/RunOrderConfirm";
+import { jumpToStop } from "@/lib/actions/runOrder";
 
 const C = {
   green: "#02733e",
@@ -494,6 +495,22 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
 
   function selectPin(id: string) {
     setTargetId(id);
+    // Tapping a stop that isn't next IS the reorder — he's told us where he's
+    // going, so the run follows him. Fire-and-forget: out here a request hangs
+    // rather than fails, and nothing about picking a stop should wait on the
+    // network.
+    const remaining = stops.filter((s) => s.status === "pending" || s.status === "arrived");
+    const at = remaining.findIndex((s) => s.id === id);
+    if (at > 0) {
+      const chosen = remaining[at];
+      // Show it as next immediately; the server renumbers to match.
+      setStops((cur) => {
+        const done = cur.filter((s) => !remaining.some((r) => r.id === s.id));
+        const rest = remaining.filter((s) => s.id !== id);
+        return [...done, chosen, ...rest].map((s, i) => ({ ...s, stop_order: i + 1 }));
+      });
+      void jumpToStop(routeId, id).catch(() => {});
+    }
     // Prospect stops open expanded (notes + history in view); deliveries peek.
     setSheet(stops.find((s) => s.id === id)?.kind === "prospect_visit" ? "full" : "peek");
   }
