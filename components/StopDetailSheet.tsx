@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getCustomerStopHistory, type StopActivity } from "@/lib/actions/customers";
 import { googleVoiceCallHref, formatPhone } from "@/lib/phone";
+import MessagePreview from "@/components/MessagePreview";
 
 export interface StopDetailInfo {
   customerId: string;
@@ -134,6 +135,9 @@ export default function StopDetailSheet({ stop, onClose }: { stop: StopDetailInf
               )}
             </div>
           </div>
+
+          {/* Messages — owner-only, same as the Text button above. */}
+          {stop.canMessage && <MessagePreview customerId={stop.customerId} phone={stop.phone} name={stop.name} />}
 
           {/* History */}
           <div>

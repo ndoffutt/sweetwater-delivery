@@ -88,6 +88,7 @@ export default async function CustomersPage({
       customers={((customers ?? []) as Customer[]).map((c) => ({ ...c, out_of_range: oorSet.has(c.id) }))}
       activity={activity}
       initialSelectedId={searchParams?.id ?? null}
+      canMessage={session.role === "admin"}
     />
   );
 }

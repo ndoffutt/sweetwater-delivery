@@ -4,6 +4,34 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/session";
 import { recordAndSend, placeBridgeCall, phoneDigits, callConfigured, canTransmitSms } from "@/lib/messaging";
 
+export interface CustomerMessage {
+  id: string;
+  direction: string;
+  body: string;
+  status: string;
+  sender_name: string | null;
+  created_at: string;
+}
+
+/** A customer's recent message history, for the quick-look popup off a stop
+ *  card and the customer directory panel — Text still deep-links into the
+ *  full thread to reply; this is just enough to see at a glance without
+ *  leaving the page. Owner-only, same as the rest of messaging during the
+ *  Twilio rollout (see canTransmitSms). */
+export async function getCustomerMessages(customerId: string, limit = 10): Promise<CustomerMessage[]> {
+  const session = await requireSession();
+  if (session.role !== "admin") return [];
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("messages")
+    .select("id, direction, body, status, sender_name, created_at")
+    .eq("customer_id", customerId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) return [];
+  return (data ?? []) as CustomerMessage[];
+}
+
 /** Send a text from the office number. During Twilio rollout only the Owner
  *  (Nate) actually transmits; other logins record the message as pending.
  *  `replyToId` quotes an earlier message, iMessage style. */

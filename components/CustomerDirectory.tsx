@@ -18,6 +18,7 @@ import {
   type RoutePositioning,
 } from "@/lib/actions/customers";
 import RouteMap from "@/components/RouteMap";
+import MessagePreview from "@/components/MessagePreview";
 import { AccountAvatar, KindPill, InfoTile } from "@/components/AccountBits";
 import { parseAddress, composeAddress } from "@/lib/address";
 import type { Customer, RouteStop } from "@/lib/types";
@@ -44,10 +45,13 @@ export default function CustomerDirectory({
   customers: initial,
   activity,
   initialSelectedId = null,
+  canMessage = false,
 }: {
   customers: Customer[];
   activity: Record<string, Activity[]>;
   initialSelectedId?: string | null;
+  /** Messaging is owner-only for now (see lib/messaging.ts canTransmitSms). */
+  canMessage?: boolean;
 }) {
   const [customers, setCustomers] = useState(initial);
   const [query, setQuery] = useState("");
@@ -410,6 +414,7 @@ export default function CustomerDirectory({
             onPatch={(p) => patch(selected.id, p)}
             onDelete={() => { setCustomers((cs) => cs.filter((x) => x.id !== selected.id)); setSelectedId(null); startTransition(() => { deleteCustomer(selected.id); }); }}
             pending={startTransition}
+            canMessage={canMessage}
           />
         ) : (
           <div className="hidden md:flex h-full items-center justify-center text-charcoal/30 font-body">
@@ -422,7 +427,7 @@ export default function CustomerDirectory({
 }
 
 function Detail({
-  c, activity, onBack, onPatch, onDelete, pending,
+  c, activity, onBack, onPatch, onDelete, pending, canMessage = false,
 }: {
   c: Customer;
   activity: Activity[];
@@ -430,6 +435,7 @@ function Detail({
   onPatch: (p: Partial<Customer>) => void;
   onDelete: () => void;
   pending: (fn: () => void) => void;
+  canMessage?: boolean;
 }) {
   const [gate, setGate] = useState(c.gate_code ?? "");
   const [notes, setNotes] = useState(c.delivery_notes ?? "");
@@ -571,6 +577,9 @@ function Detail({
         <InfoTile icon="🔑" label="Gate / entry code" value={c.gate_code || "—"} mono={!!c.gate_code} />
         <InfoTile icon="🕐" label="Last delivered" value={activity[0]?.date ? new Date(activity[0].date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"} />
       </div>
+
+      {/* Messages — owner-only, same as texting itself. */}
+      {canMessage && <MessagePreview customerId={c.id} phone={c.phone} name={c.name} />}
 
       {/* Delivery history — the reason you open a customer: everything we've
           done for them. Front and center, full history, newest first. */}
