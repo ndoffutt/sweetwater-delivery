@@ -1,6 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { scoreSignup } from "@/lib/signupSpam";
 
 interface PublicSignupInput {
   fullName: string;
@@ -10,6 +11,8 @@ interface PublicSignupInput {
   notes?: string;
   smsConsent: boolean;
   company?: string; // honeypot — real users leave this blank
+  /** ms between the form rendering and submit; bots post instantly. */
+  elapsedMs?: number;
 }
 
 // Public delivery sign-up from the website opt-in form. Queues the request for
@@ -24,6 +27,18 @@ export async function submitPublicSignup(input: PublicSignupInput) {
   if (!fullName || !address) return { error: "Please add your name and address." };
   if (!phone) return { error: "Please add a mobile number." };
 
+  // Bots clear the honeypot but still fill the visible fields, so score the
+  // content too. Flagged sign-ups are RECORDED, not rejected — a false
+  // positive costs a real delivery customer, which is far worse than a junk
+  // row nobody sees — they're just filed as dismissed so they never reach the
+  // review queue.
+  const verdict = scoreSignup({
+    fullName,
+    address,
+    notes: input.notes,
+    elapsedMs: input.elapsedMs,
+  });
+
   const consentNote = input.smsConsent
     ? `SMS opt-in: agreed to receive delivery text notifications via web form on ${new Date().toISOString().slice(0, 10)}.`
     : `SMS opt-in: NOT given.`;
@@ -35,9 +50,16 @@ export async function submitPublicSignup(input: PublicSignupInput) {
     address,
     phone,
     email: input.email?.trim() || null,
-    notes,
+    notes: verdict.spam ? `[auto-flagged spam: ${verdict.reasons.join(", ")}] ${notes}` : notes,
+    status: verdict.spam ? "dismissed" : "pending",
   });
   if (error) return { error: "Something went wrong — please call us instead." };
+
+  // Never confirm a flagged sign-up. The bots supply other people's real
+  // addresses — subpoenainquiries@valvesoftware.com and ap@pipedrive.com have
+  // both been sent our welcome email — which is unsolicited mail from our
+  // domain to strangers, and the fastest way to wreck sending reputation.
+  if (verdict.spam) return { success: true };
 
   // Confirm interest by email (best-effort — a mail hiccup must never fail the
   // signup). States the card-on-file requirement so eligibility is clear up

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { submitPublicSignup } from "@/lib/actions/signup";
 
 export default function PublicSignupForm() {
@@ -8,6 +8,9 @@ export default function PublicSignupForm() {
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
   const [consent, setConsent] = useState(false);
+  // When the form first rendered. A person takes many seconds to fill five
+  // fields; a script posts immediately.
+  const renderedAt = useRef(Date.now());
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -22,6 +25,7 @@ export default function PublicSignupForm() {
         notes: (fd.get("notes") as string) || undefined,
         smsConsent: consent,
         company: (fd.get("company") as string) || undefined,
+        elapsedMs: Date.now() - renderedAt.current,
       });
       if (res.error) { setError(res.error); return; }
       setDone(true);
