@@ -88,6 +88,19 @@ export default async function ReportsPage() {
     .filter((d): d is string => Boolean(d))
     .sort();
 
+  // Signups over time — every submission (spam-flagged ones included; the
+  // point of this chart is site traffic/interest, not just clean conversions).
+  let signupDates: string[] = [];
+  try {
+    const signupRows = await pageAll<{ created_at: string }>((from, to) =>
+      supabase.from("customer_signups").select("created_at").range(from, to)
+    );
+    signupDates = signupRows
+      .map((s) => s.created_at)
+      .filter((d): d is string => Boolean(d))
+      .sort();
+  } catch { /* table absent on an unmigrated environment */ }
+
   // Touchpoints — what outreach happened and what was said.
   const rawTps = await pageAll<{
     id: string;
@@ -128,6 +141,7 @@ export default async function ReportsPage() {
     <ReportsView
       stops={stops}
       customerDates={customerDates}
+      signupDates={signupDates}
       touchpoints={touchpoints}
       legs={legs}
     />

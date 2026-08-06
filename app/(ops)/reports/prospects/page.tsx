@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { Band, Kicker, Tag } from "@/components/ops/Bits";
+import { Band, Tag } from "@/components/ops/Bits";
 import ReportsNav from "@/components/ops/ReportsNav";
+import ProspectStatCards from "@/components/ops/ProspectStatCards";
 import { needsAttention, daysOverdue } from "@/lib/prospectVisit";
 import type { Prospect } from "@/lib/types";
 import { touchpointWeek } from "@/lib/date";
@@ -119,21 +120,28 @@ export default async function ReportsProspectsPage() {
           </p>
         </div>
 
-        {/* Headline counts */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
+        {/* Headline counts — each opens the rows behind it */}
+        <ProspectStatCards
+          cards={[
             { label: "This week", value: week.length, sub: prior.length > 0 || week.length > 0 ? `${delta >= 0 ? "+" : ""}${delta} vs last week` : "no activity yet" },
             { label: "Last 30 days", value: month.length, sub: `${byPerson.length} ${byPerson.length === 1 ? "person" : "people"}` },
             { label: "Check-ins due", value: due.length, sub: due.length ? `worst ${daysOverdue(due[0])}d past due` : "all current" },
             { label: "Active prospects", value: prospects.length, sub: "new, working, active" },
-          ].map((s) => (
-            <div key={s.label} className="border border-ops-divider p-4">
-              <Kicker>{s.label}</Kicker>
-              <div className="font-barlowc text-[32px] font-semibold leading-none mt-1.5">{s.value}</div>
-              <div className="font-barlow text-[12.5px] text-[rgba(26,26,26,.55)] mt-1">{s.sub}</div>
-            </div>
-          ))}
-        </div>
+          ]}
+          weekTouches={week.map((t) => ({
+            type: t.type, createdBy: t.created_by, createdAt: t.created_at,
+            prospectId: t.prospects?.id ?? null, prospectName: t.prospects?.name ?? "Unknown",
+          }))}
+          monthTouches={month.map((t) => ({
+            type: t.type, createdBy: t.created_by, createdAt: t.created_at,
+            prospectId: t.prospects?.id ?? null, prospectName: t.prospects?.name ?? "Unknown",
+          }))}
+          due={due.map((p) => ({
+            id: p.id, name: p.name, town: p.town,
+            label: daysOverdue(p) > 0 ? `${daysOverdue(p)}d past due` : "Requested",
+          }))}
+          active={prospects.map((p) => ({ id: p.id, name: p.name, town: p.town, status: p.status }))}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Band title="How we reached them">

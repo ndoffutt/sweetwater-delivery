@@ -141,7 +141,7 @@ function BarChart({
 }
 
 // ── Cumulative customers line ──────────────────────────────────
-function CustomerLine({ dates }: { dates: string[] }) {
+function TrendLine({ dates, color, gradientId }: { dates: string[]; color: string; gradientId: string }) {
   const pts = useMemo(() => {
     if (dates.length === 0) return [];
     const byMonth = new Map<string, number>();
@@ -187,13 +187,13 @@ function CustomerLine({ dates }: { dates: string[] }) {
     <div className="bg-cream rounded-xl border border-cream-dark p-4 sm:p-5">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ overflow: "visible" }}>
         <defs>
-          <linearGradient id="custFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={GREEN} stopOpacity="0.18" />
-            <stop offset="100%" stopColor={GREEN} stopOpacity="0" />
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.18" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
         </defs>
-        <path d={area} fill="url(#custFill)" />
-        <polyline points={line} fill="none" stroke={GREEN} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        <path d={area} fill={`url(#${gradientId})`} />
+        <polyline points={line} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
         {pts.map((p, i) => {
           const showTick = i % step === 0 || i === pts.length - 1;
           const isHover = hover === i;
@@ -201,7 +201,7 @@ function CustomerLine({ dates }: { dates: string[] }) {
             <g key={p.key}>
               {(isHover || i === pts.length - 1) && (
                 <>
-                  <circle cx={x(i)} cy={y(p.total)} r={4} fill="#fff" stroke={GREEN} strokeWidth={2} />
+                  <circle cx={x(i)} cy={y(p.total)} r={4} fill="#fff" stroke={color} strokeWidth={2} />
                   <text x={x(i)} y={y(p.total) - 10} textAnchor="middle" fontSize="11" fontFamily="var(--font-poppins), sans-serif" fill="rgba(26,26,26,0.65)">
                     {p.total}
                   </text>
@@ -231,10 +231,11 @@ const TP_GLYPH: Record<string, GlyphName> = {
 };
 
 export default function ReportsView({
-  stops, customerDates, touchpoints, legs = [],
+  stops, customerDates, signupDates = [], touchpoints, legs = [],
 }: {
   stops: StopRow[];
   customerDates: string[];
+  signupDates?: string[];
   touchpoints: TouchpointRow[];
   legs?: TripLeg[];
 }) {
@@ -589,7 +590,18 @@ export default function ReportsView({
         <span className="font-body text-xs text-charcoal/40">{customerDates.length} total</span>
       </div>
       <div className="mb-8">
-        <CustomerLine dates={customerDates} />
+        <TrendLine dates={customerDates} color={GREEN} gradientId="custFill" />
+      </div>
+
+      {/* Signups over time */}
+      <div className="flex items-baseline justify-between mb-3">
+        <h3 className="font-body text-xs uppercase tracking-widest text-charcoal/30">
+          Signups over time
+        </h3>
+        <span className="font-body text-xs text-charcoal/40">{signupDates.length} total</span>
+      </div>
+      <div className="mb-8">
+        <TrendLine dates={signupDates} color={GOLD} gradientId="signupFill" />
       </div>
       </div>
 
