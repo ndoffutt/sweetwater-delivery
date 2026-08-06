@@ -6,14 +6,14 @@ import { getOverdueProspectCount, getThreadTable, getActionItems, currentWeekSta
 
 export const dynamic = "force-dynamic";
 
-// The Ops Hub is the OWNER'S console. The manager keeps the existing MgrShell
-// experience at /dispatch and the driver keeps /driver — both untouched. Any
-// non-admin landing here is sent back to their own home.
+// The Ops Hub — the owner's console, and now Ahsin's (dispatcher) too, full
+// parity except Revenue (blocked in middleware). The driver keeps /driver,
+// untouched.
 export default async function OpsLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
   if (!session) redirect("/");
   if (session.role === "driver") redirect("/driver");
-  if (session.role !== "admin") redirect("/dispatch");
+  if (session.role !== "admin" && session.role !== "dispatcher") redirect("/dispatch");
 
   const supabase = createAdminClient();
   const week = currentWeekStart();

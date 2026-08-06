@@ -28,11 +28,10 @@ const MSGSVC = process.env.TWILIO_MESSAGING_SERVICE_SID;
 export const smsConfigured = () => Boolean(SID && TOKEN && (MSGSVC || FROM));
 export const callConfigured = () => Boolean(SID && TOKEN && FROM && BRIDGE);
 
-// Rollout gate: during the initial Twilio launch, ONLY the Owner (Nate, role
-// "admin") actually transmits SMS — every other login records the message as
-// pending, so it's saved in the app but never leaves. Widen this list (e.g.
-// add "dispatcher") to open sending up to the Manager later.
-export const canTransmitSms = (role: string | null | undefined) => role === "admin";
+// Rollout gate: the Owner and the Manager (Ahsin, role "dispatcher") transmit
+// SMS — everyone else (drivers) records the message as pending, so it's
+// saved in the app but never leaves.
+export const canTransmitSms = (role: string | null | undefined) => role === "admin" || role === "dispatcher";
 
 // Master switch + dry-run target now live in the database (Settings → Texting)
 // so they take effect on the next request instead of waiting on a redeploy.

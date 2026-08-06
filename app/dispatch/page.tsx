@@ -242,7 +242,7 @@ export default async function DispatchPage() {
       plannedVisitIds={plannedVisitIds}
       plannedVisits={plannedVisits}
       today={route ? { id: route.id, status: route.status, startedAt: route.started_at ?? null, stops } : null}
-      canMessage={session.role === "admin"}
+      canMessage={session.role === "admin" || session.role === "dispatcher"}
     />
   );
 }

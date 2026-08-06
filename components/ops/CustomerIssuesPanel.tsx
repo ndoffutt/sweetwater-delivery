@@ -15,16 +15,24 @@ export default function CustomerIssuesPanel({
   issues,
   weekStart,
   comments = {},
+  customers,
 }: {
   issues: CustomerIssueRow[];
   weekStart: string;
   comments?: Record<string, EntityComment[]>;
+  /** For the customer picker — a real account, not a typed name that might
+   *  not match anything. */
+  customers: { id: string; name: string }[];
 }) {
   const [rows, setRows] = useState(issues);
   const [, start] = useTransition();
   const [err, setErr] = useState("");
   const [adding, setAdding] = useState(false);
   const [who, setWho] = useState("");
+  // Set only when `who` matches an actual customer — add() requires this,
+  // not just non-empty text, so a typo can't slip through as a "customer".
+  const [whoId, setWhoId] = useState<string | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [what, setWhat] = useState("");
   // Closing an issue asks how — so `resolving` holds the id being closed
   // while its reason is typed.
@@ -62,19 +70,25 @@ export default function CustomerIssuesPanel({
 
   function add() {
     const description = what.trim();
-    if (!description) return;
+    const name = who.trim();
+    if (!description || !whoId || !name) return;
     setErr("");
     start(async () => {
-      const r = await addCustomerIssue({ description, customerName: who.trim() || null, openedWeek: weekStart });
+      const r = await addCustomerIssue({ description, customerName: name, openedWeek: weekStart });
       if ("error" in r && r.error) { setErr(r.error); return; }
       // Use the row the server actually created — its real id is what makes
       // resolving or deleting it work straight away.
       if ("issue" in r && r.issue) setRows((cur) => [...cur, r.issue]);
       setWho("");
+      setWhoId(null);
       setWhat("");
       setAdding(false);
     });
   }
+
+  const suggestions = who.trim()
+    ? customers.filter((c) => c.name.toLowerCase().includes(who.trim().toLowerCase())).slice(0, 8)
+    : customers.slice(0, 8);
 
   const open = rows.filter((r) => !r.resolved_week);
   const carried = open.filter((r) => r.opened_week !== weekStart);
@@ -145,11 +159,37 @@ export default function CustomerIssuesPanel({
 
       {adding ? (
         <div className="border border-dashed border-ops-divider p-3 space-y-2">
-          <input value={who} onChange={(e) => setWho(e.target.value)} placeholder="Customer (optional)" className={`${inputCls} w-full`} />
-          <input value={what} onChange={(e) => setWhat(e.target.value)} placeholder="What happened?" autoFocus className={`${inputCls} w-full`} />
+          <div className="relative">
+            <input
+              value={who}
+              onChange={(e) => { setWho(e.target.value); setWhoId(null); setShowSuggestions(true); }}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 120)}
+              placeholder="Customer — start typing"
+              autoFocus
+              className={`${inputCls} w-full`}
+            />
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-ops-bg border border-ops-divider max-h-48 overflow-y-auto">
+                {suggestions.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    // onMouseDown (not onClick) fires before the input's onBlur
+                    // closes this list, so the pick actually registers.
+                    onMouseDown={() => { setWho(c.name); setWhoId(c.id); setShowSuggestions(false); }}
+                    className="block w-full text-left px-3 py-1.5 text-[14px] font-barlow hover:bg-[rgba(26,26,26,.05)]"
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <input value={what} onChange={(e) => setWhat(e.target.value)} placeholder="What happened?" className={`${inputCls} w-full`} />
           <div className="flex gap-2">
             <button className={btnSecondary} onClick={() => setAdding(false)}>Cancel</button>
-            <button className={`${btnPrimary} flex-1`} disabled={!what.trim()} onClick={add}>Add issue</button>
+            <button className={`${btnPrimary} flex-1`} disabled={!what.trim() || !whoId} onClick={add}>Add issue</button>
           </div>
         </div>
       ) : (

@@ -7,7 +7,7 @@
 // unlabelled single number once made a business running +15% read as flat.
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Reg, Tag, btnPrimary, btnSecondary, inputCls, Kicker } from "@/components/ops/Bits";
 import ActionItemsPanel, { type ActionItemTeamMember } from "@/components/ops/ActionItemsPanel";
 import CustomerIssuesPanel from "@/components/ops/CustomerIssuesPanel";
@@ -45,6 +45,8 @@ export interface ReportsData {
   retentionComments: Record<string, EntityComment[]>;
   comments: ReportCommentRow[];
   pastUpdates: { week_start: string; submitted_at: string | null; written: boolean }[];
+  role?: "admin" | "dispatcher";
+  customers: { id: string; name: string }[];
 }
 
 const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(/[^0-9.-]/g, "")));
@@ -93,9 +95,7 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
   const [staffingNote, setStaffingNote] = useState(s?.staffing_note ?? "");
   const [equipment, setEquipment] = useState(s?.equipment_status ?? "Green");
   const [equipmentNote, setEquipmentNote] = useState(s?.equipment_note ?? "");
-  const [blocking, setBlocking] = useState(s?.blocking_growth ?? "None");
   const [keyUpdates, setKeyUpdates] = useState(s?.key_updates ?? "");
-  const [expectation, setExpectation] = useState(s?.expectation_note ?? "");
 
   // Counts for the emailed copy come straight off the logged issues now —
   // there's nothing to type, so nothing to get out of step with the list.
@@ -119,12 +119,27 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
         week_start: data.weekStart,
         staffing_status: staffing, staffing_note: staffingNote,
         equipment_status: equipment, equipment_note: equipmentNote,
-        blocking_growth: blocking, key_updates: keyUpdates, expectation_note: expectation,
+        key_updates: keyUpdates,
       });
       if (res?.error) setErr(res.error);
       else then?.();
     });
   }
+
+  // Autosave — debounced, so a run of keystrokes doesn't fire a save each.
+  // Skips the mount render (nothing changed yet, and everything here is
+  // seeded straight from the saved row) via the `dirty` ref.
+  const dirty = useRef(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  useEffect(() => {
+    if (!dirty.current) { dirty.current = true; return; }
+    setSaveState("saving");
+    const t = setTimeout(() => {
+      save(() => setSaveState("saved"));
+    }, 900);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staffing, staffingNote, equipment, equipmentNote, keyUpdates]);
 
   const updateText = () =>
     renderWeeklyUpdate({
@@ -132,10 +147,9 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
       openIssues: issueOpen,
       newIssues: issueNew,
       resolvedIssues: issueResolved,
-      expectationNote: expectation,
       staffingStatus: staffing, staffingNote,
       equipmentStatus: equipment, equipmentNote,
-      blockingGrowth: blocking, keyUpdates,
+      keyUpdates,
       sweetwater: { weekly: num(swWeek), ytd: num(swYtd), ytdPrior: num(swPrior) },
       jrs: { weekly: num(jrsWeek), ytd: num(jrsYtd), ytdPrior: num(jrsPrior) },
       delivery: { weekly: num(delWeek), ytd: num(delYtd), ytdPrior: null, sweetwaterYtd: num(swYtd) },
@@ -169,7 +183,7 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
 
   return (
     <>
-      <ReportsNav active="Weekly update" />
+      <ReportsNav active="Weekly update" role={data.role} />
       <div className="mx-auto max-w-[1440px] px-5 md:px-12">
         {/* Title */}
         <div className="pt-8 flex flex-wrap items-start justify-between gap-4">
@@ -217,11 +231,7 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
                 </h2>
                 <Tag tone="neutral">filled in weekly · unresolved carries over</Tag>
               </div>
-              <CustomerIssuesPanel issues={data.customerIssues} weekStart={data.weekStart} comments={data.issueComments} />
-              <label className="block mt-4">
-                <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">Expectation missed (leave blank if met)</span>
-                <input value={expectation} onChange={(e) => setExpectation(e.target.value)} className={inputCls} />
-              </label>
+              <CustomerIssuesPanel issues={data.customerIssues} weekStart={data.weekStart} comments={data.issueComments} customers={data.customers} />
               <CommentCallout section="issues" />
             </section>
 
@@ -260,10 +270,6 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
                   placeholder={["Anything down or limping", "Repairs booked", "Parts / service needed"]}
                 />
               </div>
-              <label className="block mt-4">
-                <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">Operations blocking growth</span>
-                <input value={blocking ?? ""} onChange={(e) => setBlocking(e.target.value)} className={inputCls} />
-              </label>
               <div className="mt-4">
                 <LineListField
                   label="Key updates"
@@ -289,11 +295,9 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
                 activeOpportunities={data.activeOpportunities}
               />
               <CommentCallout section="growth" />
-              <div className="mt-5 flex gap-2">
-                <button className={btnSecondary} disabled={pending} onClick={() => save()}>
-                  {pending ? "Saving…" : "Save draft"}
-                </button>
-              </div>
+              <p className="mt-5 text-[12.5px] text-[rgba(26,26,26,.45)]">
+                {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : " "}
+              </p>
             </section>
 
             {/* Leave a comment */}

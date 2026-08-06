@@ -60,9 +60,14 @@ export default function WeeklyUpdateView({ data }: { data: WeeklyPageData }) {
   const [staffingNote, setStaffingNote] = useState(s?.staffing_note ?? "");
   const [equipment, setEquipment] = useState(s?.equipment_status ?? "Green");
   const [equipmentNote, setEquipmentNote] = useState(s?.equipment_note ?? "");
-  const [blocking, setBlocking] = useState(s?.blocking_growth ?? "None");
+  // No longer read from the saved row — these two fields were retired from
+  // the writable form (saveWeeklyUpdate no longer accepts them) but this
+  // legacy screen isn't reachable anymore (middleware routes both Owner and
+  // Manager to the Ops Hub's Weekly Update instead); left as static defaults
+  // so this file keeps compiling rather than deleting a page still on disk.
+  const [blocking, setBlocking] = useState("None");
   const [keyUpdates, setKeyUpdates] = useState(s?.key_updates ?? "");
-  const [expectation, setExpectation] = useState(s?.expectation_note ?? "");
+  const [expectation, setExpectation] = useState("");
 
   const [newOwner, setNewOwner] = useState("");
   const [newAction, setNewAction] = useState("");
@@ -108,7 +113,7 @@ export default function WeeklyUpdateView({ data }: { data: WeeklyPageData }) {
         sweetwater_ytd_prior: num(swPrior), jrs_ytd_prior: num(jrsPrior), delivery_ytd_prior: null,
         staffing_status: staffing, staffing_note: staffingNote,
         equipment_status: equipment, equipment_note: equipmentNote,
-        blocking_growth: blocking, key_updates: keyUpdates, expectation_note: expectation,
+        key_updates: keyUpdates,
       });
       if (res?.error) setErr(res.error);
     });

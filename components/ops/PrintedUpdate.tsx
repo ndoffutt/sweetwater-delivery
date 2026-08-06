@@ -7,9 +7,11 @@ import ReportsNav from "@/components/ops/ReportsNav";
 export default function PrintedUpdate({
   date,
   text,
+  role = "admin",
 }: {
   date: string;
   text: string;
+  role?: "admin" | "dispatcher";
 }) {
   const paragraphs = text.split(/\n\n+/);
   const renderBold = (line: string) =>
@@ -23,7 +25,7 @@ export default function PrintedUpdate({
 
   return (
     <>
-      <ReportsNav active="Weekly update" />
+      <ReportsNav active="Weekly update" role={role} />
       <div className="mx-auto max-w-[840px] px-5 md:px-12 pb-16">
         <div className="pt-8 flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="font-barlowc font-semibold text-[30px] md:text-[40px] leading-none">

@@ -200,24 +200,35 @@ export interface OpenActionItem {
   section: "operations" | "growth";
   opened_week: string;
   completed_week: string | null;
+  resolution: string | null;
 }
 
 const ACTION_ITEM_CORE = "id, owner, action, section, opened_week, completed_week";
 const ACTION_ITEM_V2 = `${ACTION_ITEM_CORE}, owner_id`;
 const ACTION_ITEM_V3 = `${ACTION_ITEM_V2}, critical`;
+const ACTION_ITEM_V4 = `${ACTION_ITEM_V3}, resolution`;
 
 export async function getActionItems(supabase: Admin, weekStart: string): Promise<OpenActionItem[]> {
   try {
-    // owner_id lands with ops_hub.sql — select it optimistically and fall
-    // back to the core columns on a database that hasn't run it yet.
+    // owner_id/critical/resolution each land with their own migration —
+    // select optimistically and fall back a tier at a time on a database
+    // that hasn't run the latest one yet.
     let data: unknown[] | null;
     let error: { message: string } | null;
     ({ data, error } = await supabase
       .from("action_items")
-      .select(ACTION_ITEM_V3)
+      .select(ACTION_ITEM_V4)
       .is("deleted_at", null)
       .or(`completed_week.is.null,completed_week.eq.${weekStart}`)
       .order("opened_week", { ascending: true }));
+    if (error) {
+      ({ data, error } = await supabase
+        .from("action_items")
+        .select(ACTION_ITEM_V3)
+        .is("deleted_at", null)
+        .or(`completed_week.is.null,completed_week.eq.${weekStart}`)
+        .order("opened_week", { ascending: true }));
+    }
     if (error) {
       ({ data, error } = await supabase
         .from("action_items")
@@ -235,7 +246,7 @@ export async function getActionItems(supabase: Admin, weekStart: string): Promis
         .order("opened_week", { ascending: true }));
     }
     if (error) return [];
-    return ((data ?? []) as unknown as OpenActionItem[]).map((i) => ({ ...i, owner_id: i.owner_id ?? null, critical: i.critical ?? false }));
+    return ((data ?? []) as unknown as OpenActionItem[]).map((i) => ({ ...i, owner_id: i.owner_id ?? null, critical: i.critical ?? false, resolution: i.resolution ?? null }));
   } catch {
     return [];
   }

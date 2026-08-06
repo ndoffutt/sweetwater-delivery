@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Kicker } from "@/components/ops/Bits";
 import ReportsNav from "@/components/ops/ReportsNav";
@@ -63,7 +65,14 @@ function Bars({
 
 // Revenue — weekly dollars for each business, charted from every weekly update
 // on record (imported history + everything entered in the app going forward).
+// Owner-only — the one exception to Ahsin (dispatcher) otherwise mirroring
+// this whole shell. Also blocked in middleware; redirecting here too so a
+// stale client-side navigation can't slip past it.
 export default async function RevenuePage() {
+  const session = await getSession();
+  if (!session) redirect("/");
+  if (session.role === "dispatcher") redirect("/reports/delivery");
+
   const supabase = createAdminClient();
   let rows: WeekRow[] = [];
   try {

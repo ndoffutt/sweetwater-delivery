@@ -63,6 +63,12 @@ export default function ActionItemsPanel({
   const [newAction, setNewAction] = useState("");
   const [newCritical, setNewCritical] = useState(false);
 
+  // Completing asks how — same rule as Customer Issues: a checked box on its
+  // own doesn't say whether the fix stuck. `resolving` holds the id being
+  // completed while its reason is typed; reopening needs no reason.
+  const [resolving, setResolving] = useState<string | null>(null);
+  const [why, setWhy] = useState("");
+
   function apply(next: ActionItemRow[]) {
     setRows(next);
     onChange?.(next);
@@ -70,9 +76,27 @@ export default function ActionItemsPanel({
 
   function toggle(a: ActionItemRow) {
     const done = a.completed_week === weekStart;
-    apply(rows.map((x) => (x.id === a.id ? { ...x, completed_week: done ? null : weekStart } : x)));
+    if (!done) {
+      setResolving(a.id);
+      setWhy("");
+      return;
+    }
+    apply(rows.map((x) => (x.id === a.id ? { ...x, completed_week: null, resolution: null } : x)));
     start(async () => {
-      await setActionItemDone(a.id, weekStart, !done);
+      await setActionItemDone(a.id, weekStart, false);
+    });
+  }
+
+  function confirmComplete(a: ActionItemRow) {
+    const reason = why.trim();
+    if (!reason) return;
+    setErr("");
+    start(async () => {
+      const r = await setActionItemDone(a.id, weekStart, true, reason);
+      if (r?.error) { setErr(r.error); return; }
+      apply(rows.map((x) => (x.id === a.id ? { ...x, completed_week: weekStart, resolution: reason } : x)));
+      setResolving(null);
+      setWhy("");
     });
   }
 
@@ -186,11 +210,28 @@ export default function ActionItemsPanel({
                 </button>
               </div>
               </div>
-              {(
-                <div className="px-3 pb-2.5 pl-[calc(0.75rem+5px)]">
-                  <CommentThread entityType="action_item" entityId={a.id} initial={comments[a.id] ?? []} />
-                </div>
-              )}
+              <div className="px-3 pb-2.5 pl-[calc(0.75rem+5px)]">
+                {done && a.resolution && (
+                  <p className="font-barlow text-[13px] text-[rgba(26,26,26,.62)] mb-1.5">
+                    <span className="text-ops-accent">✓</span> {a.resolution}
+                  </p>
+                )}
+                {resolving === a.id && (
+                  <div className="flex gap-2 mb-1.5">
+                    <input
+                      value={why}
+                      onChange={(e) => setWhy(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confirmComplete(a); } }}
+                      placeholder="How was it resolved?"
+                      autoFocus
+                      className={`${inputCls} flex-1`}
+                    />
+                    <button className={btnSecondary} onClick={() => setResolving(null)}>Cancel</button>
+                    <button className={btnPrimary} disabled={!why.trim()} onClick={() => confirmComplete(a)}>Complete</button>
+                  </div>
+                )}
+                <CommentThread entityType="action_item" entityId={a.id} initial={comments[a.id] ?? []} />
+              </div>
             </div>
           );
         })}

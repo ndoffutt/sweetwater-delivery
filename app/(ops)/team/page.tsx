@@ -8,11 +8,14 @@ import { Band } from "@/components/ops/Bits";
 
 export const dynamic = "force-dynamic";
 
-// Team & settings — owner-only, in the ops shell.
+// Team & settings — owner and manager (Ahsin), in the ops shell. TeamPanel's
+// viewerRole prop already carries the manager-vs-owner distinction (add
+// drivers, edit drivers + self only) — this page just wasn't reachable by a
+// manager before, so it always passed "admin".
 export default async function TeamPage() {
   const session = await getSession();
   if (!session) redirect("/");
-  if (session.role !== "admin") redirect("/dispatch");
+  if (session.role !== "admin" && session.role !== "dispatcher") redirect("/dispatch");
 
   const supabase = createAdminClient();
   const { data } = await supabase
@@ -40,7 +43,7 @@ export default async function TeamPage() {
     <>
     <TeamPanel
       meId={session.id}
-      viewerRole="admin"
+      viewerRole={session.role as "admin" | "dispatcher"}
       team={(data ?? []) as TeamMember[]}
       deletions={deletions}
     />

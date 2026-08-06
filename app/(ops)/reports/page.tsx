@@ -26,9 +26,11 @@ export default async function ReportsPage({
 
   // Pre-app weeks render as the printed copy of the original email, not the
   // editable form.
+  const role = session?.role === "dispatcher" ? "dispatcher" : "admin";
+
   const printed = (weeklyHistory as Record<string, { date: string; text: string }>)[week];
   if (printed && week !== thisWeek) {
-    return <PrintedUpdate date={printed.date} text={printed.text} />;
+    return <PrintedUpdate date={printed.date} text={printed.text} role={role} />;
   }
 
   const weekStartMs = new Date(week + "T00:00:00").getTime();
@@ -50,6 +52,18 @@ export default async function ReportsPage({
   };
 
   const customerIssues = await getCustomerIssues(supabase, week);
+  // For the Customer Issues picker — a real account, not a typed name that
+  // might not match anything.
+  let customers: { id: string; name: string }[] = [];
+  try {
+    const { data } = await supabase
+      .from("customers")
+      .select("id, name")
+      .eq("active", true)
+      .is("deleted_at", null)
+      .order("name");
+    customers = (data ?? []) as { id: string; name: string }[];
+  } catch { /* customers table always exists, but stay tolerant */ }
   const weekTouchpoints = await getWeekTouchpoints(supabase, week);
   const retention = await getRetentionCustomers(supabase);
   const [issueComments, itemComments, retentionComments] = await Promise.all([
@@ -126,7 +140,15 @@ export default async function ReportsPage({
     retentionComments,
     comments,
     pastUpdates,
+    role,
+    customers,
   };
 
-  return <ReportsHub data={data} />;
+  // Keyed on the viewed week: ReportsHub's form fields are local useState
+  // seeded from `data` only at mount, so switching weeks via ?week= without
+  // a remount would leave stale fields from the old week sitting in the new
+  // week's form. Autosave makes that a real risk (a stray keystroke would
+  // silently write the wrong week) where manual Save previously needed a
+  // deliberate click to trigger it.
+  return <ReportsHub key={week} data={data} />;
 }

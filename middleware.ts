@@ -92,16 +92,27 @@ export async function middleware(request: NextRequest) {
 
   // The owner never sees the old shell: every legacy path has an ops-shell
   // equivalent, so redirect there (links inside the shared console components
-  // still point at /dispatch/*). The manager keeps the old paths untouched.
+  // still point at /dispatch/*). Ahsin (dispatcher) now mirrors the owner's
+  // view in full — same redirect — except Revenue, blocked below.
   // /dispatch/bouncie-setup is deliberately NOT redirected — it receives the
   // Bouncie OAuth ?code= and must not lose it.
-  if (user.role === "admin" && !pathname.startsWith("/api")) {
+  if ((user.role === "admin" || user.role === "dispatcher") && !pathname.startsWith("/api")) {
     const opsPath = adminOpsPath(pathname);
     if (opsPath) {
       const url = new URL(opsPath, request.url);
       url.search = request.nextUrl.search;
       return withSlidingSession(NextResponse.redirect(url), user, pathname);
     }
+  }
+  // The one carve-out in an otherwise full mirror of the owner's view —
+  // Revenue stays owner-only. Checked here (not just hidden in the nav) so a
+  // typed or bookmarked URL can't reach it either.
+  if (pathname === "/reports/revenue" && user.role === "dispatcher") {
+    return withSlidingSession(
+      NextResponse.redirect(new URL("/reports/delivery", request.url)),
+      user,
+      pathname
+    );
   }
   if (
     (pathname.startsWith("/dispatch") ||

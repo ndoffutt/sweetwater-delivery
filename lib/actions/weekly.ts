@@ -13,6 +13,7 @@ export interface ActionItemRow {
   section: "operations" | "growth";
   opened_week: string;
   completed_week: string | null;
+  resolution: string | null;
 }
 
 export interface WeeklyUpdateRow {
@@ -34,9 +35,7 @@ export interface WeeklyUpdateRow {
   staffing_note: string | null;
   equipment_status: string | null;
   equipment_note: string | null;
-  blocking_growth: string | null;
   key_updates: string | null;
-  expectation_note: string | null;
   submitted_at?: string | null;
 }
 
@@ -61,9 +60,7 @@ export async function saveWeeklyUpdate(row: WeeklyUpdateRow) {
     staffing_note: row.staffing_note,
     equipment_status: row.equipment_status,
     equipment_note: row.equipment_note,
-    blocking_growth: row.blocking_growth,
     key_updates: row.key_updates,
-    expectation_note: row.expectation_note,
     updated_at: new Date().toISOString(),
   };
 
@@ -179,12 +176,17 @@ export interface CustomerIssueRow {
   resolution: string | null;
 }
 
-/** Manager writes these in each week; an unresolved one carries forward. */
+/** Manager writes these in each week; an unresolved one carries forward.
+ *  customerName must be a real account (the UI only offers a picker built
+ *  from the customers table) — an issue with nobody attached to it isn't
+ *  traceable to anything later. */
 export async function addCustomerIssue(input: {
   description: string;
-  customerName?: string | null;
+  customerName: string;
   openedWeek: string;
 }) {
+  const name = input.customerName.trim();
+  if (!name) return { error: "Pick a customer" };
   const session = await requireSession("dispatcher");
   const supabase = createAdminClient();
   // Return the inserted row: the caller needs the REAL id. Rendering an
@@ -195,7 +197,7 @@ export async function addCustomerIssue(input: {
     .from("customer_issues")
     .insert({
       description: input.description.trim(),
-      customer_name: input.customerName?.trim() || null,
+      customer_name: name,
       opened_week: input.openedWeek,
       created_by: session.name,
     })
@@ -295,23 +297,33 @@ export async function addActionItem(input: {
       ...row,
       owner_id: row.owner_id ?? null,
       critical: row.critical ?? false,
+      resolution: row.resolution ?? null,
     } as ActionItemRow,
   };
 }
 
 /** Mark done (or reopen). Completed items show "(Completed)" for the week they
  *  finished, then drop out of the following week's update. */
-export async function setActionItemDone(id: string, weekStart: string, done: boolean) {
+/** Complete (or reopen). Same rule as customer issues: completing requires
+ *  saying what happened — a checked box on its own doesn't say whether the
+ *  fix stuck. Reopening needs no reason. */
+export async function setActionItemDone(id: string, weekStart: string, done: boolean, resolution?: string) {
   await requireSession("dispatcher");
+  const why = (resolution ?? "").trim();
+  if (done && !why) return { error: "Say how it was resolved." };
   const supabase = createAdminClient();
-  const { error } = await supabase
+  const completedPatch = { completed_week: weekStart, completed_at: new Date().toISOString(), resolution: why };
+  const reopenedPatch = { completed_week: null, completed_at: null, resolution: null };
+  let { error } = await supabase
     .from("action_items")
-    .update(
-      done
-        ? { completed_week: weekStart, completed_at: new Date().toISOString() }
-        : { completed_week: null, completed_at: null }
-    )
+    .update(done ? completedPatch : reopenedPatch)
     .eq("id", id);
+  if (error && /resolution/i.test(error.message)) {
+    // Pre-migration: still record the state change rather than losing it.
+    const { resolution: _drop, ...bare } = done ? completedPatch : reopenedPatch;
+    void _drop;
+    ({ error } = await supabase.from("action_items").update(bare).eq("id", id));
+  }
   if (error) return { error: error.message };
   revalidatePath("/dispatch/weekly");
   revalidatePath("/today");

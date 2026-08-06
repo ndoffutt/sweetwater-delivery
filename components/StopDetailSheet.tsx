@@ -23,7 +23,8 @@ export interface StopDetailInfo {
   status: string; // pending | arrived | completed | skipped
   arrivedAt: string | null;
   completedAt: string | null;
-  /** Messaging is owner-only for now — Text is hidden (Call still works) when false. */
+  /** Owner + Manager can text (see lib/messaging.ts canTransmitSms) — Text
+   *  shows disabled (Call still works) for anyone else, e.g. a driver. */
   canMessage?: boolean;
 }
 
@@ -116,7 +117,7 @@ export default function StopDetailSheet({ stop, onClose }: { stop: StopDetailInf
                       ) : (
                         <button
                           disabled
-                          title="Texting is owner-only for now"
+                          title="Texting is owner/manager-only"
                           className="flex-1 inline-flex items-center justify-center gap-1.5 min-h-tap px-3 bg-cream-dark/50 text-charcoal/30 text-xs font-body uppercase tracking-widest rounded-lg cursor-not-allowed"
                         >
                           💬 Text
