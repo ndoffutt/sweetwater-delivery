@@ -209,6 +209,7 @@ export default function DispatchConsole({
   plannedVisitIds = [],
   plannedVisits = [],
   today,
+  canMessage = false,
 }: {
   dateLabel: string;
   driverName: string;
@@ -224,6 +225,9 @@ export default function DispatchConsole({
   plannedVisitIds?: string[];
   plannedVisits?: PlannedVisit[];
   today: { id: string; status: string; startedAt?: string | null; stops: InitialStop[] } | null;
+  /** Messaging is owner-only for now (see lib/messaging.ts canTransmitSms) —
+   *  hides the Text option from the stop popup for anyone else. */
+  canMessage?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -1162,6 +1166,7 @@ export default function DispatchConsole({
                 customerId: w.customerId, name: w.name, address: w.address, town: w.town,
                 phone: w.phone, vip: w.vip, pieces: w.pieces, hasDropoff: w.has_dropoff, hasPickup: w.has_pickup,
                 notes: w.notes, status: lv?.status ?? "pending", arrivedAt: lv?.arrived_at ?? null, completedAt: lv?.completed_at ?? null,
+                canMessage,
               });
               return (
                 <div

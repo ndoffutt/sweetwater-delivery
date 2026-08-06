@@ -22,6 +22,8 @@ export interface StopDetailInfo {
   status: string; // pending | arrived | completed | skipped
   arrivedAt: string | null;
   completedAt: string | null;
+  /** Messaging is owner-only for now — Text is hidden (Call still works) when false. */
+  canMessage?: boolean;
 }
 
 const time = (iso: string | null) =>
@@ -36,6 +38,7 @@ const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
 
 export default function StopDetailSheet({ stop, onClose }: { stop: StopDetailInfo; onClose: () => void }) {
   const [history, setHistory] = useState<StopActivity[] | null>(null);
+  const [contactOpen, setContactOpen] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -91,12 +94,43 @@ export default function StopDetailSheet({ stop, onClose }: { stop: StopDetailInf
               )}
               {stop.notes && <p className="text-xs text-charcoal/70 font-body">📝 {stop.notes}</p>}
               {stop.phone && (
-                <a
-                  href={googleVoiceCallHref(stop.phone)}
-                  className="inline-flex items-center gap-1.5 min-h-tap px-3 bg-green-primary text-cream text-xs font-body uppercase tracking-widest rounded-lg"
-                >
-                  📞 Call {formatPhone(stop.phone)}
-                </a>
+                <div className="relative">
+                  {contactOpen ? (
+                    <div className="flex gap-2">
+                      <a
+                        href={googleVoiceCallHref(stop.phone)}
+                        onClick={() => setContactOpen(false)}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 min-h-tap px-3 bg-green-primary text-cream text-xs font-body uppercase tracking-widest rounded-lg"
+                      >
+                        📞 Call
+                      </a>
+                      {stop.canMessage ? (
+                        <Link
+                          href={`/dispatch/messages?open=${encodeURIComponent(stop.phone)}&name=${encodeURIComponent(stop.name)}`}
+                          onClick={() => setContactOpen(false)}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 min-h-tap px-3 bg-gold-dark text-cream text-xs font-body uppercase tracking-widest rounded-lg"
+                        >
+                          💬 Text
+                        </Link>
+                      ) : (
+                        <button
+                          disabled
+                          title="Texting is owner-only for now"
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 min-h-tap px-3 bg-cream-dark/50 text-charcoal/30 text-xs font-body uppercase tracking-widest rounded-lg cursor-not-allowed"
+                        >
+                          💬 Text
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setContactOpen(true)}
+                      className="inline-flex items-center gap-1.5 min-h-tap px-3 bg-green-primary text-cream text-xs font-body uppercase tracking-widest rounded-lg"
+                    >
+                      📞 Contact {formatPhone(stop.phone)}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>

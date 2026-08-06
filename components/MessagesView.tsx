@@ -187,7 +187,19 @@ const needsSeparator = (cur: Msg, prev: Msg | undefined) => {
   return a.toDateString() !== b.toDateString() || b.getTime() - a.getTime() > 36e5;
 };
 
-export default function MessagesView({ canCall, embedded = false }: { canCall: boolean; embedded?: boolean }) {
+export default function MessagesView({
+  canCall,
+  embedded = false,
+  initialPhone = null,
+  initialName = null,
+}: {
+  canCall: boolean;
+  embedded?: boolean;
+  /** Deep-link into a specific customer's thread (or start one) — e.g. the
+   *  "Text" action off a dispatch stop card. */
+  initialPhone?: string | null;
+  initialName?: string | null;
+}) {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [setup, setSetup] = useState(false);
@@ -217,10 +229,13 @@ export default function MessagesView({ canCall, embedded = false }: { canCall: b
       const res = await fetch("/api/messages", { cache: "no-store" });
       const data = await res.json();
       if (data.setup) setSetup(true);
-      setThreads(data.threads ?? []);
+      const list: Thread[] = data.threads ?? [];
+      setThreads(list);
       setConfigured(data.configured ?? false);
+      return list;
     } catch {
       /* offline: keep what we have */
+      return [];
     }
   }, []);
 
@@ -260,6 +275,26 @@ export default function MessagesView({ canCall, embedded = false }: { canCall: b
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Deep-linked in from elsewhere in the app (e.g. a dispatch stop card's
+  // "Text" button) — open the existing thread if there is one, otherwise
+  // land straight in compose with the recipient already picked.
+  useEffect(() => {
+    if (!initialPhone) return;
+    const digits = initialPhone.replace(/\D/g, "").slice(-10);
+    (async () => {
+      const list = await loadThreads();
+      const match = list.find((t) => t.digits === digits);
+      if (match) {
+        await openThread(match);
+      } else {
+        setComposing(true);
+        setNewTo(initialPhone);
+        setNewToName(initialName);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPhone]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
