@@ -40,7 +40,7 @@ function adminOpsPath(pathname: string): string | null {
   if (pathname.startsWith("/dispatch/delivery/")) return "/delivery/detail/" + pathname.slice("/dispatch/delivery/".length);
   if (pathname === "/dispatch/reports") return "/reports/analytics";
   if (pathname === "/dispatch/weekly") return "/reports";
-  if (pathname === "/dispatch/messages") return "/messages/threads";
+  if (pathname === "/dispatch/messages") return "/messages";
   if (pathname === "/sales" || pathname === "/sales/prospects") return "/prospects/list";
   if (pathname === "/settings") return "/team";
   if (pathname === "/owner") return "/today";

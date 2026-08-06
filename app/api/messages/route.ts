@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifySessionToken, COOKIE_NAME } from "@/lib/auth";
 import { phoneDigits, smsConfigured } from "@/lib/messaging";
+import { getThreadTable } from "@/lib/opsData";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,13 @@ export interface ThreadSummary {
   unread: number;
   pinned: boolean;
   archived: boolean;
+  /** Set when the last message is inbound and unanswered — same rule as the
+   *  Today page's Needs-reply count (lib/opsData.ts), so the two counts and
+   *  this list can't drift apart. */
+  waitingSince: string | null;
+  waitingMessageId: string | null;
+  deliveryRelated: boolean;
+  about: string;
 }
 
 interface MessageRow {
@@ -219,10 +227,27 @@ export async function GET(request: NextRequest) {
         // otherwise a bulk archive hides new texts forever and the inbox
         // looks dead (exactly what happened on 2026-08-03).
         archived: Boolean(mt?.archived_at && mt.archived_at! > m.created_at),
+        waitingSince: null,
+        waitingMessageId: null,
+        deliveryRelated: false,
+        about: "",
       };
       threads.set(d, t);
     }
     if (m.direction === "inbound" && !m.read_at) t.unread++;
+  }
+
+  // Layer on the same waiting/delivery/about derivation the Today page and
+  // Needs-reply count use (lib/opsData.ts) so a thread reads the same
+  // whether it's the badge count, the Today band, or this list.
+  const enrichment = await getThreadTable(supabase);
+  for (const e of enrichment) {
+    const t = threads.get(e.digits);
+    if (!t) continue;
+    t.waitingSince = e.waitingSince;
+    t.waitingMessageId = e.waitingMessageId;
+    t.deliveryRelated = e.deliveryRelated;
+    t.about = e.about;
   }
 
   // Pinned first, then most recent.

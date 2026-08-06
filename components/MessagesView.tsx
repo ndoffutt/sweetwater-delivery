@@ -29,6 +29,10 @@ interface Thread {
   unread: number;
   pinned: boolean;
   archived: boolean;
+  waitingSince: string | null;
+  waitingMessageId: string | null;
+  deliveryRelated: boolean;
+  about: string;
 }
 
 interface Msg {
@@ -214,6 +218,8 @@ export default function MessagesView({
   const [composing, setComposing] = useState(false);
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [scope, setScope] = useState<"all" | "delivery" | "not">("all");
+  const [needsReplyOnly, setNeedsReplyOnly] = useState(false);
   const [replyTo, setReplyTo] = useState<Msg | null>(null);
   const [actionsFor, setActionsFor] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
@@ -319,6 +325,8 @@ export default function MessagesView({
     const qDigits = q.replace(/\D/g, "");
     return threads
       .filter((t) => (showArchived ? t.archived : !t.archived))
+      .filter((t) => scope === "all" || (scope === "delivery" ? t.deliveryRelated : !t.deliveryRelated))
+      .filter((t) => !needsReplyOnly || t.waitingSince)
       .filter(
         (t) =>
           !q ||
@@ -326,7 +334,17 @@ export default function MessagesView({
           (qDigits.length > 0 && t.digits.includes(qDigits)) ||
           t.lastBody.toLowerCase().includes(q)
       );
-  }, [threads, search, showArchived]);
+  }, [threads, search, showArchived, scope, needsReplyOnly]);
+
+  const waitingCount = useMemo(
+    () => threads.filter((t) => t.waitingSince && !t.archived).length,
+    [threads]
+  );
+
+  function dismissWaiting(t: Thread) {
+    setThreads((cur) => cur.map((x) => (x.digits === t.digits ? { ...x, waitingSince: null } : x)));
+    if (t.waitingMessageId) void reactToMessage(t.waitingMessageId, "like").catch(() => {});
+  }
 
   async function openThread(t: Thread) {
     setSel(t.digits);
@@ -474,6 +492,34 @@ export default function MessagesView({
             placeholder="Search"
             className="w-full px-3.5 py-2 rounded-xl bg-cream-dark/50 text-charcoal font-body text-sm placeholder:text-charcoal/35 focus:outline-none focus:ring-2 focus:ring-green-primary/25"
           />
+
+          {/* One list, filtered — not separate pages. */}
+          <div className="flex items-center gap-1.5 mt-2.5 overflow-x-auto">
+            {([
+              ["all", "All"],
+              ["delivery", "Delivery"],
+              ["not", "Not delivery"],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setScope(key)}
+                className={`shrink-0 px-2.5 py-1 rounded-full text-[11.5px] font-body uppercase tracking-wide transition-colors ${
+                  scope === key ? "bg-green-primary text-cream" : "bg-cream-dark/50 text-charcoal/55"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+            <span className="w-px h-4 bg-cream-dark shrink-0" />
+            <button
+              onClick={() => setNeedsReplyOnly((v) => !v)}
+              className={`shrink-0 px-2.5 py-1 rounded-full text-[11.5px] font-body uppercase tracking-wide transition-colors ${
+                needsReplyOnly ? "bg-gold-dark text-cream" : "bg-cream-dark/50 text-charcoal/55"
+              }`}
+            >
+              Needs reply{waitingCount > 0 ? ` · ${waitingCount}` : ""}
+            </button>
+          </div>
         </div>
 
         {(setup || !configured) && (
@@ -527,12 +573,43 @@ export default function MessagesView({
                       {t.lastDirection === "outbound" ? "You: " : ""}
                       {t.lastBody}
                     </span>
+                    {t.waitingSince && (
+                      <span className="shrink-0 text-[10px] font-body uppercase tracking-wide px-1.5 py-0.5 rounded bg-gold-primary/20 text-gold-dark">
+                        Needs reply
+                      </span>
+                    )}
                   </span>
                 </span>
               </button>
 
+              {/* Mark handled without opening the thread — the same reaction
+                  that clears it from Needs reply everywhere else (Today, the
+                  badge count). Mobile-only placement here: no hover on a
+                  touchscreen, and mobile is the primary way this list gets
+                  used. Desktop gets the same action folded into the hover
+                  row below instead, so the two never overlap. */}
+              {t.waitingSince && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); dismissWaiting(t); }}
+                  title="No reply needed"
+                  aria-label="No reply needed"
+                  className="md:hidden absolute right-2 top-2 w-8 h-8 flex items-center justify-center rounded-full text-charcoal/35 hover:bg-cream-dark/60 hover:text-charcoal/70"
+                >
+                  ✕
+                </button>
+              )}
+
               {/* Row actions, desktop hover */}
               <div className="hidden md:flex absolute right-2 top-2 gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                {t.waitingSince && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); dismissWaiting(t); }}
+                    title="No reply needed"
+                    className="px-2 py-1 rounded-lg bg-cream border border-cream-dark text-[10px] font-body uppercase tracking-wide text-charcoal/60"
+                  >
+                    No reply
+                  </button>
+                )}
                 <button
                   onClick={(e) => { e.stopPropagation(); togglePin(t); }}
                   title={t.pinned ? "Unpin" : "Pin"}

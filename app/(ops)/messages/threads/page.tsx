@@ -1,34 +1,15 @@
-import MessagesView from "@/components/MessagesView";
-import { callConfigured } from "@/lib/messaging";
-import { SubNav } from "@/components/ops/Bits";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-// Threads — the full conversation view (reply, compose, tapbacks, contacts),
-// embedded in the Ops Hub shell. The wrapper subtracts the 68px header and
-// 48px sub-nav so the composer stays on screen (without it, md:h-screen pushed
-// the message box below the fold — compose looked broken).
-export default function ThreadsPage({
+// Retired: Threads and Needs-reply are one page now (/messages, filtered).
+// Kept as a redirect so old links/bookmarks still land somewhere real.
+export default function ThreadsPageRedirect({
   searchParams,
 }: {
   searchParams?: { open?: string; name?: string };
 }) {
-  return (
-    <>
-      <SubNav
-        items={[
-          { label: "Needs reply", href: "/messages" },
-          { label: "Threads", href: "/messages/threads", active: true },
-        ]}
-      />
-      <div className="md:h-[calc(100vh-116px)] md:overflow-hidden">
-        <MessagesView
-          canCall={callConfigured()}
-          embedded
-          initialPhone={searchParams?.open ?? null}
-          initialName={searchParams?.name ?? null}
-        />
-      </div>
-    </>
-  );
+  const params = new URLSearchParams();
+  if (searchParams?.open) params.set("open", searchParams.open);
+  if (searchParams?.name) params.set("name", searchParams.name);
+  const qs = params.toString();
+  redirect(`/messages${qs ? `?${qs}` : ""}`);
 }
