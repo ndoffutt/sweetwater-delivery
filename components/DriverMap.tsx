@@ -470,6 +470,13 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
   // next Navigate tap retries — the server side is idempotent
   // (`.is("departed_at", null)`), so a retry can't double-text anyone.
   const [departed, setDeparted] = useState(departedAt != null);
+  // useState's initializer only runs on mount — if the office re-arms the
+  // guard (resets departed_at to null) while a driver's session is already
+  // open, a stale `departed=true` here would silently block headOut()
+  // forever, even though safeRefresh() keeps feeding this component a fresh
+  // departedAt prop after every stop action. Re-sync to the server's answer
+  // whenever that prop actually changes.
+  useEffect(() => { setDeparted(departedAt != null); }, [departedAt]);
   const departingRef = useRef(false);
   function headOut() {
     if (departed || departingRef.current) return;
