@@ -148,9 +148,24 @@ export default async function DriverPage() {
   );
   const stops: RouteStop[] = merged.map((s, i) => ({ ...s, stop_order: i + 1 }));
 
+  // Has he confirmed the running order for this route? Tolerant of the table
+  // not existing — an unknown answer counts as confirmed, because a missing
+  // migration must never trap a driver behind a modal he can't dismiss.
+  let orderConfirmed = true;
+  try {
+    const { data, error } = await supabase
+      .from("route_order_changes")
+      .select("id")
+      .eq("route_id", route.id)
+      .eq("kind", "confirm")
+      .limit(1);
+    if (!error) orderConfirmed = (data ?? []).length > 0;
+  } catch { /* table absent — never block the run */ }
+
   return (
     <DriverMap
       initialStops={stops}
+      orderConfirmed={orderConfirmed}
       isManager={isManager}
       canMessage={session.role === "admin"}
       routeId={route.id}

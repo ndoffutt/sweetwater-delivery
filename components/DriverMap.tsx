@@ -16,6 +16,7 @@ import RouteMap from "@/components/RouteMap";
 import type { RouteStop } from "@/lib/types";
 import { googleVoiceCallHref, formatPhone } from "@/lib/phone";
 import ProspectVisitSheet from "@/components/ProspectVisitSheet";
+import RunOrderConfirm, { type RunStop } from "@/components/RunOrderConfirm";
 
 const C = {
   green: "#02733e",
@@ -332,7 +333,11 @@ function mapsHref(c: { address: string; lat: number | null; lng: number | null }
 }
 
 // ── Main ───────────────────────────────────────────────────────
-export default function DriverMap({ initialStops, isManager, canMessage = false, routeId, departedAt = null }: { initialStops: RouteStop[]; isManager: boolean; canMessage?: boolean; routeId: string; departedAt?: string | null }) {
+export default function DriverMap({ initialStops, isManager, canMessage = false, routeId, departedAt = null, orderConfirmed = true }: { initialStops: RouteStop[]; isManager: boolean; canMessage?: boolean; routeId: string; departedAt?: string | null; /** False until the driver has confirmed the running order for this route. */ orderConfirmed?: boolean }) {
+  // Ask once, before he drives, so the order in the app is the order on the
+  // road. Dismissed locally the moment he confirms — the write is best-effort,
+  // and a failed save must never re-trap him behind the modal mid-run.
+  const [needsOrder, setNeedsOrder] = useState(!orderConfirmed);
   const [stops, setStops] = useState(initialStops);
   const [targetId, setTargetId] = useState(() => (initialStops.find((s) => s.status === "pending" || s.status === "arrived") ?? initialStops[0])?.id ?? "");
   // Prospect stops open expanded so the standing notes + touch history are
@@ -716,6 +721,24 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
             {sync.pendingPhotos} photo{sync.pendingPhotos === 1 ? "" : "s"} still uploading — keep this app open{online ? "" : " and get back on signal"} until it finishes.
           </div>
         </div>
+      )}
+
+      {/* CONFIRM THE RUN — blocks the map until he says what order he's
+          driving. Only for a run with work left; a finished route never asks. */}
+      {needsOrder && !allDone && (
+        <RunOrderConfirm
+          routeId={routeId}
+          stops={stops
+            .filter((st) => st.status === "pending" || st.status === "arrived")
+            .map((st): RunStop => ({
+              id: st.id,
+              name: st.customer?.name ?? "Stop",
+              town: (st.customer?.address ?? "").split(",")[1]?.trim() ?? "",
+              drop: !!st.has_dropoff,
+              pick: !!st.has_pickup,
+            }))}
+          onDone={() => setNeedsOrder(false)}
+        />
       )}
 
       {/* RECENTER */}
