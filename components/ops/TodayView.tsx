@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { Band, Tag, OpenLink, btnPrimary, btnSecondary } from "@/components/ops/Bits";
 import ActionItemsPanel, { type ActionItemTeamMember } from "@/components/ops/ActionItemsPanel";
 import { resolveException, type ExceptionKind } from "@/lib/actions/exceptions";
+import { reactToMessage } from "@/lib/actions/messages";
 import type { ActionItemRow } from "@/lib/actions/weekly";
 import { GOAL_MULTIPLIER, DELIVERY_GOAL_PCT } from "@/lib/weeklyUpdate";
 import type { EntityComment } from "@/lib/actions/comments";
@@ -28,7 +29,7 @@ export interface TodayData {
   messages: {
     waitingCount: number;
     totalThreads: number;
-    rows: { digits: string; name: string; excerpt: string; about: string; waitingSince: string | null; channels: string[] }[];
+    rows: { digits: string; name: string; excerpt: string; about: string; waitingSince: string | null; waitingMessageId: string | null; channels: string[] }[];
   };
   reports: {
     hasDraft: boolean;
@@ -60,6 +61,18 @@ export default function TodayView({ data }: { data: TodayData }) {
   const [, start] = useTransition();
   const [stops, setStops] = useState(data.route?.stops ?? []);
   const [exceptions, setExceptions] = useState(data.exceptions);
+  const [messageRows, setMessageRows] = useState(data.messages.rows);
+  const [waitingCount, setWaitingCount] = useState(data.messages.waitingCount);
+
+  // "Seen, nothing to say back" — reacting to the message is what actually
+  // clears it out of Needs reply (see lib/opsData.ts); this just does that
+  // without making you open the thread first. Optimistic: drop it from the
+  // list immediately, the reaction call runs in the background.
+  function dismissMessage(digits: string, messageId: string | null) {
+    setMessageRows((rows) => rows.filter((r) => r.digits !== digits));
+    setWaitingCount((c) => Math.max(0, c - 1));
+    if (messageId) void reactToMessage(messageId, "like").catch(() => {});
+  }
 
   // Live edge: poll /api/live every 30s while a route is out.
   useEffect(() => {
@@ -199,12 +212,12 @@ export default function TodayView({ data }: { data: TodayData }) {
       <div className="lg:grid lg:grid-cols-2 lg:gap-14">
         <Band title="Messages" right={<OpenLink href="/messages">Open Messages</OpenLink>}>
           <p className="mt-1 text-[13px] text-[rgba(26,26,26,.62)]">
-            {data.messages.waitingCount} need a reply · {data.messages.totalThreads} threads · texts on the office line
+            {waitingCount} need a reply · {data.messages.totalThreads} threads · texts on the office line
           </p>
-          {data.messages.rows.length === 0 ? (
+          {messageRows.length === 0 ? (
             <p className="mt-4 text-[15px] text-[rgba(26,26,26,.68)]">Nothing waiting on you.</p>
           ) : (
-            data.messages.rows.map((m, i) => (
+            messageRows.map((m, i) => (
               <div key={m.digits} className="mt-3 border-t border-ops-hairline pt-3 flex items-start gap-3">
                 <div className="flex flex-col gap-1 shrink-0">
                   {m.channels.map((c) => (
@@ -219,9 +232,19 @@ export default function TodayView({ data }: { data: TodayData }) {
                   <div className="text-[14px] text-[rgba(26,26,26,.78)] truncate">&ldquo;{m.excerpt}&rdquo;</div>
                   <div className="text-[12.5px] text-[rgba(26,26,26,.62)] mt-0.5">{m.about}</div>
                 </div>
-                <Link href={`/messages?open=${m.digits}`} className={i === 0 ? btnPrimary : btnSecondary}>
-                  {i === 0 ? "Reply" : "Open"}
-                </Link>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link href={`/messages?open=${m.digits}`} className={i === 0 ? btnPrimary : btnSecondary}>
+                    {i === 0 ? "Reply" : "Open"}
+                  </Link>
+                  <button
+                    onClick={() => dismissMessage(m.digits, m.waitingMessageId)}
+                    title="No reply needed"
+                    aria-label="No reply needed"
+                    className="w-8 h-8 shrink-0 flex items-center justify-center rounded-full text-[rgba(26,26,26,.4)] hover:bg-[rgba(26,26,26,.06)] hover:text-[rgba(26,26,26,.7)]"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
             ))
           )}

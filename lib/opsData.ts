@@ -23,6 +23,9 @@ export interface ThreadRow {
   lastAt: string;
   /** Set when the last message is inbound and unanswered. */
   waitingSince: string | null;
+  /** The inbound message id backing waitingSince — reacting to it (a quick
+   *  "seen, no reply needed") clears the wait without opening the thread. */
+  waitingMessageId: string | null;
   about: string;
   deliveryRelated: boolean;
   kind: "customer" | "prospect" | "contact" | "unknown";
@@ -31,7 +34,7 @@ export interface ThreadRow {
 
 /** The unified message table: one row per phone thread, newest first. */
 export async function getThreadTable(supabase: Admin): Promise<ThreadRow[]> {
-  type M = { phone: string; direction: "inbound" | "outbound"; body: string | null; created_at: string; reaction?: string | null };
+  type M = { id: string; phone: string; direction: "inbound" | "outbound"; body: string | null; created_at: string; reaction?: string | null };
   let msgs: M[] = [];
   try {
     // The live inbox is the v2 `messages` table (messaging_v2.sql). The old
@@ -39,7 +42,7 @@ export async function getThreadTable(supabase: Admin): Promise<ThreadRow[]> {
     // page empty while real conversations sat in `messages`.
     const { data, error } = await supabase
       .from("messages")
-      .select("phone, direction, body, created_at, reaction")
+      .select("id, phone, direction, body, created_at, reaction")
       .order("created_at", { ascending: true })
       .limit(4000);
     if (error) return [];
@@ -108,15 +111,16 @@ export async function getThreadTable(supabase: Admin): Promise<ThreadRow[]> {
   }
 
   // Fold messages into threads.
-  interface Acc { phone: string; lastBody: string; lastAt: string; lastDirection: "inbound" | "outbound"; waitingSince: string | null }
+  interface Acc { phone: string; lastBody: string; lastAt: string; lastDirection: "inbound" | "outbound"; waitingSince: string | null; lastInboundId: string | null }
   const acc = new Map<string, Acc>();
   for (const m of msgs) {
     const d = digitsOf(m.phone);
     if (!d) continue;
-    const t = acc.get(d) ?? { phone: m.phone, lastBody: "", lastAt: m.created_at, lastDirection: m.direction, waitingSince: null };
+    const t = acc.get(d) ?? { phone: m.phone, lastBody: "", lastAt: m.created_at, lastDirection: m.direction, waitingSince: null, lastInboundId: null };
     t.lastBody = (m.body ?? "").slice(0, 160);
     t.lastAt = m.created_at;
     t.lastDirection = m.direction;
+    if (m.direction === "inbound") t.lastInboundId = m.id;
     // waitingSince = the first inbound after the last outbound. Reacting to an
     // inbound message (👍 etc.) counts as dealing with it — the whole point of
     // a thumbs-up is "seen, nothing to say back", so it must clear the wait or
@@ -157,6 +161,7 @@ export async function getThreadTable(supabase: Admin): Promise<ThreadRow[]> {
       lastBody: t.lastBody,
       lastAt: t.lastAt,
       waitingSince: t.lastDirection === "inbound" ? t.waitingSince : null,
+      waitingMessageId: t.lastDirection === "inbound" ? t.lastInboundId : null,
       about,
       deliveryRelated: stop != null,
       kind,

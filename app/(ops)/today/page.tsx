@@ -105,6 +105,7 @@ export default async function TodayPage() {
         excerpt: t.lastBody,
         about: t.deliveryRelated ? `Delivery-related · ${t.about.toLowerCase()}` : `Not delivery · ${t.about.toLowerCase()}`,
         waitingSince: t.waitingSince,
+        waitingMessageId: t.waitingMessageId,
         channels: t.channels,
       })),
     },
