@@ -47,12 +47,18 @@ export default function ProspectStatCards({
   monthTouches,
   due,
   active,
+  prospectHref = (id) => `/prospects/list?id=${id}`,
+  touchpointsHref = "/prospects/touchpoints",
 }: {
   cards: CardDef[];
   weekTouches: TouchRow[];
   monthTouches: TouchRow[];
   due: DueRow[];
   active: ActiveRow[];
+  /** Owner (ops shell) and manager (dispatch shell) have different prospect
+   *  routes — default is the ops-shell path. */
+  prospectHref?: (id: string) => string;
+  touchpointsHref?: string;
 }) {
   const [open, setOpen] = useState<number | null>(null);
 
@@ -83,15 +89,15 @@ export default function ProspectStatCards({
               <button onClick={() => setOpen(null)} className="text-[rgba(26,26,26,.4)] text-xl leading-none px-1" aria-label="Close">✕</button>
             </div>
             <div className="overflow-y-auto">
-              {open === 0 && <TouchList rows={weekTouches} empty="No outreach logged this week." />}
-              {open === 1 && <TouchList rows={monthTouches} empty="No outreach logged in the last 30 days." />}
+              {open === 0 && <TouchList rows={weekTouches} empty="No outreach logged this week." prospectHref={prospectHref} touchpointsHref={touchpointsHref} />}
+              {open === 1 && <TouchList rows={monthTouches} empty="No outreach logged in the last 30 days." prospectHref={prospectHref} touchpointsHref={touchpointsHref} />}
               {open === 2 && (
                 due.length === 0 ? (
                   <p className="p-6 text-center text-[14px] text-[rgba(26,26,26,.5)] font-barlow">Everyone&apos;s current — nothing overdue.</p>
                 ) : (
                   <div className="divide-y divide-ops-divider">
                     {due.map((p) => (
-                      <Link key={p.id} href={`/prospects/list?id=${p.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-[rgba(26,26,26,.03)]">
+                      <Link key={p.id} href={prospectHref(p.id)} className="flex items-center gap-3 px-5 py-3 hover:bg-[rgba(26,26,26,.03)]">
                         <span className="font-barlow text-[14px] flex-1 min-w-0 truncate">{p.name}</span>
                         {p.town && <span className="font-barlow text-[12.5px] text-[rgba(26,26,26,.45)]">{p.town}</span>}
                         <span className="font-barlowc text-[12px] uppercase tracking-wide px-2 py-0.5 bg-[rgba(184,130,31,.15)] text-[#b8821f]">{p.label}</span>
@@ -106,7 +112,7 @@ export default function ProspectStatCards({
                 ) : (
                   <div className="divide-y divide-ops-divider">
                     {active.map((p) => (
-                      <Link key={p.id} href={`/prospects/list?id=${p.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-[rgba(26,26,26,.03)]">
+                      <Link key={p.id} href={prospectHref(p.id)} className="flex items-center gap-3 px-5 py-3 hover:bg-[rgba(26,26,26,.03)]">
                         <span className="font-barlow text-[14px] flex-1 min-w-0 truncate">{p.name}</span>
                         {p.town && <span className="font-barlow text-[12.5px] text-[rgba(26,26,26,.45)]">{p.town}</span>}
                         <span className="font-barlowc text-[11px] uppercase tracking-wide px-2 py-0.5 bg-[rgba(26,26,26,.06)] text-[rgba(26,26,26,.6)]">{p.status}</span>
@@ -123,14 +129,16 @@ export default function ProspectStatCards({
   );
 }
 
-function TouchList({ rows, empty }: { rows: TouchRow[]; empty: string }) {
+function TouchList({
+  rows, empty, prospectHref, touchpointsHref,
+}: { rows: TouchRow[]; empty: string; prospectHref: (id: string) => string; touchpointsHref: string }) {
   if (rows.length === 0) return <p className="p-6 text-center text-[14px] text-[rgba(26,26,26,.5)] font-barlow">{empty}</p>;
   return (
     <div className="divide-y divide-ops-divider">
       {rows.map((t, i) => (
         <Link
           key={i}
-          href={t.prospectId ? `/prospects/list?id=${t.prospectId}` : "/prospects/touchpoints"}
+          href={t.prospectId ? prospectHref(t.prospectId) : touchpointsHref}
           className="flex items-center gap-3 px-5 py-3 hover:bg-[rgba(26,26,26,.03)]"
         >
           <span className="font-barlow text-[14px] flex-1 min-w-0 truncate">{t.prospectName}</span>

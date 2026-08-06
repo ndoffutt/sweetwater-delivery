@@ -19,8 +19,10 @@ export interface CustomerMessage {
  *  leaving the page. Owner-only, same as the rest of messaging during the
  *  Twilio rollout (see canTransmitSms). */
 export async function getCustomerMessages(customerId: string, limit = 10): Promise<CustomerMessage[]> {
-  const session = await requireSession();
-  if (session.role !== "admin") return [];
+  // Read-only, for anyone already trusted with this stop's photos/notes/gate
+  // code — driver included. Sending stays admin/dispatcher-only (see
+  // canTransmitSms); this is just visibility.
+  await requireSession();
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("messages")

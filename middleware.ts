@@ -38,7 +38,8 @@ function adminOpsPath(pathname: string): string | null {
   if (pathname === "/dispatch/live" || pathname === "/dispatch/scan") return "/delivery";
   if (pathname.startsWith("/dispatch/route/")) return "/delivery/route/" + pathname.slice("/dispatch/route/".length);
   if (pathname.startsWith("/dispatch/delivery/")) return "/delivery/detail/" + pathname.slice("/dispatch/delivery/".length);
-  if (pathname === "/dispatch/reports") return "/reports/analytics";
+  if (pathname === "/dispatch/reports") return "/reports/delivery";
+  if (pathname === "/dispatch/reports/prospects") return "/reports/prospects";
   if (pathname === "/dispatch/weekly") return "/reports";
   if (pathname === "/dispatch/messages") return "/messages";
   if (pathname === "/sales" || pathname === "/sales/prospects") return "/prospects/list";

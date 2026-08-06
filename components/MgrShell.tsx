@@ -33,6 +33,7 @@ type MoreItem = { href: string; label: string; adminOnly?: boolean };
 const MORE_ITEMS: MoreItem[] = [
   { href: "/dispatch/weekly", label: "Weekly update" },
   { href: "/dispatch/reports", label: "Reports" },
+  { href: "/dispatch/reports/prospects", label: "Prospect reports" },
   { href: "/dispatch/signups", label: "Signups" },
   { href: "/dispatch/messages", label: "Messages", adminOnly: true },
   { href: "/dispatch/route-plan", label: "Route plan", adminOnly: true },

@@ -1,10 +1,10 @@
 "use client";
 
-// Shared "recent messages" block for a customer — used in the stop popup
-// (quick look) and the customer directory (full profile). Owner-only, same
-// gate as the rest of messaging; getCustomerMessages() itself enforces it
-// server-side too, so this never renders real content for anyone else even
-// if a caller forgets the canMessage check.
+// Shared "recent messages" block for a customer — used in the dispatch stop
+// popup, the customer directory, and the driver's stop sheet. Read-only:
+// anyone with an active session can see it (getCustomerMessages enforces
+// only that), but the "open full thread" link goes to the Messages inbox,
+// which stays admin/dispatcher-only — canOpenThread hides it for a driver.
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getCustomerMessages, type CustomerMessage } from "@/lib/actions/messages";
@@ -13,10 +13,12 @@ export default function MessagePreview({
   customerId,
   phone,
   name,
+  canOpenThread = true,
 }: {
   customerId: string;
   phone: string | null;
   name: string;
+  canOpenThread?: boolean;
 }) {
   const [messages, setMessages] = useState<CustomerMessage[] | null>(null);
 
@@ -58,7 +60,7 @@ export default function MessagePreview({
           ))}
         </div>
       )}
-      {phone && (
+      {phone && canOpenThread && (
         <Link
           href={`/dispatch/messages?open=${encodeURIComponent(phone)}&name=${encodeURIComponent(name)}`}
           className="inline-block mt-2 font-body text-xs text-charcoal/50 underline underline-offset-2"

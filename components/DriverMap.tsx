@@ -18,6 +18,7 @@ import { googleVoiceCallHref, formatPhone } from "@/lib/phone";
 import ProspectVisitSheet from "@/components/ProspectVisitSheet";
 import RunOrderConfirm, { type RunStop } from "@/components/RunOrderConfirm";
 import { jumpToStop } from "@/lib/actions/runOrder";
+import MessagePreview from "@/components/MessagePreview";
 
 const C = {
   green: "#02733e",
@@ -879,6 +880,13 @@ export default function DriverMap({ initialStops, isManager, canMessage = false,
                   <span style={{ marginLeft: "auto", fontSize: 11.5, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(26,26,26,0.35)" }}>Call</span>
                 </a>
               )}
+
+              {/* Read-only — a driver can see what's already been said, not
+                  reply from here. The office line stays admin/dispatcher-only
+                  for actually sending. */}
+              <div style={{ marginBottom: 12 }}>
+                <MessagePreview customerId={cust.id} phone={cust.phone} name={cust.name} canOpenThread={isManager} />
+              </div>
 
               {target.status === "arrived" && (
                 <>
