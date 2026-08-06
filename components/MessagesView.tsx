@@ -11,6 +11,7 @@ import {
   setThreadPinned,
   setThreadArchived,
 } from "@/lib/actions/messages";
+import CustomerFilePanel from "@/components/CustomerFilePanel";
 
 // Shared business-number inbox, styled after iMessage: one thread per number,
 // bubbles grouped by sender, day separators, quote replies and tapbacks.
@@ -1086,6 +1087,14 @@ export default function MessagesView({
           </div>
         )}
       </div>
+
+      {/* ── Customer file (desktop, wide only — three columns is cramped
+          below ~1280px) ──────────────────────────────────────── */}
+      {current?.customerId && (
+        <div className={`hidden xl:block xl:w-[320px] xl:border-l xl:border-cream-dark ${embedded ? "xl:h-full" : "xl:h-screen"}`}>
+          <CustomerFilePanel customerId={current.customerId} />
+        </div>
+      )}
     </div>
   );
 }

@@ -327,6 +327,30 @@ export async function getCustomerStopHistory(customerId: string, limit = 8): Pro
     }));
 }
 
+export interface CustomerFile {
+  id: string;
+  name: string;
+  address: string;
+  phone: string | null;
+  email: string | null;
+  gate_code: string | null;
+  delivery_notes: string | null;
+  tags: string[] | null;
+}
+
+/** The compact profile for the Messages 3rd column — just enough to place
+ *  who you're texting without leaving the thread for the full directory. */
+export async function getCustomerFile(customerId: string): Promise<CustomerFile | null> {
+  await requireSession();
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("customers")
+    .select("id, name, address, phone, email, gate_code, delivery_notes, tags")
+    .eq("id", customerId)
+    .maybeSingle();
+  return (data as CustomerFile | null) ?? null;
+}
+
 export async function setCustomerRange(id: string, outOfRange: boolean) {
   await requireSession("dispatcher");
   const supabase = createAdminClient();
