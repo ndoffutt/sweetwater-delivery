@@ -47,7 +47,7 @@ export default function ProspectStatCards({
   monthTouches,
   due,
   active,
-  prospectHref = (id) => `/prospects/list?id=${id}`,
+  prospectHrefBase = "/prospects/list?id=",
   touchpointsHref = "/prospects/touchpoints",
 }: {
   cards: CardDef[];
@@ -56,11 +56,16 @@ export default function ProspectStatCards({
   due: DueRow[];
   active: ActiveRow[];
   /** Owner (ops shell) and manager (dispatch shell) have different prospect
-   *  routes — default is the ops-shell path. */
-  prospectHref?: (id: string) => string;
+   *  routes — default is the ops-shell path. A plain string prefix (id gets
+   *  appended), not a function: this is a Client Component, and a function
+   *  passed down from the Server Component that renders it can't cross that
+   *  boundary — it throws ("Server Components render" error) at request time,
+   *  not at build time, which is how this shipped broken. */
+  prospectHrefBase?: string;
   touchpointsHref?: string;
 }) {
   const [open, setOpen] = useState<number | null>(null);
+  const prospectHref = (id: string) => `${prospectHrefBase}${id}`;
 
   return (
     <>

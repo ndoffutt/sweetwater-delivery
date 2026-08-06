@@ -33,14 +33,19 @@ const DAY = 86_400_000;
 
 // The owner (ops shell, /reports/*) and the manager (dispatch shell,
 // /dispatch/reports/*) have different prospect routes — the (ops) wrapper
-// passes its own set; this default is the manager's.
+// passes its own set; this default is the manager's. Plain strings, not
+// functions: prospectBase is a prefix a caller appends an id to. A function
+// here would eventually get passed into ProspectStatCards, a Client
+// Component, and a function can't cross that boundary from a Server
+// Component (see the comment there) — it fails at request time, not build
+// time, which is exactly how this shipped broken the first time.
 export interface ProspectReportLinks {
-  prospect: (id: string) => string;
+  prospectBase: string;
   touchpoints: string;
   checkins: string;
 }
 const DISPATCH_LINKS: ProspectReportLinks = {
-  prospect: (id) => `/sales/prospects?id=${id}`,
+  prospectBase: "/sales/prospects?id=",
   touchpoints: "/sales/prospects",
   checkins: "/dispatch",
 };
@@ -165,7 +170,7 @@ export default async function ReportsProspectsPage({
           label: daysOverdue(p) > 0 ? `${daysOverdue(p)}d past due` : "Requested",
         }))}
         active={prospects.map((p) => ({ id: p.id, name: p.name, town: p.town, status: p.status }))}
-        prospectHref={links.prospect}
+        prospectHrefBase={links.prospectBase}
         touchpointsHref={links.touchpoints}
       />
 
@@ -226,7 +231,7 @@ export default async function ReportsProspectsPage({
           ) : (
             <div className="divide-y divide-ops-divider">
               {byProspect.map((p) => (
-                <Link key={p.id} href={links.prospect(p.id)} className="flex items-center gap-3 py-2.5 hover:bg-[rgba(26,26,26,.03)]">
+                <Link key={p.id} href={`${links.prospectBase}${p.id}`} className="flex items-center gap-3 py-2.5 hover:bg-[rgba(26,26,26,.03)]">
                   <span className="font-barlow text-[14px] flex-1 min-w-0 truncate">{p.name}</span>
                   <span className="font-barlowc text-[13px] tabular-nums text-[rgba(26,26,26,.6)]">
                     {p.n} {p.n === 1 ? "touch" : "touches"}
@@ -243,7 +248,7 @@ export default async function ReportsProspectsPage({
           ) : (
             <div className="divide-y divide-ops-divider">
               {due.slice(0, 8).map((p) => (
-                <Link key={p.id} href={links.prospect(p.id)} className="flex items-center gap-3 py-2.5 hover:bg-[rgba(26,26,26,.03)]">
+                <Link key={p.id} href={`${links.prospectBase}${p.id}`} className="flex items-center gap-3 py-2.5 hover:bg-[rgba(26,26,26,.03)]">
                   <span className="font-barlow text-[14px] flex-1 min-w-0 truncate">{p.name}</span>
                   {p.town && <span className="font-barlow text-[12.5px] text-[rgba(26,26,26,.45)]">{p.town}</span>}
                   <Tag tone={daysOverdue(p) >= 30 ? "danger" : "gold"}>

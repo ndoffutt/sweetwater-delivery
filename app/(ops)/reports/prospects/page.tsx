@@ -15,7 +15,7 @@ export default async function OpsReportsProspectsPage() {
       <ReportsNav active="Prospects" role={session?.role === "dispatcher" ? "dispatcher" : "admin"} />
       <ReportsProspectsPage
         links={{
-          prospect: (id) => `/prospects/list?id=${id}`,
+          prospectBase: "/prospects/list?id=",
           touchpoints: "/prospects/touchpoints",
           checkins: "/prospects/checkins",
         }}
