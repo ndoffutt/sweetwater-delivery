@@ -84,16 +84,28 @@ export default async function ReportsPage({
     if (!error) comments = (data ?? []) as ReportCommentRow[];
   } catch { /* none */ }
 
-  let pastUpdates: { week_start: string; submitted_at: string | null }[] = [];
+  // `weekly_updates` holds two different things since the revenue history was
+  // imported: weeks somebody actually wrote up, and weeks that exist only
+  // because they carry figures. Labelling the latter "Never submitted" reads
+  // as a missed deadline when in truth nothing was ever started, so the list
+  // has to be able to tell them apart.
+  let pastUpdates: { week_start: string; submitted_at: string | null; written: boolean }[] = [];
   try {
     const { data, error } = await supabase
       .from("weekly_updates")
-      .select("week_start, submitted_at")
+      .select("week_start, submitted_at, staffing_note, equipment_note, key_updates, blocking_growth, expectation_note")
       .lt("week_start", thisWeek)
       .neq("week_start", week)
       .order("week_start", { ascending: false })
       .limit(30);
-    if (!error) pastUpdates = (data ?? []) as typeof pastUpdates;
+    if (!error) {
+      pastUpdates = ((data ?? []) as Record<string, string | null>[]).map((w) => ({
+        week_start: w.week_start as string,
+        submitted_at: w.submitted_at ?? null,
+        written: ["staffing_note", "equipment_note", "key_updates", "blocking_growth", "expectation_note"]
+          .some((k) => (w[k] ?? "").trim().length > 0),
+      }));
+    }
   } catch { /* none */ }
 
   const data: ReportsData = {

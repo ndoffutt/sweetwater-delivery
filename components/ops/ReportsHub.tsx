@@ -44,7 +44,7 @@ export interface ReportsData {
   retention: RetentionRow[];
   retentionComments: Record<string, EntityComment[]>;
   comments: ReportCommentRow[];
-  pastUpdates: { week_start: string; submitted_at: string | null }[];
+  pastUpdates: { week_start: string; submitted_at: string | null; written: boolean }[];
 }
 
 const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(/[^0-9.-]/g, "")));
@@ -359,7 +359,9 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
                     <Link href={`/reports?week=${u.week_start}`} className="text-[15px] text-ops-accent">
                       Week of {new Date(u.week_start + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                     </Link>
-                    <span className="text-[12.5px] text-[rgba(26,26,26,.62)]">{u.submitted_at ? "Closed" : "Never submitted"}</span>
+                    <span className="text-[12.5px] text-[rgba(26,26,26,.62)]">
+                      {u.submitted_at ? "Closed" : u.written ? "Draft, not sent" : "Revenue only"}
+                    </span>
                   </div>
                 ))
               )}
