@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { SubNav, SegLinks, Tag } from "@/components/ops/Bits";
+import { SegLinks, Tag } from "@/components/ops/Bits";
+import ProspectsNav from "@/components/ops/ProspectsNav";
+import { getOverdueProspectCount } from "@/lib/opsData";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +39,7 @@ export default async function TouchpointsPage({
   const filter = FILTERS.find((f) => f.key === (searchParams?.type ?? "all")) ?? FILTERS[0];
 
   const supabase = createAdminClient();
+  const dueCount = await getOverdueProspectCount(supabase);
   let rows: TpRow[] = [];
   try {
     let q = supabase
@@ -59,14 +62,7 @@ export default async function TouchpointsPage({
 
   return (
     <>
-      <SubNav
-        items={[
-          { label: "Pipeline", href: "/prospects" },
-          { label: "List", href: "/prospects/list" },
-          { label: "Check-ins due", href: "/prospects/checkins" },
-          { label: "Touchpoints", href: "/prospects/touchpoints", active: true },
-        ]}
-      />
+      <ProspectsNav active="Touchpoints" checkinsDue={dueCount} />
       <div className="mx-auto max-w-[1440px] px-5 md:px-12 pb-12">
         <div className="pt-8 flex flex-wrap items-end justify-between gap-4">
           <div>

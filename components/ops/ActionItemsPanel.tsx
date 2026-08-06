@@ -107,14 +107,13 @@ export default function ActionItemsPanel({
       // The section split isn't shown anymore — every item created here just
       // lands in "operations" (the DB column stays for old data / reporting).
       const r = await addActionItem({ owner, ownerId: newOwnerId, action, section: "operations", openedWeek: weekStart, critical: newCritical });
-      if (r?.error) {
+      if ("error" in r && r.error) {
         setErr(r.error);
         return;
       }
-      apply([
-        ...rows,
-        { id: `tmp-${Date.now()}`, owner, owner_id: newOwnerId, critical: newCritical, action, section: "operations", opened_week: weekStart, completed_week: null },
-      ]);
+      // Real id from the server, so completing or flagging it works without a
+      // refresh first.
+      if ("item" in r && r.item) apply([...rows, r.item]);
       setNewOwnerId(null);
       setNewOwnerName("");
       setNewAction("");
@@ -187,7 +186,7 @@ export default function ActionItemsPanel({
                 </button>
               </div>
               </div>
-              {!a.id.startsWith("tmp-") && (
+              {(
                 <div className="px-3 pb-2.5 pl-[calc(0.75rem+5px)]">
                   <CommentThread entityType="action_item" entityId={a.id} initial={comments[a.id] ?? []} />
                 </div>

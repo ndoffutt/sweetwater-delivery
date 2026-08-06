@@ -249,8 +249,13 @@ export default function DispatchConsole({
       days: s.days ?? [],
     }));
 
+  // "completed" belongs here too. Falling through to "empty" made the console
+  // show "Upload today's SPOT manifest" the moment the last stop was marked
+  // done — so the afternoon view of a finished run looked identical to a
+  // morning with no run at all, inviting a second manifest and a duplicate
+  // route.
   const initialPhase: Phase =
-    today && (today.status === "dispatched" || today.status === "in_progress")
+    today && (today.status === "dispatched" || today.status === "in_progress" || today.status === "completed")
       ? "dispatched"
       : today && today.status === "draft" && today.stops.length
       ? "review"
@@ -310,8 +315,14 @@ export default function DispatchConsole({
         const res = await fetch("/api/live", { cache: "no-store" });
         if (!res.ok) return;
         const data = await res.json();
-        // A route exists now but this screen doesn't know about it.
-        if (!stop && data?.route) router.refresh();
+        // Only an ACTIONABLE route means this screen is out of date. /api/live
+        // returns today's route whatever its status, so testing for mere
+        // existence refreshed forever on a day whose route was already
+        // finished — the refresh could never change the phase.
+        const st = data?.route?.status;
+        if (!stop && (st === "draft" || st === "dispatched" || st === "in_progress")) {
+          router.refresh();
+        }
       } catch { /* offline blip — try again next tick */ }
     }
     void check();
@@ -941,7 +952,7 @@ export default function DispatchConsole({
 
   return (
     <div className="p-4 md:p-8 md:max-w-5xl xl:max-w-[1400px] md:mx-auto pb-24 md:pb-8">
-      <Header dateLabel={dateLabel} dispatched={dispatched} outSince={dispatched ? today?.startedAt : null} />
+      <Header dateLabel={dateLabel} dispatched={dispatched} done={(liveRouteStatus ?? today?.status) === "completed"} outSince={dispatched ? today?.startedAt : null} />
       <VanChip />
       {/* Route-order verdict, visible where the office actually looks. Quiet
           when good; specific — and clickable for the detail — when the order
@@ -1624,17 +1635,20 @@ function OutTimer({ since, done }: { since: string; done?: boolean }) {
   );
 }
 
-function Header({ dateLabel, dispatched, outSince }: { dateLabel: string; dispatched?: boolean; outSince?: string | null }) {
+function Header({ dateLabel, dispatched, outSince, done }: { dateLabel: string; dispatched?: boolean; outSince?: string | null; done?: boolean }) {
   return (
     <div className="flex items-end justify-between gap-3 flex-wrap">
       <div className="flex items-center gap-3 flex-wrap">
         <h2 className="font-serif text-3xl md:text-[34px] font-light text-charcoal leading-none">Today</h2>
         {dispatched && (
           <span className="inline-flex items-center gap-1.5 bg-green-primary/10 text-green-primary rounded-full px-3 py-1 font-body text-xs font-semibold">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-primary" /> Dispatched
+            <span className="w-1.5 h-1.5 rounded-full bg-green-primary" /> {done ? "Complete" : "Dispatched"}
           </span>
         )}
-        {dispatched && outSince && <OutTimer since={outSince} />}
+        {/* The running timer is only true while the van is still out — on a
+            finished route it kept counting and read as though nobody had come
+            back. */}
+        {dispatched && !done && outSince && <OutTimer since={outSince} />}
       </div>
       <p className="font-body text-sm text-charcoal/45 w-full">{dateLabel}</p>
     </div>

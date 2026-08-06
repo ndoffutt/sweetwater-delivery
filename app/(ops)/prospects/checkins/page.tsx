@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { SubNav, Tag } from "@/components/ops/Bits";
+import { Tag } from "@/components/ops/Bits";
+import ProspectsNav from "@/components/ops/ProspectsNav";
 import {
   lastEngagementAt,
   daysOverdue,
@@ -53,14 +54,7 @@ export default async function CheckinsPage() {
 
   return (
     <>
-      <SubNav
-        items={[
-          { label: "Pipeline", href: "/prospects" },
-          { label: "List", href: "/prospects/list" },
-          { label: "Check-ins due", href: "/prospects/checkins", active: true, count: due.length },
-          { label: "Touchpoints", href: "/prospects/touchpoints" },
-        ]}
-      />
+      <ProspectsNav active="Check-ins due" checkinsDue={due.length} />
       <div className="mx-auto max-w-[1440px] px-5 md:px-12 pb-12">
         <div className="pt-8">
           <h1 className="font-barlowc font-semibold text-[30px] md:text-[40px] leading-none">Check-ins due</h1>

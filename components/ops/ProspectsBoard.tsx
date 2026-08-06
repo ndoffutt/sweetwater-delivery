@@ -7,7 +7,8 @@
 
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
-import { SubNav, SegLinks, Tag, Kicker, btnSecondary } from "@/components/ops/Bits";
+import { SegLinks, Tag, Kicker, btnSecondary } from "@/components/ops/Bits";
+import ProspectsNav from "@/components/ops/ProspectsNav";
 import { addProspectVisit } from "@/lib/actions/prospectVisits";
 
 export interface BoardCard {
@@ -96,13 +97,9 @@ export default function ProspectsBoard({ data }: { data: BoardData }) {
 
   return (
     <>
-      <SubNav
-        items={[
-          { label: "Pipeline", href: "/prospects", active: true },
-          { label: "List", href: "/prospects/list" },
-          { label: "Check-ins due", href: "/prospects/checkins", count: overdueCount },
-          { label: "Touchpoints", href: "/prospects/touchpoints" },
-        ]}
+      <ProspectsNav
+        active="Pipeline"
+        checkinsDue={overdueCount}
         action={<Link href="/prospects/list" className={btnSecondary}>Add prospect</Link>}
       />
       <div className="mx-auto max-w-[1440px] px-5 md:px-12">

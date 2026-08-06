@@ -66,11 +66,10 @@ export default function CustomerIssuesPanel({
     setErr("");
     start(async () => {
       const r = await addCustomerIssue({ description, customerName: who.trim() || null, openedWeek: weekStart });
-      if (r?.error) { setErr(r.error); return; }
-      setRows((cur) => [
-        ...cur,
-        { id: `tmp-${cur.length}-${description.length}`, description, customer_name: who.trim() || null, opened_week: weekStart, resolved_week: null, resolution: null },
-      ]);
+      if ("error" in r && r.error) { setErr(r.error); return; }
+      // Use the row the server actually created — its real id is what makes
+      // resolving or deleting it work straight away.
+      if ("issue" in r && r.issue) setRows((cur) => [...cur, r.issue]);
       setWho("");
       setWhat("");
       setAdding(false);
@@ -133,7 +132,7 @@ export default function CustomerIssuesPanel({
                       <button className={btnPrimary} disabled={!why.trim()} onClick={() => confirmResolve(i)}>Resolve</button>
                     </div>
                   )}
-                  {!i.id.startsWith("tmp-") && (
+                  {(
                     <CommentThread entityType="customer_issue" entityId={i.id} initial={comments[i.id] ?? []} />
                   )}
                 </div>

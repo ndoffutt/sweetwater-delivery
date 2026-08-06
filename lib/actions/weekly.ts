@@ -156,16 +156,24 @@ export async function addCustomerIssue(input: {
 }) {
   const session = await requireSession("dispatcher");
   const supabase = createAdminClient();
-  const { error } = await supabase.from("customer_issues").insert({
-    description: input.description.trim(),
-    customer_name: input.customerName?.trim() || null,
-    opened_week: input.openedWeek,
-    created_by: session.name,
-  });
+  // Return the inserted row: the caller needs the REAL id. Rendering an
+  // optimistic row under a made-up "tmp-…" id meant resolving or deleting it
+  // before the next refresh sent that string to Postgres and blew up on the
+  // uuid cast — on exactly the add-then-resolve path this section is for.
+  const { data, error } = await supabase
+    .from("customer_issues")
+    .insert({
+      description: input.description.trim(),
+      customer_name: input.customerName?.trim() || null,
+      opened_week: input.openedWeek,
+      created_by: session.name,
+    })
+    .select("id, description, customer_name, opened_week, resolved_week, resolution")
+    .single();
   if (error) return { error: missing(error.message) ? "Run supabase/customer_issues.sql first." : error.message };
   revalidatePath("/reports");
   revalidatePath("/dispatch/weekly");
-  return { success: true };
+  return { issue: data as CustomerIssueRow };
 }
 
 /** Resolve (or reopen). resolved_week records WHICH week it was closed in, so
@@ -233,18 +241,31 @@ export async function addActionItem(input: {
   // owner_id and critical each land with their own migration — step the
   // fallback so a database missing one doesn't lose the other.
   const withOwner = { ...base, owner_id: input.ownerId ?? null };
-  let { error } = await supabase.from("action_items").insert({ ...withOwner, critical: !!input.critical });
+  const COLS = "id, owner, owner_id, action, section, opened_week, completed_week, critical";
+  const ins = (row: Record<string, unknown>, cols: string) =>
+    supabase.from("action_items").insert(row).select(cols).single();
+
+  // Same reason as customer issues: the caller needs the real id so a
+  // just-added item can be completed or flagged without a refresh first.
+  let { data, error } = await ins({ ...withOwner, critical: !!input.critical }, COLS);
   if (error && /critical/i.test(error.message)) {
-    ({ error } = await supabase.from("action_items").insert(withOwner));
+    ({ data, error } = await ins(withOwner, "id, owner, owner_id, action, section, opened_week, completed_week"));
   }
   if (error && /owner_id/i.test(error.message)) {
-    ({ error } = await supabase.from("action_items").insert(base));
+    ({ data, error } = await ins(base, "id, owner, action, section, opened_week, completed_week"));
   }
   if (error) return { error: missing(error.message) ? "Run supabase/weekly_updates.sql first." : error.message };
   revalidatePath("/dispatch/weekly");
   revalidatePath("/today");
   revalidatePath("/reports");
-  return { success: true };
+  const row = data as unknown as Partial<ActionItemRow>;
+  return {
+    item: {
+      ...row,
+      owner_id: row.owner_id ?? null,
+      critical: row.critical ?? false,
+    } as ActionItemRow,
+  };
 }
 
 /** Mark done (or reopen). Completed items show "(Completed)" for the week they
