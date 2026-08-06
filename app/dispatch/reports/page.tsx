@@ -88,17 +88,23 @@ export default async function ReportsPage() {
     .filter((d): d is string => Boolean(d))
     .sort();
 
-  // Signups over time — every submission (spam-flagged ones included; the
-  // point of this chart is site traffic/interest, not just clean conversions).
+  // Signups over time — accepted only ("added"). Dismissed rows are spam
+  // (auto-flagged or a manual call) and would inflate the trend with noise
+  // that was never a real prospective customer. Pending ones aren't decided
+  // yet either way, so they're surfaced as a separate waiting count instead
+  // of being folded into the line.
   let signupDates: string[] = [];
+  let pendingSignupCount = 0;
   try {
-    const signupRows = await pageAll<{ created_at: string }>((from, to) =>
-      supabase.from("customer_signups").select("created_at").range(from, to)
+    const signupRows = await pageAll<{ created_at: string; status: string }>((from, to) =>
+      supabase.from("customer_signups").select("created_at, status").range(from, to)
     );
     signupDates = signupRows
+      .filter((s) => s.status === "added")
       .map((s) => s.created_at)
       .filter((d): d is string => Boolean(d))
       .sort();
+    pendingSignupCount = signupRows.filter((s) => s.status === "pending").length;
   } catch { /* table absent on an unmigrated environment */ }
 
   // Touchpoints — what outreach happened and what was said.
@@ -142,6 +148,7 @@ export default async function ReportsPage() {
       stops={stops}
       customerDates={customerDates}
       signupDates={signupDates}
+      pendingSignupCount={pendingSignupCount}
       touchpoints={touchpoints}
       legs={legs}
     />

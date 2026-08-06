@@ -231,11 +231,12 @@ const TP_GLYPH: Record<string, GlyphName> = {
 };
 
 export default function ReportsView({
-  stops, customerDates, signupDates = [], touchpoints, legs = [],
+  stops, customerDates, signupDates = [], pendingSignupCount = 0, touchpoints, legs = [],
 }: {
   stops: StopRow[];
   customerDates: string[];
   signupDates?: string[];
+  pendingSignupCount?: number;
   touchpoints: TouchpointRow[];
   legs?: TripLeg[];
 }) {
@@ -593,13 +594,22 @@ export default function ReportsView({
         <TrendLine dates={customerDates} color={GREEN} gradientId="custFill" />
       </div>
 
-      {/* Signups over time */}
+      {/* Signups over time — accepted only; pending ones are called out
+          separately since they're not yet a decided outcome either way. */}
       <div className="flex items-baseline justify-between mb-3">
         <h3 className="font-body text-xs uppercase tracking-widest text-charcoal/30">
           Signups over time
         </h3>
-        <span className="font-body text-xs text-charcoal/40">{signupDates.length} total</span>
+        <span className="font-body text-xs text-charcoal/40">{signupDates.length} accepted</span>
       </div>
+      {pendingSignupCount > 0 && (
+        <Link
+          href="/dispatch/signups"
+          className="inline-flex items-center gap-1.5 mb-3 px-2.5 py-1 rounded-full bg-gold-primary/20 text-gold-dark font-body text-xs"
+        >
+          {pendingSignupCount} waiting on a decision →
+        </Link>
+      )}
       <div className="mb-8">
         <TrendLine dates={signupDates} color={GOLD} gradientId="signupFill" />
       </div>
