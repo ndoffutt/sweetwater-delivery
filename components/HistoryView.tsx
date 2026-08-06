@@ -7,6 +7,7 @@ import DriverPathMap from "@/components/DriverPathMap";
 import { timingTrusted } from "@/lib/timing";
 import { NeedsAttention } from "@/components/TodayRail";
 import type { DeliveryException, ResolvedException } from "@/lib/actions/exceptions";
+import type { RouteOrderChange } from "@/lib/actions/runOrder";
 
 export interface HistoryStop {
   id: string;
@@ -51,10 +52,12 @@ export default function HistoryView({
   routes,
   openExceptions = [],
   resolvedExceptions = [],
+  orderChangesByRoute = {},
 }: {
   routes: HistoryRoute[];
   openExceptions?: DeliveryException[];
   resolvedExceptions?: ResolvedException[];
+  orderChangesByRoute?: Record<string, RouteOrderChange[]>;
 }) {
   // Everything starts closed. This page is scanned far more often than it's
   // read: you want the whole month of runs on one screen and to open only the
@@ -165,6 +168,8 @@ export default function HistoryView({
               (s) => s.kind === "delivery" && s.status === "completed" && s.photos.length === 0
             ).length;
             const openEx = exByDate[r.date] ?? 0;
+            const changes = orderChangesByRoute[r.id] ?? [];
+            const reorders = changes.filter((c) => c.kind === "reorder").length;
             const firstArrived = r.stops.map((s) => s.arrivedAt).filter(Boolean)[0] ?? null;
             const lastDone = [...r.stops].reverse().map((s) => s.completedAt).filter(Boolean)[0] ?? r.completedAt;
             // Driver-out time: route start (left the shop / first arrive) to route
@@ -197,6 +202,11 @@ export default function HistoryView({
                           {openEx} open
                         </span>
                       )}
+                      {reorders > 0 && (
+                        <span className="text-[10.5px] font-body uppercase tracking-wider px-1.5 py-0.5 rounded bg-gold-primary/25 text-gold-dark">
+                          {reorders} reordered
+                        </span>
+                      )}
                     </div>
                     <div className="text-[11px] text-charcoal/35 font-body mt-0.5">
                       {outTotal ? `out ${outTotal}` : ""}{outTotal && r.completedAt ? " · " : ""}{r.completedAt ? `done ${time(r.completedAt)}` : ""}
@@ -213,6 +223,25 @@ export default function HistoryView({
                           path={r.path}
                           stops={r.stops.filter((s) => s.lat != null && s.lng != null).map((s) => ({ lng: s.lng as number, lat: s.lat as number, name: s.name }))}
                         />
+                      </div>
+                    )}
+                    {changes.length > 0 && (
+                      <div className="bg-white/60 rounded-lg border border-cream-dark px-3 py-2 mb-1">
+                        <p className="font-body text-[10px] uppercase tracking-widest text-charcoal/40 mb-1">
+                          Run order
+                        </p>
+                        <div className="space-y-1">
+                          {changes.map((c) => (
+                            <div key={c.id} className="font-body text-[12px] text-charcoal/70 flex gap-2">
+                              <span className="text-charcoal/35 shrink-0">{time(c.created_at)}</span>
+                              <span>
+                                {c.kind === "reorder" && <span className="text-gold-dark mr-1">↕</span>}
+                                {c.summary}
+                                {c.changed_by ? <span className="text-charcoal/40"> · {c.changed_by}</span> : null}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                     {r.stops.map((s, i) => {

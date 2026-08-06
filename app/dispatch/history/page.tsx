@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import HistoryView, { type HistoryRoute } from "@/components/HistoryView";
 import { getOpenExceptions, getResolvedExceptions } from "@/lib/actions/exceptions";
+import type { RouteOrderChange } from "@/lib/actions/runOrder";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,22 @@ export default async function HistoryPage() {
       .in("route_id", routeIds);
     for (const pv of (pvs ?? []) as unknown as RawProspectVisit[]) {
       (pvByRoute[pv.route_id] ??= []).push(pv);
+    }
+  }
+
+  // Run-order changes (confirmed order, mid-route reorders) attached to these
+  // routes — tolerant of the migration not having run yet.
+  const orderChangesByRoute: Record<string, RouteOrderChange[]> = {};
+  if (routeIds.length) {
+    const { data: changes, error } = await supabase
+      .from("route_order_changes")
+      .select("id, route_id, kind, summary, changed_by, seen_at, created_at")
+      .in("route_id", routeIds)
+      .order("created_at", { ascending: true });
+    if (!error) {
+      for (const c of (changes ?? []) as unknown as RouteOrderChange[]) {
+        (orderChangesByRoute[c.route_id] ??= []).push(c);
+      }
     }
   }
 
@@ -137,5 +154,12 @@ export default async function HistoryPage() {
     getResolvedExceptions(14).catch(() => []),
   ]);
 
-  return <HistoryView routes={routes} openExceptions={openExceptions} resolvedExceptions={resolvedExceptions} />;
+  return (
+    <HistoryView
+      routes={routes}
+      openExceptions={openExceptions}
+      resolvedExceptions={resolvedExceptions}
+      orderChangesByRoute={orderChangesByRoute}
+    />
+  );
 }
