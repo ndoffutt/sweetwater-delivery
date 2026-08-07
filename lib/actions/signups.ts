@@ -56,7 +56,10 @@ export async function addSignupAsCustomer(signupId: string) {
   revalidatePath("/dispatch/signups");
   revalidatePath("/dispatch");
   revalidatePath("/dispatch/customers");
-  return { success: true };
+  // Caller needs these to prompt for a route spot right away — a customer
+  // added here otherwise sits unpositioned until someone notices during
+  // route building.
+  return { success: true, customerId: customer.id, customerName: signup.full_name as string };
 }
 
 export async function dismissSignup(signupId: string) {

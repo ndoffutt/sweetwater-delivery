@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addSignupAsCustomer, dismissSignup } from "@/lib/actions/signups";
+import RouteSpotPopup from "@/components/RouteSpotPopup";
 
 export interface Signup {
   id: string;
@@ -20,6 +21,10 @@ export default function SignupList({ signups: initial }: { signups: Signup[] }) 
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  // A customer created here has no route spot yet — same required step as
+  // adding one manually in the directory. Holds who to prompt for once the
+  // signup itself has gone through.
+  const [placing, setPlacing] = useState<{ id: string; name: string } | null>(null);
 
   function handleAdd(id: string) {
     setError("");
@@ -29,6 +34,8 @@ export default function SignupList({ signups: initial }: { signups: Signup[] }) 
       if (result.error) {
         setError(result.error);
         router.refresh();
+      } else if (result.customerId) {
+        setPlacing({ id: result.customerId, name: result.customerName ?? "" });
       } else {
         router.refresh();
       }
@@ -44,7 +51,7 @@ export default function SignupList({ signups: initial }: { signups: Signup[] }) 
     });
   }
 
-  if (signups.length === 0) {
+  if (signups.length === 0 && !placing) {
     return (
       <p className="text-center text-charcoal/40 font-body py-12">
         No new signups right now.
@@ -54,6 +61,13 @@ export default function SignupList({ signups: initial }: { signups: Signup[] }) 
 
   return (
     <div className="space-y-3">
+      {placing && (
+        <RouteSpotPopup
+          customerId={placing.id}
+          customerName={placing.name}
+          onDone={() => { setPlacing(null); router.refresh(); }}
+        />
+      )}
       {error && (
         <p className="text-center text-sm text-red-600 font-body">{error}</p>
       )}
