@@ -201,9 +201,10 @@ export interface OpenActionItem {
   opened_week: string;
   completed_week: string | null;
   resolution: string | null;
+  created_at: string;
 }
 
-const ACTION_ITEM_CORE = "id, owner, action, section, opened_week, completed_week";
+const ACTION_ITEM_CORE = "id, owner, action, section, opened_week, completed_week, created_at";
 const ACTION_ITEM_V2 = `${ACTION_ITEM_CORE}, owner_id`;
 const ACTION_ITEM_V3 = `${ACTION_ITEM_V2}, critical`;
 const ACTION_ITEM_V4 = `${ACTION_ITEM_V3}, resolution`;
@@ -259,6 +260,7 @@ export interface CustomerIssue {
   opened_week: string;
   resolved_week: string | null;
   resolution: string | null;
+  created_at: string;
 }
 
 /** Everything still open, plus whatever was closed during this week — so a
@@ -268,7 +270,7 @@ export async function getCustomerIssues(supabase: Admin, weekStart: string): Pro
   try {
     const { data, error } = await supabase
       .from("customer_issues")
-      .select("id, description, customer_name, opened_week, resolved_week, resolution")
+      .select("id, description, customer_name, opened_week, resolved_week, resolution, created_at")
       .is("deleted_at", null)
       .or(`resolved_week.is.null,resolved_week.eq.${weekStart}`)
       .order("opened_week", { ascending: true });
@@ -276,7 +278,7 @@ export async function getCustomerIssues(supabase: Admin, weekStart: string): Pro
       // resolution arrives with comments_and_resolution.sql.
       const fb = await supabase
         .from("customer_issues")
-        .select("id, description, customer_name, opened_week, resolved_week")
+        .select("id, description, customer_name, opened_week, resolved_week, created_at")
         .is("deleted_at", null)
         .or(`resolved_week.is.null,resolved_week.eq.${weekStart}`)
         .order("opened_week", { ascending: true });

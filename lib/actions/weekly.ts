@@ -14,6 +14,7 @@ export interface ActionItemRow {
   opened_week: string;
   completed_week: string | null;
   resolution: string | null;
+  created_at: string;
 }
 
 export interface WeeklyUpdateRow {
@@ -174,6 +175,7 @@ export interface CustomerIssueRow {
   opened_week: string;
   resolved_week: string | null;
   resolution: string | null;
+  created_at: string;
 }
 
 /** Manager writes these in each week; an unresolved one carries forward.
@@ -201,7 +203,7 @@ export async function addCustomerIssue(input: {
       opened_week: input.openedWeek,
       created_by: session.name,
     })
-    .select("id, description, customer_name, opened_week, resolved_week, resolution")
+    .select("id, description, customer_name, opened_week, resolved_week, resolution, created_at")
     .single();
   if (error) return { error: missing(error.message) ? "Run supabase/customer_issues.sql first." : error.message };
   revalidatePath("/reports");
@@ -274,7 +276,7 @@ export async function addActionItem(input: {
   // owner_id and critical each land with their own migration — step the
   // fallback so a database missing one doesn't lose the other.
   const withOwner = { ...base, owner_id: input.ownerId ?? null };
-  const COLS = "id, owner, owner_id, action, section, opened_week, completed_week, critical";
+  const COLS = "id, owner, owner_id, action, section, opened_week, completed_week, critical, created_at";
   const ins = (row: Record<string, unknown>, cols: string) =>
     supabase.from("action_items").insert(row).select(cols).single();
 
@@ -282,10 +284,10 @@ export async function addActionItem(input: {
   // just-added item can be completed or flagged without a refresh first.
   let { data, error } = await ins({ ...withOwner, critical: !!input.critical }, COLS);
   if (error && /critical/i.test(error.message)) {
-    ({ data, error } = await ins(withOwner, "id, owner, owner_id, action, section, opened_week, completed_week"));
+    ({ data, error } = await ins(withOwner, "id, owner, owner_id, action, section, opened_week, completed_week, created_at"));
   }
   if (error && /owner_id/i.test(error.message)) {
-    ({ data, error } = await ins(base, "id, owner, action, section, opened_week, completed_week"));
+    ({ data, error } = await ins(base, "id, owner, action, section, opened_week, completed_week, created_at"));
   }
   if (error) return { error: missing(error.message) ? "Run supabase/weekly_updates.sql first." : error.message };
   revalidatePath("/dispatch/weekly");
@@ -298,6 +300,7 @@ export async function addActionItem(input: {
       owner_id: row.owner_id ?? null,
       critical: row.critical ?? false,
       resolution: row.resolution ?? null,
+      created_at: row.created_at ?? new Date().toISOString(),
     } as ActionItemRow,
   };
 }

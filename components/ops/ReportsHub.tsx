@@ -243,34 +243,40 @@ export default function ReportsHub({ data }: { data: ReportsData }) {
                 </h2>
                 {commentsFor("operations").length > 0 && <Tag tone="gold">{commentsFor("operations").length} comment{commentsFor("operations").length === 1 ? "" : "s"} open</Tag>}
               </div>
-              <div className="mt-4 flex flex-wrap gap-8">
+              {/* Status paired directly with its own note — previously all
+                  statuses sat in one row with both notes in a separate grid
+                  below, so matching a note back to its status meant reading
+                  across two rows. Genuinely lists, so edited as lists: a
+                  textarea labelled "one per line" is a textarea asking the
+                  writer to remember a convention, and it reliably got one
+                  long sentence instead. */}
+              <div className="mt-4 grid md:grid-cols-2 gap-6">
                 <div>
                   <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">Staffing</span>
                   <Seg value={staffing ?? "Green"} onChange={setStaffing} />
+                  <div className="mt-3">
+                    <LineListField
+                      label="Notes"
+                      value={staffingNote ?? ""}
+                      onChange={setStaffingNote}
+                      placeholder={["Who's out / covering", "Open roles", "Anything to raise on the call"]}
+                    />
+                  </div>
                 </div>
                 <div>
                   <span className="block text-[12.5px] text-[rgba(26,26,26,.62)] mb-1.5">Equipment</span>
                   <Seg value={equipment ?? "Green"} onChange={setEquipment} />
+                  <div className="mt-3">
+                    <LineListField
+                      label="Notes"
+                      value={equipmentNote ?? ""}
+                      onChange={setEquipmentNote}
+                      placeholder={["Anything down or limping", "Repairs booked", "Parts / service needed"]}
+                    />
+                  </div>
                 </div>
               </div>
-              {/* Genuinely lists, so edited as lists. A textarea labelled
-                  "one per line" is a textarea asking the writer to remember a
-                  convention, and it reliably got one long sentence instead. */}
-              <div className="mt-4 grid md:grid-cols-2 gap-4">
-                <LineListField
-                  label="Staffing"
-                  value={staffingNote ?? ""}
-                  onChange={setStaffingNote}
-                  placeholder={["Who's out / covering", "Open roles", "Anything to raise on the call"]}
-                />
-                <LineListField
-                  label="Equipment"
-                  value={equipmentNote ?? ""}
-                  onChange={setEquipmentNote}
-                  placeholder={["Anything down or limping", "Repairs booked", "Parts / service needed"]}
-                />
-              </div>
-              <div className="mt-4">
+              <div className="mt-5">
                 <LineListField
                   label="Key updates"
                   value={keyUpdates ?? ""}

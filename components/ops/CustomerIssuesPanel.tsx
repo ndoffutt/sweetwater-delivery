@@ -11,6 +11,9 @@ import { btnPrimary, btnSecondary, inputCls } from "@/components/ops/Bits";
 import CommentThread from "@/components/ops/CommentThread";
 import type { EntityComment } from "@/lib/actions/comments";
 
+const dateFmt = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const daysOpen = (iso: string) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
+
 export default function CustomerIssuesPanel({
   issues,
   weekStart,
@@ -127,6 +130,11 @@ export default function CustomerIssuesPanel({
                   <div className="text-[11px] font-barlowc uppercase tracking-[0.06em] mt-1 text-[rgba(26,26,26,.45)]">
                     {done ? "Resolved" : isCarried ? `Carried from ${i.opened_week}` : "New this week"}
                   </div>
+                  {!done && (
+                    <p className="text-[12px] font-barlow text-[rgba(26,26,26,.45)] mt-0.5">
+                      Created {dateFmt(i.created_at)} · open {daysOpen(i.created_at)} day{daysOpen(i.created_at) === 1 ? "" : "s"}
+                    </p>
+                  )}
                   {done && i.resolution && (
                     <p className="font-barlow text-[13px] text-[rgba(26,26,26,.62)] mt-1">
                       <span className="text-ops-accent">✓</span> {i.resolution}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { smsConfigured, validateTwilioSignature, phoneDigits } from "@/lib/messaging";
+import { sendPushToAll } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
     const d = phoneDigits(from);
     const { data: customers } = await supabase
       .from("customers")
-      .select("id, phone")
+      .select("id, phone, name")
       .eq("active", true)
       .is("deleted_at", null)
       .not("phone", "is", null);
@@ -80,6 +81,13 @@ export async function POST(request: NextRequest) {
     } else {
       await supabase.from("messages").insert(row);
     }
+
+    // Best-effort — a push failure shouldn't affect the Twilio response.
+    sendPushToAll({
+      title: `New text from ${match?.name ?? from}`,
+      body: body || "Sent a photo",
+      url: "/messages",
+    }).catch(() => {});
   }
 
   // Empty TwiML: no auto-reply.

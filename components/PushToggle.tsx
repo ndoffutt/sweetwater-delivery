@@ -82,9 +82,9 @@ export default function PushToggle() {
     <div className="bg-cream rounded-xl border border-cream-dark p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="font-body font-medium text-charcoal">Visit reminders</p>
+          <p className="font-body font-medium text-charcoal">Push notifications</p>
           <p className="text-xs text-charcoal/50 font-body mt-0.5">
-            A daily 8am push when prospects are overdue for a visit.
+            New customer texts, plus a daily 8am nudge when prospects are overdue for a visit.
           </p>
         </div>
         {state === "on" ? (
